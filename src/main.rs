@@ -33,6 +33,7 @@ struct Cli {
 enum BackgroundResult {
     HomeLoaded(Vec<crate::emby::MediaItem>),
     LibrariesLoaded(Vec<crate::emby::Library>, Vec<(String, Vec<crate::emby::MediaItem>)>),
+    SettingsLoaded(Vec<crate::emby::Library>),
     SeriesInfoLoaded(app::SeriesState),
     EpisodesLoaded(String, Vec<crate::emby::MediaItem>),
     FolderLoaded(Vec<crate::emby::MediaItem>, String),
@@ -186,6 +187,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.library_latest = latest;
                     state.loading = false;
                     state.status_msg = format!("{} libraries", state.libraries.len());
+                }
+                BackgroundResult::SettingsLoaded(libs) => {
+                    state.libraries = libs;
+                    state.open_settings();
+                    state.loading = false;
                 }
                 BackgroundResult::SeriesInfoLoaded(ss) => {
                     state.series_state = ss;
@@ -579,7 +585,17 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Char('/') => state.start_search(),
                                 KeyCode::Char('s') => {
-                                    state.open_settings();
+                                    if state.libraries.is_empty() {
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            let libs = client.get_libraries().await.unwrap_or_default();
+                                            let _ = tx.send(BackgroundResult::SettingsLoaded(libs));
+                                        });
+                                    } else {
+                                        state.open_settings();
+                                    }
                                 }
                                 KeyCode::Char('e') => {
                                     if let Some(item) = state.selected_item().cloned() {
