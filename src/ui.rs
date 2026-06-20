@@ -352,11 +352,16 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect) {
         ]))
     }).collect();
 
+    let title = if state.total_episodes > state.episodes.len() {
+        format!("{} - Episodes ({}/{})", state.series_name, state.episodes.len(), state.total_episodes)
+    } else {
+        format!("{} - Episodes ({})", state.series_name, state.episodes.len())
+    };
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!("{} - All Episodes ({})", state.series_name, state.episodes.len()))
+                .title(title)
         )
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
