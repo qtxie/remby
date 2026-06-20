@@ -624,7 +624,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
     for (i, lib) in ss.libraries.iter().enumerate() {
         let selected = i == ss.selected;
-        let prefix = if selected { "▸ " } else { "  " };
+        let prefix = if selected { "▸ " } else { "   " };
         let name_style = if selected {
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
         } else {
