@@ -380,13 +380,16 @@ impl AppState {
                     self.selected = 0;
                 }
             }
-            View::Episodes => {
-                self.view = View::Home;
-                self.selected = 0;
-            }
-            View::SeriesInfo => {
-                self.view = View::Home;
-                self.selected = 0;
+            View::Episodes | View::SeriesInfo => {
+                if let Some(prev) = self.stack.pop() {
+                    self.items = prev.items;
+                    self.current_folder_id = prev.folder_id;
+                    self.view = prev.view;
+                    self.selected = 0;
+                } else {
+                    self.view = View::Home;
+                    self.selected = 0;
+                }
             }
             View::Playing => {
                 self.kill_mpv();
