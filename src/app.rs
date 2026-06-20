@@ -238,16 +238,27 @@ impl AppState {
             Ok(libs) => {
                 self.libraries = libs;
                 self.library_latest.clear();
-                for lib in &self.libraries {
-                    match self.client.get_latest_for_library(&lib.id, 10).await {
-                        Ok(items) => {
-                            if !items.is_empty() {
-                                self.library_latest.push((lib.name.clone(), items));
-                            }
+
+                // Fetch latest items for all libraries in parallel
+                let futures: Vec<_> = self.libraries.iter().map(|lib| {
+                    let client = self.client.clone();
+                    let lib_id = lib.id.clone();
+                    let lib_name = lib.name.clone();
+                    async move {
+                        match client.get_latest_for_library(&lib_id, 10).await {
+                            Ok(items) if !items.is_empty() => Some((lib_name, items)),
+                            _ => None,
                         }
-                        Err(_) => {}
+                    }
+                }).collect();
+
+                let results = futures::future::join_all(futures).await;
+                for result in results {
+                    if let Some(pair) = result {
+                        self.library_latest.push(pair);
                     }
                 }
+
                 self.status_msg = format!("{} libraries", self.libraries.len());
             }
             Err(e) => {
