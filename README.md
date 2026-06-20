@@ -1,5 +1,16 @@
 # remby
 
+```
+      ________       
+   __/        \__    
+  /   ________   \   
+ |   /        \   |  
+ |  |   ▶▶▶▶   |  |  
+  \  \________/  /   
+   \__        __/    
+      \______/       
+```
+
 A lightweight Emby client with terminal UI and mpv playback.
 
 > **Note**: This project was entirely written by AI (MiMo Code Agent).
