@@ -77,9 +77,9 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            remby-linux-x86_64/remby-linux-x86_64
-            remby-linux-arm64/remby-linux-arm64
-            remby-windows-x86_64/remby-windows-x86_64.exe
-            remby-windows-arm64/remby-windows-arm64.exe
-            remby-macos-arm64/remby-macos-arm64
+            remby-linux-x86_64
+            remby-linux-arm64
+            remby-windows-x86_64.exe
+            remby-windows-arm64.exe
+            remby-macos-arm64
           generate_release_notes: true
