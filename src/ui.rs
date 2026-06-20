@@ -603,11 +603,12 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
     let mut items: Vec<ListItem> = Vec::new();
 
-    // Column headers
+    // Column headers - use same layout as rows
     let enabled_header = if ss.column == SettingsColumn::Enabled { ">Enabled" } else { " Enabled" };
     let latest_header = if ss.column == SettingsColumn::Latest { ">Latest" } else { " Latest" };
+    let header_name = format!("{:<width$}", " Library", width = name_col);
     items.push(ListItem::new(Line::from(vec![
-        Span::styled(format!("{:<width$}", "Library", width = name_col), header_style),
+        Span::styled(header_name, header_style),
         Span::styled(
             enabled_header,
             if ss.column == SettingsColumn::Enabled { header_style } else { Style::default().fg(Color::DarkGray) },
@@ -646,19 +647,18 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
             Style::default().fg(Color::DarkGray)
         };
 
-        // Calculate display width of name
-        let name_display_width: usize = lib.name.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
+        // Build name with marker, pad to fixed width
         let marker = if selected { ">" } else { " " };
-        let padding = if name_display_width + 1 < name_col {
-            " ".repeat(name_col - name_display_width - 1)
+        let name_with_marker = format!("{}{}", marker, lib.name);
+        let display_width: usize = name_with_marker.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
+        let padded_name = if display_width < name_col {
+            format!("{}{}", name_with_marker, " ".repeat(name_col - display_width))
         } else {
-            " ".to_string()
+            name_with_marker
         };
 
         items.push(ListItem::new(Line::from(vec![
-            Span::styled(marker, name_style),
-            Span::styled(&lib.name, name_style),
-            Span::raw(padding),
+            Span::styled(padded_name, name_style),
             Span::styled(enabled_mark, enabled_style),
             Span::raw("   "),
             Span::styled(latest_mark, latest_style),
