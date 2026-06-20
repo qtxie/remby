@@ -599,18 +599,15 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
     let ss = &state.settings_state;
 
     let header_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-
-    // Fixed column position for checkboxes (leave room for longest possible name)
-    let checkbox_col = 30;
+    let name_col = 24; // Fixed width for name column
 
     let mut items: Vec<ListItem> = Vec::new();
 
     // Column headers
-    let enabled_header = if ss.column == SettingsColumn::Enabled { "▸ Enabled" } else { "  Enabled" };
-    let latest_header = if ss.column == SettingsColumn::Latest { "▸ Latest" } else { "  Latest" };
+    let enabled_header = if ss.column == SettingsColumn::Enabled { ">Enabled" } else { " Enabled" };
+    let latest_header = if ss.column == SettingsColumn::Latest { ">Latest" } else { " Latest" };
     items.push(ListItem::new(Line::from(vec![
-        Span::styled("  Library", header_style),
-        Span::raw(" ".repeat(checkbox_col - 9)),
+        Span::styled(format!("{:<width$}", "Library", width = name_col), header_style),
         Span::styled(
             enabled_header,
             if ss.column == SettingsColumn::Enabled { header_style } else { Style::default().fg(Color::DarkGray) },
@@ -624,7 +621,6 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
     for (i, lib) in ss.libraries.iter().enumerate() {
         let selected = i == ss.selected;
-        let prefix = if selected { "▸ " } else { "   " };
         let name_style = if selected {
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
         } else {
@@ -650,20 +646,21 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
             Style::default().fg(Color::DarkGray)
         };
 
-        // Calculate display width of prefix + name
-        let name_display = format!("{}{}", prefix, lib.name);
-        let display_width: usize = name_display.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
-        let padding = if display_width < checkbox_col {
-            " ".repeat(checkbox_col - display_width)
+        // Calculate display width of name
+        let name_display_width: usize = lib.name.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
+        let marker = if selected { ">" } else { " " };
+        let padding = if name_display_width + 1 < name_col {
+            " ".repeat(name_col - name_display_width - 1)
         } else {
             " ".to_string()
         };
 
         items.push(ListItem::new(Line::from(vec![
-            Span::styled(name_display, name_style),
+            Span::styled(marker, name_style),
+            Span::styled(&lib.name, name_style),
             Span::raw(padding),
             Span::styled(enabled_mark, enabled_style),
-            Span::raw("      "),
+            Span::raw("   "),
             Span::styled(latest_mark, latest_style),
         ])));
     }
