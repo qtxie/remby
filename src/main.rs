@@ -52,23 +52,63 @@ async fn main() -> Result<()> {
 
     terminal.draw(|f| {
         let area = f.area();
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan))
-            .title(Span::styled(
-                " Remby ",
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
-            ))
-            .title_alignment(Alignment::Center);
-        f.render_widget(Clear, area);
-        f.render_widget(block, area);
 
-        let loading = Paragraph::new(Span::styled(
-            "⣾ Initializing...",
-            Style::default().fg(Color::Yellow),
-        ))
+        // Center the content vertically
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(30),
+                Constraint::Length(8),
+                Constraint::Min(1),
+            ])
+            .split(area);
+
+        // Logo / ASCII art
+        let logo_lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  ██████╗ ███████╗███╗  EB██╗",
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "  ██╔══██╗██╔════╝████╗ ██║",
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "  ██████╔╝█████╗  ██╔████╔██║",
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "  ██╔══██╗██╔══╝  ██║╚██╔╝██║",
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "  ██║  ██║███████╗██║ ╚═╝ ██║",
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝",
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )),
+        ];
+        let logo = Paragraph::new(logo_lines).alignment(Alignment::Center);
+        f.render_widget(logo, vertical[1]);
+
+        // Loading animation area
+        let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
+        let idx = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() / 100) as usize % spinner.len();
+
+        let loading = Paragraph::new(Line::from(vec![
+            Span::styled(
+                format!("{} Connecting to server...", spinner[idx]),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]))
         .alignment(Alignment::Center);
-        f.render_widget(loading, area);
+        f.render_widget(loading, vertical[2]);
     })?;
 
     // Connect to server and authenticate
@@ -115,7 +155,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         let tx = bg_tx.clone();
         let client = state.client.clone();
         tokio::spawn(async move {
-            let timeout = std::time::Duration::from_secs(30);
+            let timeout = std::time::Duration::from_secs(120);
             let result = tokio::time::timeout(timeout, async {
                 let mut items = Vec::new();
                 if let Ok(resume) = client.get_resume_items(20).await {
@@ -337,7 +377,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
                                             tokio::spawn(async move {
-                                                let timeout = std::time::Duration::from_secs(15);
+                                                let timeout = std::time::Duration::from_secs(60);
                                                 match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
                                                     Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
                                                     _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
@@ -369,7 +409,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             tokio::spawn(async move {
-                                                let timeout = std::time::Duration::from_secs(15);
+                                                let timeout = std::time::Duration::from_secs(60);
                                                 match tokio::time::timeout(timeout, client.get_episodes(&series_id)).await {
                                                     Ok(Ok(episodes)) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes)); }
                                                     _ => { let _ = tx.send(BackgroundResult::Timeout("Episodes".to_string())); }
@@ -423,7 +463,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
                                             tokio::spawn(async move {
-                                                let timeout = std::time::Duration::from_secs(15);
+                                                let timeout = std::time::Duration::from_secs(60);
                                                 match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
                                                     Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
                                                     _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
