@@ -57,6 +57,8 @@ pub struct MediaItem {
     pub series_id: Option<String>,
     #[serde(default, rename = "Overview")]
     pub overview: Option<String>,
+    #[serde(default, rename = "ChildCount")]
+    pub child_count: Option<i32>,
     #[serde(default, rename = "MediaSources")]
     pub media_sources: Vec<MediaSource>,
     #[serde(default, rename = "UserData")]
@@ -311,7 +313,7 @@ impl EmbyClient {
             .query(&[
                 ("ParentId", parent_id),
                 ("Recursive", "false"),
-                ("Fields", "Overview,MediaSources"),
+                ("Fields", "Overview,MediaSources,ChildCount"),
                 ("StartIndex", &start.to_string()),
                 ("Limit", &limit.to_string()),
             ])
@@ -332,7 +334,7 @@ impl EmbyClient {
             .query(&[
                 ("Limit", limit_str.as_str()),
                 ("Recursive", "true"),
-                ("Fields", "Overview,MediaSources"),
+                ("Fields", "Overview,MediaSources,ChildCount"),
                 ("IncludeItemTypes", "Movie,Episode"),
             ])
             .send()
@@ -353,7 +355,7 @@ impl EmbyClient {
                 ("SortBy", "DateCreated"),
                 ("SortOrder", "Descending"),
                 ("Limit", limit_str.as_str()),
-                ("Fields", "Overview,MediaSources"),
+                ("Fields", "Overview,MediaSources,ChildCount"),
             ])
             .send()
             .await
@@ -396,7 +398,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview,MediaSources"),
+                ("Fields", "Overview,MediaSources,ChildCount"),
                 ("Recursive", "false"),
                 ("Limit", "1000"),
             ])
@@ -412,7 +414,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview"),
+                ("Fields", "Overview,ChildCount"),
             ])
             .send()
             .await
@@ -427,7 +429,7 @@ impl EmbyClient {
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("SeasonId", season_id),
-                ("Fields", "Overview,MediaSources"),
+                ("Fields", "Overview,MediaSources,ChildCount"),
                 ("Limit", "1000"),
             ])
             .send()
@@ -443,7 +445,7 @@ impl EmbyClient {
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("Limit", "12"),
-                ("Fields", "Overview"),
+                ("Fields", "Overview,ChildCount"),
             ])
             .send()
             .await
@@ -502,6 +504,7 @@ impl MediaItem {
             runtime_ticks: None,
             series_id: None,
             overview: None,
+            child_count: None,
             media_sources: Vec::new(),
             user_data: None,
         }
@@ -533,6 +536,12 @@ impl MediaItem {
     }
 
     pub fn display_name(&self) -> String {
+        // Show episode count for series and seasons
+        if self.item_type == "Series" || self.item_type == "Season" {
+            if let Some(count) = self.child_count {
+                return format!("{} ({})", self.name, count);
+            }
+        }
         if let Some(ref series) = self.series_name {
             if let Some(ep) = self.index_number {
                 let season = self.parent_index_number.unwrap_or(0);
