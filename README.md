@@ -28,6 +28,13 @@ A lightweight Emby client with terminal UI and mpv playback.
 - [Rust](https://www.rust-lang.org/tools/install) (for building)
 - [mpv](https://mpv.io/installation/) (for playback)
 
+**Supported platforms**: Windows, Linux, macOS
+
+**mpv paths by platform**:
+- Linux: `/usr/bin/mpv` or `/usr/local/bin/mpv`
+- macOS: `/opt/homebrew/bin/mpv` (Homebrew) or `/usr/local/bin/mpv`
+- Windows: `C:\Tools\mpv\mpv.exe` or add mpv to PATH
+
 ### Build
 
 ```bash

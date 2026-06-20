@@ -8,14 +8,6 @@ description = "A lightweight Emby client with mpv playback"
 name = "remby"
 path = "src/main.rs"
 
-[[bin]]
-name = "container_debug"
-path = "src/bin/container_debug.rs"
-
-[[bin]]
-name = "play_debug"
-path = "src/bin/play_debug.rs"
-
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
