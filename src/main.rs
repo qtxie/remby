@@ -184,7 +184,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 }
                 BackgroundResult::LibrariesLoaded(libs, latest) => {
                     state.libraries = libs;
+                    state.libraries_fetched_at = Some(std::time::Instant::now());
                     state.library_latest = latest;
+                    state.library_latest_fetched_at = Some(std::time::Instant::now());
                     state.loading = false;
                     state.status_msg = format!("{} libraries", state.libraries.len());
                 }
@@ -508,7 +510,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Right | KeyCode::Char('l') => {
                                     state.show_libraries().await;
-                                    if state.library_latest.is_empty() {
+                                    if !state.is_libraries_cache_valid() || !state.is_latest_cache_valid() {
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let config = state.config.clone();

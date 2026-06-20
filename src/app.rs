@@ -1,13 +1,18 @@
 use anyhow::Result;
+use std::time::Instant;
 
 use crate::config::RembyConfig;
 use crate::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
+
+const CACHE_TTL_SECS: u64 = 300; // 5 minutes
 
 pub struct AppState {
     pub client: EmbyClient,
     pub server: String,
     pub libraries: Vec<Library>,
+    pub libraries_fetched_at: Option<Instant>,
     pub library_latest: Vec<(String, Vec<MediaItem>)>,
+    pub library_latest_fetched_at: Option<Instant>,
     pub items: Vec<MediaItem>,
     pub total_items: usize,
     pub current_folder_id: String,
@@ -211,7 +216,9 @@ impl AppState {
             client,
             server,
             libraries: Vec::new(),
+            libraries_fetched_at: None,
             library_latest: Vec::new(),
+            library_latest_fetched_at: None,
             items: Vec::new(),
             total_items: 0,
             current_folder_id: String::new(),
@@ -458,6 +465,18 @@ impl AppState {
         None
     }
 
+    pub fn is_libraries_cache_valid(&self) -> bool {
+        self.libraries_fetched_at
+            .map(|t| t.elapsed().as_secs() < CACHE_TTL_SECS)
+            .unwrap_or(false)
+    }
+
+    pub fn is_latest_cache_valid(&self) -> bool {
+        self.library_latest_fetched_at
+            .map(|t| t.elapsed().as_secs() < CACHE_TTL_SECS)
+            .unwrap_or(false)
+    }
+
     pub async fn show_libraries(&mut self) {
         self.stack.push(StackEntry {
             items: self.items.clone(),
@@ -466,7 +485,7 @@ impl AppState {
         });
         self.view = View::Libraries;
         self.selected = 0;
-        if self.library_latest.is_empty() {
+        if !self.is_libraries_cache_valid() || !self.is_latest_cache_valid() {
             self.loading = true;
             self.status_msg = "Loading libraries...".to_string();
         }
@@ -648,7 +667,9 @@ impl AppState {
             self.status_msg = "Settings saved".to_string();
         }
         self.libraries.clear();
+        self.libraries_fetched_at = None;
         self.library_latest.clear();
+        self.library_latest_fetched_at = None;
         self.view = View::Libraries;
         self.selected = 0;
         self.loading = true;
