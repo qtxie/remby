@@ -209,6 +209,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 }
                 BackgroundResult::EpisodesLoaded(name, episodes) => {
                     state.series_name = name;
+                    state.status_msg = format!("{} episodes", episodes.len());
                     state.episodes = episodes;
                     state.view = app::View::Episodes;
                     state.selected = 0;
