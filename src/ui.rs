@@ -147,15 +147,23 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
-    // Build combined list: libraries + latest items sections
     let mut items: Vec<ListItem> = Vec::new();
+    let mut idx = 0;
 
-    // Libraries section
+    // Libraries header
+    let style = if state.view == View::Libraries && state.selected == idx {
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+    let prefix = if state.view == View::Libraries && state.selected == idx { "▸ " } else { "  " };
     items.push(ListItem::new(Line::from(Span::styled(
-        " Libraries",
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        format!("{}Libraries", prefix),
+        style,
     ))));
+    idx += 1;
 
+    // Library items
     for lib in &state.libraries {
         let icon = match lib.collection_type.as_deref() {
             Some("movies") => " ",
@@ -164,20 +172,36 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
             Some("books") => " ",
             _ => " ",
         };
+        let selected = state.view == View::Libraries && state.selected == idx;
+        let prefix = if selected { "▸ " } else { "  " };
+        let style = if selected {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
         items.push(ListItem::new(Line::from(vec![
-            Span::raw("  "),
+            Span::raw(prefix),
             Span::styled(icon, Style::default().fg(Color::Cyan)),
             Span::raw("  "),
-            Span::raw(&lib.name),
+            Span::styled(&lib.name, style),
         ])));
+        idx += 1;
     }
 
     // Latest items sections
     for (lib_name, latest_items) in &state.library_latest {
+        let selected = state.view == View::Libraries && state.selected == idx;
+        let prefix = if selected { "▸ " } else { "  " };
+        let style = if selected {
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Yellow)
+        };
         items.push(ListItem::new(Line::from(Span::styled(
-            format!(" 最新 {}", lib_name),
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            format!("{}最新 {}", prefix, lib_name),
+            style,
         ))));
+        idx += 1;
 
         for item in latest_items {
             let name = item.display_name();
@@ -187,14 +211,22 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
             } else {
                 String::new()
             };
-            let icon = if item.is_video() { "▶" } else { " " };
+            let icon = " ";
+            let selected = state.view == View::Libraries && state.selected == idx;
+            let prefix = if selected { "▸ " } else { "  " };
+            let style = if selected {
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
             items.push(ListItem::new(Line::from(vec![
-                Span::raw("  "),
+                Span::raw(prefix),
                 Span::styled(icon, Style::default().fg(Color::Cyan)),
                 Span::raw("  "),
-                Span::raw(name),
+                Span::styled(name, style),
                 Span::styled(dur, Style::default().fg(Color::DarkGray)),
             ])));
+            idx += 1;
         }
     }
 
@@ -203,9 +235,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .title("Library"),
-        )
-        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        .highlight_symbol("▸ ");
+        );
 
     let mut state_list = ListState::default();
     state_list.select(Some(state.selected));

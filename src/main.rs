@@ -31,6 +31,7 @@ struct Cli {
 
 enum BackgroundResult {
     HomeLoaded(Vec<crate::emby::MediaItem>),
+    LibrariesLoaded(Vec<crate::emby::Library>, Vec<(String, Vec<crate::emby::MediaItem>)>),
     SeriesInfoLoaded(app::SeriesState),
     EpisodesLoaded(String, Vec<crate::emby::MediaItem>),
     FolderLoaded(Vec<crate::emby::MediaItem>, String),
@@ -166,6 +167,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 BackgroundResult::HomeLoaded(items) => {
                     state.home_items = items;
                     state.loading = false;
+                }
+                BackgroundResult::LibrariesLoaded(libs, latest) => {
+                    state.libraries = libs;
+                    state.library_latest = latest;
+                    state.loading = false;
+                    state.status_msg = format!("{} libraries", state.libraries.len());
                 }
                 BackgroundResult::SeriesInfoLoaded(ss) => {
                     state.series_state = ss;
@@ -430,6 +437,29 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Right | KeyCode::Char('l') => {
                                     state.show_libraries().await;
+                                    if state.library_latest.is_empty() {
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            let timeout = std::time::Duration::from_secs(120);
+                                            let result = tokio::time::timeout(timeout, async {
+                                                let libs = client.get_libraries().await.unwrap_or_default();
+                                                let mut latest = Vec::new();
+                                                for lib in &libs {
+                                                    if let Ok(items) = client.get_latest_for_library(&lib.id, 10).await {
+                                                        if !items.is_empty() {
+                                                            latest.push((lib.name.clone(), items));
+                                                        }
+                                                    }
+                                                }
+                                                (libs, latest)
+                                            }).await;
+                                            match result {
+                                                Ok((libs, latest)) => { let _ = tx.send(BackgroundResult::LibrariesLoaded(libs, latest)); }
+                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Libraries".to_string())); }
+                                            }
+                                        });
+                                    }
                                 }
                                 KeyCode::Enter => {
                                     if let Some(item) = state.selected_item().cloned() {

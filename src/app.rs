@@ -600,9 +600,13 @@ impl AppState {
         });
         self.view = View::Libraries;
         self.selected = 0;
-        if self.libraries.is_empty() {
-            self.load_libraries().await;
-        }
+        self.loading = true;
+        self.status_msg = "Loading libraries...".to_string();
+    }
+
+    pub async fn load_libraries_bg(&mut self) {
+        self.load_libraries().await;
+        self.loading = false;
     }
 
     pub fn start_search(&mut self) {
