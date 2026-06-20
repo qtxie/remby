@@ -466,8 +466,10 @@ impl AppState {
         });
         self.view = View::Libraries;
         self.selected = 0;
-        self.loading = true;
-        self.status_msg = "Loading libraries...".to_string();
+        if self.library_latest.is_empty() {
+            self.loading = true;
+            self.status_msg = "Loading libraries...".to_string();
+        }
     }
 
     pub fn start_search(&mut self) {
