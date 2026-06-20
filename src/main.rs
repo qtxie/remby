@@ -236,6 +236,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     };
                                     if let Ok(child) = mpv::play(&ps.url, mpv_path, None, None, None, start_secs) {
                                         state.mpv_child = Some(child);
+                                        state.playing_state.playing = true;
                                     }
                                 }
                                 _ => {}

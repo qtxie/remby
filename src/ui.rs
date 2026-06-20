@@ -378,7 +378,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     let ps = &state.playing_state;
-    let has_resume = ps.resume_position.is_some();
+    let has_resume = ps.resume_position.is_some() && !ps.playing;
 
     let layout = if has_resume {
         Layout::default()
@@ -415,18 +415,27 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(Clear, layout[0]);
     f.render_widget(title, layout[0]);
 
-    // Playing indicator
-    let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
-    let idx = (std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() / 100) as usize % spinner.len();
-    let playing_text = Paragraph::new(Span::styled(
-        format!("{} Playing in mpv...", spinner[idx]),
-        Style::default().fg(Color::Cyan),
-    )).alignment(Alignment::Center);
-    f.render_widget(Clear, layout[1]);
-    f.render_widget(playing_text, layout[1]);
+    // Playing indicator or resume prompt
+    if ps.playing {
+        let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
+        let idx = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() / 100) as usize % spinner.len();
+        let playing_text = Paragraph::new(Span::styled(
+            format!("{} Playing in mpv...", spinner[idx]),
+            Style::default().fg(Color::Cyan),
+        )).alignment(Alignment::Center);
+        f.render_widget(Clear, layout[1]);
+        f.render_widget(playing_text, layout[1]);
+    } else {
+        let prompt = Paragraph::new(Span::styled(
+            "Choose playback option:",
+            Style::default().fg(Color::Yellow),
+        )).alignment(Alignment::Center);
+        f.render_widget(Clear, layout[1]);
+        f.render_widget(prompt, layout[1]);
+    }
 
     // Track info
     let track_info = vec![
@@ -490,6 +499,26 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let options_widget = Paragraph::new(options);
         f.render_widget(Clear, layout[5]);
         f.render_widget(options_widget, layout[5]);
+    } else if ps.playing {
+        // Track info when playing
+        let track_info = vec![
+            Line::from(vec![
+                Span::styled("  Video:  ", Style::default().fg(Color::DarkGray)),
+                Span::raw(&ps.video_track),
+            ]),
+            Line::from(vec![
+                Span::styled("  Audio:  ", Style::default().fg(Color::DarkGray)),
+                Span::raw(&ps.audio_track),
+            ]),
+            Line::from(vec![
+                Span::styled("  Sub:    ", Style::default().fg(Color::DarkGray)),
+                Span::raw(&ps.subtitle_track),
+            ]),
+        ];
+        let tracks = Paragraph::new(track_info);
+        let url_idx = 5;
+        f.render_widget(Clear, layout[url_idx]);
+        f.render_widget(tracks, layout[url_idx]);
     }
 
     // URL (truncated)
@@ -513,10 +542,12 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
         View::Episodes => "↑↓: navigate | Enter: play | e: episodes | ←/BS: back",
         View::SeriesInfo => "←/→: section | ↑/↓: select | Enter: open | e: episodes | Esc: back",
         View::Playing => {
-            if state.playing_state.resume_position.is_some() {
+            if state.playing_state.playing {
+                "Esc: back to tracks"
+            } else if state.playing_state.resume_position.is_some() {
                 "↑/↓: select | Enter: confirm | Esc: back"
             } else {
-                "Esc: back to tracks"
+                "Enter: play | Esc: back to tracks"
             }
         }
     };

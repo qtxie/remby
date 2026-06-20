@@ -68,6 +68,7 @@ pub struct PlayingState {
     pub resume_position: Option<i64>,
     pub chosen_start: Option<f64>,
     pub option_selected: usize,
+    pub playing: bool,
 }
 
 impl Default for PlayingState {
@@ -81,6 +82,7 @@ impl Default for PlayingState {
             resume_position: None,
             chosen_start: None,
             option_selected: 0,
+            playing: false,
         }
     }
 }
@@ -545,7 +547,7 @@ impl AppState {
         self.browse_folder(&lib.id).await
     }
 
-    pub fn show_libraries(&mut self) {
+    pub async fn show_libraries(&mut self) {
         self.stack.push(StackEntry {
             items: self.items.clone(),
             folder_id: self.current_folder_id.clone(),
@@ -553,6 +555,9 @@ impl AppState {
         });
         self.view = View::Libraries;
         self.selected = 0;
+        if self.libraries.is_empty() {
+            self.load_libraries().await;
+        }
     }
 
     pub fn start_search(&mut self) {
@@ -707,6 +712,7 @@ impl AppState {
             resume_position: resume_ticks,
             chosen_start: None,
             option_selected: 0,
+            playing: false,
         };
         self.view = View::Playing;
     }

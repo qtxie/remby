@@ -294,26 +294,33 @@ impl EmbyClient {
         let data: serde_json::Value = serde_json::from_str(&body)
             .context("Invalid response from Emby server")?;
 
+        let items = if let Some(arr) = data.as_array() {
+            arr.clone()
+        } else {
+            data.get("Items")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default()
+        };
+
         let mut libraries = Vec::new();
-        if let Some(items) = data.get("Items").and_then(|v| v.as_array()) {
-            for item in items {
-                let id = item.get("ItemId")
-                    .or_else(|| item.get("Id"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let name = item.get("Name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                if !id.is_empty() && !name.is_empty() {
-                    libraries.push(Library {
-                        id: id.to_string(),
-                        name: name.to_string(),
-                        collection_type: item
-                            .get("CollectionType")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string()),
-                    });
-                }
+        for item in &items {
+            let id = item.get("ItemId")
+                .or_else(|| item.get("Id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let name = item.get("Name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if !id.is_empty() && !name.is_empty() {
+                libraries.push(Library {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                    collection_type: item
+                        .get("CollectionType")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                });
             }
         }
         Ok(libraries)
