@@ -77,12 +77,8 @@ pub struct MediaSource {
     pub container: String,
     #[serde(default, rename = "Size")]
     pub size: u64,
-    #[serde(default, rename = "Name")]
-    pub name: String,
     #[serde(default, rename = "RunTimeTicks")]
     pub runtime_ticks: Option<i64>,
-    #[serde(default, rename = "Bitrate")]
-    pub bitrate: Option<u64>,
     #[serde(default, rename = "MediaStreams")]
     pub media_streams: Vec<MediaStream>,
 }
@@ -91,8 +87,6 @@ pub struct MediaSource {
 pub struct MediaStream {
     #[serde(default, rename = "Type")]
     pub stream_type: String,
-    #[serde(default, rename = "Index")]
-    pub index: i32,
     #[serde(default, rename = "Codec")]
     pub codec: String,
     #[serde(default, rename = "Language")]
@@ -101,22 +95,12 @@ pub struct MediaStream {
     pub title: Option<String>,
     #[serde(default, rename = "DisplayTitle")]
     pub display_title: Option<String>,
-    #[serde(default, rename = "IsDefault")]
-    #[allow(dead_code)]
-    pub is_default: bool,
-    #[serde(default, rename = "IsForced")]
-    #[allow(dead_code)]
-    pub is_forced: bool,
     #[serde(default, rename = "Width")]
     pub width: Option<i32>,
     #[serde(default, rename = "Height")]
     pub height: Option<i32>,
     #[serde(default, rename = "ChannelLayout")]
     pub channel_layout: Option<String>,
-    #[serde(default, rename = "Channels")]
-    pub channels: Option<i32>,
-    #[serde(default, rename = "BitRate")]
-    pub bit_rate: Option<u64>,
     #[serde(default, rename = "Profile")]
     pub profile: Option<String>,
     #[serde(default, rename = "VideoRange")]
@@ -125,8 +109,6 @@ pub struct MediaStream {
     pub avg_frame_rate: Option<f64>,
     #[serde(default, rename = "BitDepth")]
     pub bit_depth: Option<i32>,
-    #[serde(default, rename = "SampleRate")]
-    pub sample_rate: Option<i32>,
 }
 
 impl MediaSource {
@@ -200,13 +182,10 @@ impl MediaSource {
 pub struct ItemsResponse {
     #[serde(rename = "Items")]
     pub items: Vec<MediaItem>,
-    #[serde(rename = "TotalRecordCount")]
-    pub total: usize,
 }
 
 pub struct PageResult {
     pub items: Vec<MediaItem>,
-    pub total: usize,
 }
 
 #[derive(Deserialize, Clone)]
@@ -343,7 +322,6 @@ impl EmbyClient {
         let data: ItemsResponse = resp.json().await.context("Invalid items response")?;
         Ok(PageResult {
             items: data.items,
-            total: data.total,
         })
     }
 
@@ -550,15 +528,6 @@ impl MediaItem {
         self.user_data.as_ref()
             .and_then(|ud| ud.playback_position_ticks)
             .filter(|&pos| pos > 0)
-    }
-
-    pub fn resume_position_str(&self) -> Option<String> {
-        self.resume_position_ticks().map(|ticks| {
-            let secs = ticks / 10_000_000;
-            let m = (secs % 3600) / 60;
-            let s = secs % 60;
-            format!("{}:{:02}", m, s)
-        })
     }
 
     pub fn display_name(&self) -> String {

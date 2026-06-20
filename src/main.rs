@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod emby;
 mod mpv;
 mod ui;
@@ -58,7 +59,7 @@ async fn main() -> Result<()> {
     let server = cli.server.clone();
     let user = cli.user.clone();
     let pass = cli.pass.clone();
-    let mut connect_task = tokio::spawn(async move {
+    let connect_task = tokio::spawn(async move {
         app::AppState::new(server, user, pass).await
     });
 
@@ -250,6 +251,52 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     }
 
                     match state.view {
+                        app::View::Settings => {
+                            match key.code {
+                                KeyCode::Char('q') => break,
+                                KeyCode::Esc => state.settings_cancel(),
+                                KeyCode::Up | KeyCode::Char('k') => state.settings_select_prev(),
+                                KeyCode::Down | KeyCode::Char('j') => state.settings_select_next(),
+                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => state.settings_switch_column(),
+                                KeyCode::Char(' ') => state.settings_toggle(),
+                                KeyCode::Enter => {
+                                    state.settings_save();
+                                    // Reload libraries with new settings
+                                    let tx = bg_tx.clone();
+                                    let client = state.client.clone();
+                                    let config = state.config.clone();
+                                    tokio::spawn(async move {
+                                        let timeout = std::time::Duration::from_secs(120);
+                                        let result = tokio::time::timeout(timeout, async {
+                                            let all_libs = client.get_libraries().await.unwrap_or_default();
+                                            let libs: Vec<_> = if config.enabled_libraries.is_empty() {
+                                                all_libs
+                                            } else {
+                                                all_libs.into_iter()
+                                                    .filter(|lib| config.enabled_libraries.contains(&lib.id))
+                                                    .collect()
+                                            };
+                                            let mut latest = Vec::new();
+                                            for lib in &libs {
+                                                if config.latest_libraries.is_empty() || config.latest_libraries.contains(&lib.id) {
+                                                    if let Ok(items) = client.get_latest_for_library(&lib.id, 10).await {
+                                                        if !items.is_empty() {
+                                                            latest.push((lib.name.clone(), items));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            (libs, latest)
+                                        }).await;
+                                        match result {
+                                            Ok((libs, latest)) => { let _ = tx.send(BackgroundResult::LibrariesLoaded(libs, latest)); }
+                                            Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Libraries".to_string())); }
+                                        }
+                                    });
+                                }
+                                _ => {}
+                            }
+                        }
                         app::View::SourceSelect => {
                             match key.code {
                                 KeyCode::Char('q') => break,
@@ -452,15 +499,27 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if state.library_latest.is_empty() {
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
+                                        let config = state.config.clone();
                                         tokio::spawn(async move {
                                             let timeout = std::time::Duration::from_secs(120);
                                             let result = tokio::time::timeout(timeout, async {
-                                                let libs = client.get_libraries().await.unwrap_or_default();
+                                                let all_libs = client.get_libraries().await.unwrap_or_default();
+                                                // Filter libraries by config
+                                                let libs: Vec<_> = if config.enabled_libraries.is_empty() {
+                                                    all_libs
+                                                } else {
+                                                    all_libs.into_iter()
+                                                        .filter(|lib| config.enabled_libraries.contains(&lib.id))
+                                                        .collect()
+                                                };
                                                 let mut latest = Vec::new();
                                                 for lib in &libs {
-                                                    if let Ok(items) = client.get_latest_for_library(&lib.id, 10).await {
-                                                        if !items.is_empty() {
-                                                            latest.push((lib.name.clone(), items));
+                                                    // Only fetch latest for libraries in config.latest_libraries
+                                                    if config.latest_libraries.is_empty() || config.latest_libraries.contains(&lib.id) {
+                                                        if let Ok(items) = client.get_latest_for_library(&lib.id, 10).await {
+                                                            if !items.is_empty() {
+                                                                latest.push((lib.name.clone(), items));
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -517,6 +576,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.go_back().await?;
                                 }
                                 KeyCode::Char('/') => state.start_search(),
+                                KeyCode::Char('s') => {
+                                    state.open_settings();
+                                }
                                 KeyCode::Char('e') => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         state.loading = true;

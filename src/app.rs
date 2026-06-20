@@ -1,9 +1,7 @@
 use anyhow::Result;
 
+use crate::config::RembyConfig;
 use crate::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
-
-const PAGE_SIZE: usize = 50;
-const HOME_LIMIT: usize = 20;
 
 pub struct AppState {
     pub client: EmbyClient,
@@ -29,6 +27,8 @@ pub struct AppState {
     pub series_state: SeriesState,
     pub playing_state: PlayingState,
     pub mpv_child: Option<std::process::Child>,
+    pub settings_state: SettingsState,
+    pub config: RembyConfig,
 }
 
 pub(crate) struct StackEntry {
@@ -67,9 +67,28 @@ pub struct PlayingState {
     pub subtitle_track: String,
     pub url: String,
     pub resume_position: Option<i64>,
-    pub chosen_start: Option<f64>,
     pub option_selected: usize,
     pub playing: bool,
+}
+
+#[derive(Clone)]
+pub struct SettingsLibrary {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub fetch_latest: bool,
+}
+
+pub struct SettingsState {
+    pub libraries: Vec<SettingsLibrary>,
+    pub selected: usize,
+    pub column: SettingsColumn,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum SettingsColumn {
+    Enabled,
+    Latest,
 }
 
 impl Default for PlayingState {
@@ -81,9 +100,18 @@ impl Default for PlayingState {
             subtitle_track: String::new(),
             url: String::new(),
             resume_position: None,
-            chosen_start: None,
             option_selected: 0,
             playing: false,
+        }
+    }
+}
+
+impl Default for SettingsState {
+    fn default() -> Self {
+        Self {
+            libraries: Vec::new(),
+            selected: 0,
+            column: SettingsColumn::Enabled,
         }
     }
 }
@@ -158,6 +186,7 @@ pub enum View {
     Episodes,
     SeriesInfo,
     Playing,
+    Settings,
 }
 
 impl AppState {
@@ -175,6 +204,8 @@ impl AppState {
         } else {
             EmbyClient::new(server.clone(), String::new())
         };
+
+        let config = crate::config::load_config();
 
         Ok(Self {
             client,
@@ -200,124 +231,9 @@ impl AppState {
             series_state: SeriesState::default(),
             playing_state: PlayingState::default(),
             mpv_child: None,
+            settings_state: SettingsState::default(),
+            config,
         })
-    }
-
-    pub async fn load_home(&mut self) -> Result<()> {
-        self.loading = true;
-        self.status_msg = "Loading...".to_string();
-
-        let resume_fut = self.client.get_resume_items(HOME_LIMIT);
-        let latest_fut = self.client.get_latest_items(HOME_LIMIT);
-
-        let (resume_result, latest_result) = tokio::join!(resume_fut, latest_fut);
-
-        let mut items = Vec::new();
-        if let Ok(resume) = resume_result {
-            if !resume.is_empty() {
-                items.push(MediaItem::separator("Continue Watching"));
-                items.extend(resume);
-            }
-        }
-        if let Ok(latest) = latest_result {
-            if !latest.is_empty() {
-                items.push(MediaItem::separator("Latest"));
-                items.extend(latest);
-            }
-        }
-
-        self.home_items = items;
-        self.loading = false;
-        self.status_msg = format!("{} items", self.home_items.len());
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub async fn load_libraries(&mut self) -> Result<()> {
-        match self.client.get_libraries().await {
-            Ok(libs) => {
-                self.libraries = libs;
-                self.library_latest.clear();
-
-                // Fetch latest items for all libraries in parallel
-                let futures: Vec<_> = self.libraries.iter().map(|lib| {
-                    let client = self.client.clone();
-                    let lib_id = lib.id.clone();
-                    let lib_name = lib.name.clone();
-                    async move {
-                        match client.get_latest_for_library(&lib_id, 10).await {
-                            Ok(items) if !items.is_empty() => Some((lib_name, items)),
-                            _ => None,
-                        }
-                    }
-                }).collect();
-
-                let results = futures::future::join_all(futures).await;
-                for result in results {
-                    if let Some(pair) = result {
-                        self.library_latest.push(pair);
-                    }
-                }
-
-                self.status_msg = format!("{} libraries", self.libraries.len());
-            }
-            Err(e) => {
-                self.status_msg = format!("Error: {e}");
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn browse_folder(&mut self, folder_id: &str) -> Result<()> {
-        self.stack.push(StackEntry {
-            items: self.items.clone(),
-            folder_id: self.current_folder_id.clone(),
-            view: self.view.clone(),
-        });
-        self.items.clear();
-        self.total_items = 0;
-        self.current_folder_id = folder_id.to_string();
-        self.selected = 0;
-        self.view = View::Items;
-        self.loading = true;
-        self.status_msg = "Loading...".to_string();
-
-        match self.client.get_items(folder_id, 0, PAGE_SIZE).await {
-            Ok(page) => {
-                self.total_items = page.total;
-                self.items = page.items;
-                self.status_msg = format!("{} items", self.total_items);
-            }
-            Err(e) => {
-                self.status_msg = format!("Error: {e}");
-            }
-        }
-        self.loading = false;
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub async fn load_more_items(&mut self) -> Result<()> {
-        if self.loading || self.view != View::Items {
-            return Ok(());
-        }
-        if self.items.len() >= self.total_items {
-            return Ok(());
-        }
-        self.loading = true;
-
-        match self.client.get_items(&self.current_folder_id, self.items.len(), PAGE_SIZE).await {
-            Ok(page) => {
-                self.total_items = page.total;
-                self.items.extend(page.items);
-                self.status_msg = format!("{} items", self.total_items);
-            }
-            Err(e) => {
-                self.status_msg = format!("Error loading more: {e}");
-            }
-        }
-        self.loading = false;
-        Ok(())
     }
 
     pub fn open_source_select(&mut self, item: &MediaItem, sources: Vec<MediaSource>) {
@@ -327,67 +243,6 @@ impl AppState {
         };
         self.selected = 0;
         self.view = View::SourceSelect;
-    }
-
-    pub async fn load_episodes(&mut self, series_id: &str, series_name: &str) -> Result<()> {
-        self.loading = true;
-        self.series_name = series_name.to_string();
-        self.status_msg = format!("Loading episodes of {}...", series_name);
-        match self.client.get_episodes(series_id).await {
-            Ok(episodes) => {
-                self.episodes = episodes;
-                self.selected = 0;
-                self.view = View::Episodes;
-                self.status_msg = format!("{} episodes", self.episodes.len());
-            }
-            Err(e) => {
-                self.status_msg = format!("Error: {e}");
-            }
-        }
-        self.loading = false;
-        Ok(())
-    }
-
-    pub async fn load_series_info(&mut self, item: &MediaItem) -> Result<()> {
-        let series_id = item.series_id.as_deref().unwrap_or(&item.id);
-        self.loading = true;
-        self.status_msg = "Loading series info...".to_string();
-
-        let (detail, seasons, similar) = tokio::join!(
-            self.client.get_item_detail(series_id),
-            self.client.get_seasons(series_id),
-            self.client.get_similar(series_id),
-        );
-
-        let mut episodes = Vec::new();
-        if let Ok(ref s) = seasons {
-            if let Some(first_season) = s.first() {
-                if let Ok(eps) = self.client.get_season_episodes(series_id, &first_season.id).await {
-                    episodes = eps;
-                }
-            }
-        }
-
-        let overview_text = match &detail {
-            Ok(item) => item.overview.clone().unwrap_or_default(),
-            Err(_) => String::new(),
-        };
-
-        self.series_state = SeriesState {
-            item: detail.ok(),
-            overview: overview_text,
-            seasons: seasons.unwrap_or_default(),
-            episodes,
-            similar: similar.unwrap_or_default(),
-            selected_season: 0,
-            selected_episode: 0,
-            section: SeriesSection::Seasons,
-        };
-        self.selected = 0;
-        self.view = View::SeriesInfo;
-        self.loading = false;
-        self.status_msg = String::new();
-        Ok(())
     }
 
     pub fn series_section_next(&mut self) {
@@ -527,6 +382,9 @@ impl AppState {
                 self.view = View::TrackSelect;
                 self.selected = 0;
             }
+            View::Settings => {
+                self.settings_cancel();
+            }
         }
         Ok(())
     }
@@ -585,6 +443,7 @@ impl AppState {
             View::Episodes => self.episodes.get(self.selected),
             View::SeriesInfo => self.series_selected_item(),
             View::Playing => self.track_state.item.as_ref(),
+            View::Settings => None,
         }
     }
 
@@ -599,10 +458,6 @@ impl AppState {
         None
     }
 
-    pub async fn browse_library(&mut self, lib: &Library) -> Result<()> {
-        self.browse_folder(&lib.id).await
-    }
-
     pub async fn show_libraries(&mut self) {
         self.stack.push(StackEntry {
             items: self.items.clone(),
@@ -613,11 +468,6 @@ impl AppState {
         self.selected = 0;
         self.loading = true;
         self.status_msg = "Loading libraries...".to_string();
-    }
-
-    pub async fn load_libraries_bg(&mut self) {
-        self.load_libraries().await;
-        self.loading = false;
     }
 
     pub fn start_search(&mut self) {
@@ -634,35 +484,9 @@ impl AppState {
         self.search_query.pop();
     }
 
-    pub async fn submit_search(&mut self) -> Result<()> {
-        if self.search_query.is_empty() {
-            return Ok(());
-        }
-        match self.client.search(&self.search_query).await {
-            Ok(results) => {
-                self.search_results = results;
-                self.selected = 0;
-                self.view = View::SearchResults;
-                self.status_msg = format!("{} results", self.search_results.len());
-            }
-            Err(e) => {
-                self.status_msg = format!("Search error: {e}");
-            }
-        }
-        Ok(())
-    }
-
     pub fn cancel_search(&mut self) {
         self.searching = false;
         self.search_query.clear();
-    }
-
-    #[allow(dead_code)]
-    pub fn should_load_more(&self) -> bool {
-        self.view == View::Items
-            && !self.loading
-            && self.items.len() < self.total_items
-            && self.selected + 5 >= self.items.len()
     }
 
     pub fn open_track_select(&mut self, item: &MediaItem, source: &MediaSource) {
@@ -736,30 +560,85 @@ impl AppState {
         }
     }
 
-    pub fn get_selected_tracks(&self) -> (Option<i32>, Option<i32>, Option<i32>) {
-        // Return sequential position (0-based) per track type, not the API Index
-        let video = if self.track_state.video_tracks.is_empty() {
-            None
-        } else {
-            Some(self.track_state.selected_video as i32)
-        };
-        let audio = if self.track_state.audio_tracks.is_empty() {
-            None
-        } else {
-            Some(self.track_state.selected_audio as i32)
-        };
-        let sub = if self.track_state.subtitle_tracks.is_empty() {
-            None
-        } else {
-            Some(self.track_state.selected_subtitle as i32)
-        };
-        (video, audio, sub)
-    }
-
     pub fn kill_mpv(&mut self) {
         if let Some(mut child) = self.mpv_child.take() {
             let _ = child.kill();
         }
+    }
+
+    pub fn open_settings(&mut self) {
+        self.settings_state = SettingsState {
+            libraries: self.libraries.iter().map(|lib| {
+                SettingsLibrary {
+                    id: lib.id.clone(),
+                    name: lib.name.clone(),
+                    enabled: self.config.enabled_libraries.is_empty() || self.config.enabled_libraries.contains(&lib.id),
+                    fetch_latest: self.config.latest_libraries.is_empty() || self.config.latest_libraries.contains(&lib.id),
+                }
+            }).collect(),
+            selected: 0,
+            column: SettingsColumn::Enabled,
+        };
+        self.view = View::Settings;
+        self.selected = 0;
+    }
+
+    pub fn settings_select_next(&mut self) {
+        let len = self.settings_state.libraries.len();
+        if len > 0 {
+            self.settings_state.selected = (self.settings_state.selected + 1) % len;
+        }
+    }
+
+    pub fn settings_select_prev(&mut self) {
+        let len = self.settings_state.libraries.len();
+        if len > 0 {
+            self.settings_state.selected = (self.settings_state.selected + len - 1) % len;
+        }
+    }
+
+    pub fn settings_toggle(&mut self) {
+        if let Some(lib) = self.settings_state.libraries.get_mut(self.settings_state.selected) {
+            match self.settings_state.column {
+                SettingsColumn::Enabled => lib.enabled = !lib.enabled,
+                SettingsColumn::Latest => lib.fetch_latest = !lib.fetch_latest,
+            }
+        }
+    }
+
+    pub fn settings_switch_column(&mut self) {
+        self.settings_state.column = match self.settings_state.column {
+            SettingsColumn::Enabled => SettingsColumn::Latest,
+            SettingsColumn::Latest => SettingsColumn::Enabled,
+        };
+    }
+
+    pub fn settings_save(&mut self) {
+        let enabled: Vec<String> = self.settings_state.libraries.iter()
+            .filter(|l| l.enabled)
+            .map(|l| l.id.clone())
+            .collect();
+        let latest: Vec<String> = self.settings_state.libraries.iter()
+            .filter(|l| l.enabled && l.fetch_latest)
+            .map(|l| l.id.clone())
+            .collect();
+        self.config.enabled_libraries = enabled;
+        self.config.latest_libraries = latest;
+        if let Err(e) = crate::config::save_config(&self.config) {
+            self.status_msg = format!("Save error: {e}");
+        } else {
+            self.status_msg = "Settings saved".to_string();
+        }
+        self.libraries.clear();
+        self.library_latest.clear();
+        self.view = View::Libraries;
+        self.selected = 0;
+        self.loading = true;
+    }
+
+    pub fn settings_cancel(&mut self) {
+        self.view = View::Home;
+        self.selected = 0;
     }
 
     pub fn open_playing(&mut self, item_name: &str, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>) {
@@ -770,7 +649,6 @@ impl AppState {
             audio_track: audio.to_string(),
             subtitle_track: subtitle.to_string(),
             resume_position: resume_ticks,
-            chosen_start: None,
             option_selected: 0,
             playing: false,
         };
@@ -801,6 +679,7 @@ impl AppState {
             View::Episodes => self.episodes.len(),
             View::SeriesInfo => self.series_current_len(),
             View::Playing => 0,
+            View::Settings => self.settings_state.libraries.len(),
         }
     }
 }

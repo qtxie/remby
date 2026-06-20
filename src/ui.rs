@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
-use crate::app::{AppState, SeriesSection, TrackSection, View};
+use crate::app::{AppState, SeriesSection, SettingsColumn, TrackSection, View};
 
 pub fn render(f: &mut Frame, state: &AppState) {
     let area = f.area();
@@ -27,6 +27,7 @@ pub fn render(f: &mut Frame, state: &AppState) {
         View::Episodes => render_episodes(f, state, layout[1]),
         View::SeriesInfo => render_series_info(f, state, layout[1]),
         View::Playing => render_playing(f, state, layout[1]),
+        View::Settings => render_settings(f, state, layout[1]),
     }
 
     render_footer(f, state, layout[2]);
@@ -57,6 +58,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
                     .unwrap_or_else(|| "Series".to_string())
             }
             View::Playing => "Playing".to_string(),
+            View::Settings => "Settings".to_string(),
         }
     };
 
@@ -593,6 +595,101 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(url_text, layout[url_idx]);
 }
 
+fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
+    let ss = &state.settings_state;
+
+    let header_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+
+    // Find the longest library name for alignment
+    let max_name_len = ss.libraries.iter()
+        .map(|lib| lib.name.chars().count())
+        .max()
+        .unwrap_or(10)
+        .max(10);
+
+    let mut items: Vec<ListItem> = Vec::new();
+
+    // Column headers
+    let enabled_header = if ss.column == SettingsColumn::Enabled { "▸ Enabled" } else { "  Enabled" };
+    let latest_header = if ss.column == SettingsColumn::Latest { "▸ Latest" } else { "  Latest" };
+    items.push(ListItem::new(Line::from(vec![
+        Span::styled("  Library", header_style),
+        Span::raw(" ".repeat(max_name_len - 6 + 4)),
+        Span::styled(
+            enabled_header,
+            if ss.column == SettingsColumn::Enabled { header_style } else { Style::default().fg(Color::DarkGray) },
+        ),
+        Span::raw("  "),
+        Span::styled(
+            latest_header,
+            if ss.column == SettingsColumn::Latest { header_style } else { Style::default().fg(Color::DarkGray) },
+        ),
+    ])));
+
+    for (i, lib) in ss.libraries.iter().enumerate() {
+        let selected = i == ss.selected;
+        let prefix = if selected { "▸ " } else { "  " };
+        let name_style = if selected {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+
+        let enabled_mark = if lib.enabled { "[x]" } else { "[ ]" };
+        let latest_mark = if lib.fetch_latest { "[x]" } else { "[ ]" };
+
+        let enabled_style = if selected && ss.column == SettingsColumn::Enabled {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else if lib.enabled {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
+        let latest_style = if selected && ss.column == SettingsColumn::Latest {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else if lib.fetch_latest {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
+        // Pad name to fixed width (Chinese chars are ~2 cells wide)
+        let name_display = format!("{}{}", prefix, lib.name);
+        let name_width: usize = lib.name.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
+        let prefix_width = if selected { 2 } else { 2 };
+        let total_name_width = prefix_width + name_width;
+        let padding = if total_name_width < max_name_len + 4 {
+            " ".repeat(max_name_len + 4 - total_name_width)
+        } else {
+            " ".to_string()
+        };
+
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(name_display, name_style),
+            Span::raw(padding),
+            Span::styled(enabled_mark, enabled_style),
+            Span::raw("      "),
+            Span::styled(latest_mark, latest_style),
+        ])));
+    }
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title(Span::styled(
+                    " Settings - Library Preferences ",
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                ))
+                .title_alignment(Alignment::Center),
+        );
+
+    f.render_widget(Clear, area);
+    f.render_widget(list, area);
+}
+
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
         View::Home => "↑↓: navigate | Enter: play | l: libraries | /: search | q: quit",
@@ -612,6 +709,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
                 "Enter: play | Esc: back to tracks"
             }
         }
+        View::Settings => "↑↓: navigate | ←/→: column | Space: toggle | Enter: save | Esc: cancel",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"
