@@ -600,12 +600,8 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
     let header_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
 
-    // Find the longest library name for alignment
-    let max_name_len = ss.libraries.iter()
-        .map(|lib| lib.name.chars().count())
-        .max()
-        .unwrap_or(10)
-        .max(10);
+    // Fixed column position for checkboxes (leave room for longest possible name)
+    let checkbox_col = 30;
 
     let mut items: Vec<ListItem> = Vec::new();
 
@@ -614,7 +610,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
     let latest_header = if ss.column == SettingsColumn::Latest { "▸ Latest" } else { "  Latest" };
     items.push(ListItem::new(Line::from(vec![
         Span::styled("  Library", header_style),
-        Span::raw(" ".repeat(max_name_len - 6 + 4)),
+        Span::raw(" ".repeat(checkbox_col - 9)),
         Span::styled(
             enabled_header,
             if ss.column == SettingsColumn::Enabled { header_style } else { Style::default().fg(Color::DarkGray) },
@@ -654,13 +650,11 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
             Style::default().fg(Color::DarkGray)
         };
 
-        // Pad name to fixed width (Chinese chars are ~2 cells wide)
+        // Calculate display width of prefix + name
         let name_display = format!("{}{}", prefix, lib.name);
-        let name_width: usize = lib.name.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
-        let prefix_width = if selected { 2 } else { 2 };
-        let total_name_width = prefix_width + name_width;
-        let padding = if total_name_width < max_name_len + 4 {
-            " ".repeat(max_name_len + 4 - total_name_width)
+        let display_width: usize = name_display.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
+        let padding = if display_width < checkbox_col {
+            " ".repeat(checkbox_col - display_width)
         } else {
             " ".to_string()
         };
