@@ -248,6 +248,11 @@ impl AppState {
     }
 
     pub fn open_source_select(&mut self, item: &MediaItem, sources: Vec<MediaSource>) {
+        self.stack.push(StackEntry {
+            items: self.items.clone(),
+            folder_id: self.current_folder_id.clone(),
+            view: self.view.clone(),
+        });
         self.source_state = SourceState {
             item: Some(item.clone()),
             sources,
@@ -367,13 +372,11 @@ impl AppState {
                     self.selected = 0;
                 }
             }
-            View::SourceSelect => {
-                self.view = View::Home;
-                self.selected = 0;
-            }
-            View::TrackSelect => {
-                if self.source_state.sources.len() > 1 {
-                    self.view = View::SourceSelect;
+            View::SourceSelect | View::TrackSelect | View::Playing => {
+                if let Some(prev) = self.stack.pop() {
+                    self.items = prev.items;
+                    self.current_folder_id = prev.folder_id;
+                    self.view = prev.view;
                     self.selected = 0;
                 } else {
                     self.view = View::Home;
@@ -390,11 +393,6 @@ impl AppState {
                     self.view = View::Home;
                     self.selected = 0;
                 }
-            }
-            View::Playing => {
-                self.kill_mpv();
-                self.view = View::TrackSelect;
-                self.selected = 0;
             }
             View::Settings => {
                 self.settings_cancel();
@@ -532,6 +530,11 @@ impl AppState {
     }
 
     pub fn open_track_select(&mut self, item: &MediaItem, source: &MediaSource) {
+        self.stack.push(StackEntry {
+            items: self.items.clone(),
+            folder_id: self.current_folder_id.clone(),
+            view: self.view.clone(),
+        });
         self.track_state = TrackState {
             item: Some(item.clone()),
             media_source: Some(source.clone()),
@@ -702,6 +705,11 @@ impl AppState {
     }
 
     pub fn open_playing(&mut self, item_name: &str, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>) {
+        self.stack.push(StackEntry {
+            items: self.items.clone(),
+            folder_id: self.current_folder_id.clone(),
+            view: self.view.clone(),
+        });
         self.playing_state = PlayingState {
             item_name: item_name.to_string(),
             url: url.to_string(),
