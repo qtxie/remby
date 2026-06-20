@@ -606,6 +606,22 @@ impl AppState {
         }
     }
 
+    pub fn settings_move_up(&mut self) {
+        let idx = self.settings_state.selected;
+        if idx > 0 {
+            self.settings_state.libraries.swap(idx, idx - 1);
+            self.settings_state.selected = idx - 1;
+        }
+    }
+
+    pub fn settings_move_down(&mut self) {
+        let idx = self.settings_state.selected;
+        if idx + 1 < self.settings_state.libraries.len() {
+            self.settings_state.libraries.swap(idx, idx + 1);
+            self.settings_state.selected = idx + 1;
+        }
+    }
+
     pub fn settings_switch_column(&mut self) {
         self.settings_state.column = match self.settings_state.column {
             SettingsColumn::Enabled => SettingsColumn::Latest,

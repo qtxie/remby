@@ -709,7 +709,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
                 "Enter: play | Esc: back to tracks"
             }
         }
-        View::Settings => "↑↓: navigate | ←/→: column | Space: toggle | Enter: save | Esc: cancel",
+        View::Settings => "↑↓: nav | ←/→: col | Space: toggle | Shift+↑↓: move | Enter: save | Esc: cancel",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"

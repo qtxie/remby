@@ -259,6 +259,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Down | KeyCode::Char('j') => state.settings_select_next(),
                                 KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => state.settings_switch_column(),
                                 KeyCode::Char(' ') => state.settings_toggle(),
+                                KeyCode::Char('K') => state.settings_move_up(),
+                                KeyCode::Char('J') => state.settings_move_down(),
                                 KeyCode::Enter => {
                                     state.settings_save();
                                     // Reload libraries with new settings
