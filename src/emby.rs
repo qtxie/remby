@@ -472,6 +472,24 @@ impl EmbyClient {
         Ok(data.items)
     }
 
+    pub async fn get_latest_for_library(&self, library_id: &str, limit: usize) -> Result<Vec<MediaItem>> {
+        let url = self.api_url("/Users/Latest");
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("ParentId", library_id),
+                ("Limit", &limit.to_string()),
+                ("Fields", "MediaSources"),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch latest items")?;
+
+        let body = resp.text().await.unwrap_or_default();
+        let items: Vec<MediaItem> = serde_json::from_str(&body)
+            .unwrap_or_default();
+        Ok(items)
+    }
+
     pub fn stream_url_for_source(&self, item: &MediaItem, source: &MediaSource) -> String {
         let media_source_id = if source.id.is_empty() { &item.id } else { &source.id };
         let container = if source.container.is_empty() { "mkv" } else { source.container.as_str() };

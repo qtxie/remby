@@ -147,30 +147,62 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
-    let items: Vec<ListItem> = state
-        .libraries
-        .iter()
-        .map(|lib| {
-            let icon = match lib.collection_type.as_deref() {
-                Some("movies") => " ",
-                Some("tvshows") => " ",
-                Some("music") => " ",
-                Some("books") => " ",
-                _ => " ",
+    // Build combined list: libraries + latest items sections
+    let mut items: Vec<ListItem> = Vec::new();
+
+    // Libraries section
+    items.push(ListItem::new(Line::from(Span::styled(
+        " Libraries",
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    ))));
+
+    for lib in &state.libraries {
+        let icon = match lib.collection_type.as_deref() {
+            Some("movies") => " ",
+            Some("tvshows") => " ",
+            Some("music") => " ",
+            Some("books") => " ",
+            _ => " ",
+        };
+        items.push(ListItem::new(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(icon, Style::default().fg(Color::Cyan)),
+            Span::raw("  "),
+            Span::raw(&lib.name),
+        ])));
+    }
+
+    // Latest items sections
+    for (lib_name, latest_items) in &state.library_latest {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!(" 最新 {}", lib_name),
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        ))));
+
+        for item in latest_items {
+            let name = item.display_name();
+            let duration = item.duration_str().unwrap_or_default();
+            let dur = if !duration.is_empty() {
+                format!(" [{duration}]")
+            } else {
+                String::new()
             };
-            ListItem::new(Line::from(vec![
+            let icon = if item.is_video() { "▶" } else { " " };
+            items.push(ListItem::new(Line::from(vec![
+                Span::raw("  "),
                 Span::styled(icon, Style::default().fg(Color::Cyan)),
                 Span::raw("  "),
-                Span::raw(&lib.name),
-            ]))
-        })
-        .collect();
+                Span::raw(name),
+                Span::styled(dur, Style::default().fg(Color::DarkGray)),
+            ])));
+        }
+    }
 
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!("Libraries ({})", state.libraries.len())),
+                .title("Library"),
         )
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");

@@ -9,6 +9,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::prelude::*;
+use ratatui::widgets::*;
 use std::io;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -35,24 +36,61 @@ enum BackgroundResult {
     FolderLoaded(Vec<crate::emby::MediaItem>, String),
     SearchLoaded(Vec<crate::emby::MediaItem>),
     ItemDetailLoaded(crate::emby::MediaItem),
+    Timeout(String),
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut state = app::AppState::new(cli.server, cli.user, cli.pass).await?;
 
-    if state.server.is_empty() {
-        eprintln!("Usage: remby -s <server-url> -u <username> -p <password>");
-        eprintln!("   or: remby -s <server-url> -t <api-token>");
-        std::process::exit(1);
-    }
-
+    // Splash screen
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+
+    terminal.draw(|f| {
+        let area = f.area();
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Span::styled(
+                " Remby ",
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            ))
+            .title_alignment(Alignment::Center);
+        f.render_widget(Clear, area);
+        f.render_widget(block, area);
+
+        let loading = Paragraph::new(Span::styled(
+            "⣾ Initializing...",
+            Style::default().fg(Color::Yellow),
+        ))
+        .alignment(Alignment::Center);
+        f.render_widget(loading, area);
+    })?;
+
+    // Connect to server and authenticate
+    let mut state = match app::AppState::new(cli.server, cli.user, cli.pass).await {
+        Ok(s) => s,
+        Err(e) => {
+            disable_raw_mode()?;
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+            terminal.show_cursor()?;
+            eprintln!("Error: {e:#}");
+            std::process::exit(1);
+        }
+    };
+
+    if state.server.is_empty() {
+        disable_raw_mode()?;
+        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+        terminal.show_cursor()?;
+        eprintln!("Usage: remby -s <server-url> -u <username> -p <password>");
+        eprintln!("   or: remby -s <server-url> -t <api-token>");
+        std::process::exit(1);
+    }
 
     let result = run_app(&mut terminal, &mut state, &cli.mpv).await;
 
@@ -77,20 +115,28 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         let tx = bg_tx.clone();
         let client = state.client.clone();
         tokio::spawn(async move {
-            let mut items = Vec::new();
-            if let Ok(resume) = client.get_resume_items(20).await {
-                if !resume.is_empty() {
-                    items.push(crate::emby::MediaItem::separator("Continue Watching"));
-                    items.extend(resume);
+            let timeout = std::time::Duration::from_secs(30);
+            let result = tokio::time::timeout(timeout, async {
+                let mut items = Vec::new();
+                if let Ok(resume) = client.get_resume_items(20).await {
+                    if !resume.is_empty() {
+                        items.push(crate::emby::MediaItem::separator("Continue Watching"));
+                        items.extend(resume);
+                    }
                 }
-            }
-            if let Ok(latest) = client.get_latest_items(20).await {
-                if !latest.is_empty() {
-                    items.push(crate::emby::MediaItem::separator("Latest"));
-                    items.extend(latest);
+                if let Ok(latest) = client.get_latest_items(20).await {
+                    if !latest.is_empty() {
+                        items.push(crate::emby::MediaItem::separator("Latest"));
+                        items.extend(latest);
+                    }
                 }
+                items
+            }).await;
+
+            match result {
+                Ok(items) => { let _ = tx.send(BackgroundResult::HomeLoaded(items)); }
+                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Home page".to_string())); }
             }
-            let _ = tx.send(BackgroundResult::HomeLoaded(items));
         });
     }
 
@@ -140,6 +186,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             state.mpv_child = Some(child);
                         }
                     }
+                }
+                BackgroundResult::Timeout(task) => {
+                    state.loading = false;
+                    state.status_msg = format!("{} timed out", task);
                 }
             }
         }
@@ -284,13 +334,15 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 if item.is_video() {
                                                     state.loading = true;
                                                     let tx = bg_tx.clone();
-                                                    let client = state.client.clone();
-                                                    let item_id = item.id.clone();
-                                                    tokio::spawn(async move {
-                                                        if let Ok(detail) = client.get_item_detail(&item_id).await {
-                                                            let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail));
-                                                        }
-                                                    });
+                                            let client = state.client.clone();
+                                            let item_id = item.id.clone();
+                                            tokio::spawn(async move {
+                                                let timeout = std::time::Duration::from_secs(15);
+                                                match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
+                                                    Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
+                                                    _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
+                                                }
+                                            });
                                                 }
                                             }
                                         }
@@ -317,8 +369,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             tokio::spawn(async move {
-                                                if let Ok(episodes) = client.get_episodes(&series_id).await {
-                                                    let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes));
+                                                let timeout = std::time::Duration::from_secs(15);
+                                                match tokio::time::timeout(timeout, client.get_episodes(&series_id)).await {
+                                                    Ok(Ok(episodes)) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes)); }
+                                                    _ => { let _ = tx.send(BackgroundResult::Timeout("Episodes".to_string())); }
                                                 }
                                             });
                                         }
@@ -356,7 +410,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.go_back().await?;
                                 }
                                 KeyCode::Right | KeyCode::Char('l') => {
-                                    state.show_libraries();
+                                    state.show_libraries().await;
                                 }
                                 KeyCode::Enter => {
                                     if let Some(item) = state.selected_item().cloned() {
@@ -369,8 +423,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
                                             tokio::spawn(async move {
-                                                if let Ok(detail) = client.get_item_detail(&item_id).await {
-                                                    let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail));
+                                                let timeout = std::time::Duration::from_secs(15);
+                                                match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
+                                                    Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
+                                                    _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
                                                 }
                                             });
                                         } else if item.is_navigable() {

@@ -9,6 +9,7 @@ pub struct AppState {
     pub client: EmbyClient,
     pub server: String,
     pub libraries: Vec<Library>,
+    pub library_latest: Vec<(String, Vec<MediaItem>)>,
     pub items: Vec<MediaItem>,
     pub total_items: usize,
     pub current_folder_id: String,
@@ -179,6 +180,7 @@ impl AppState {
             client,
             server,
             libraries: Vec::new(),
+            library_latest: Vec::new(),
             items: Vec::new(),
             total_items: 0,
             current_folder_id: String::new(),
@@ -235,7 +237,18 @@ impl AppState {
         match self.client.get_libraries().await {
             Ok(libs) => {
                 self.libraries = libs;
-                self.status_msg = format!("{} libraries loaded", self.libraries.len());
+                self.library_latest.clear();
+                for lib in &self.libraries {
+                    match self.client.get_latest_for_library(&lib.id, 10).await {
+                        Ok(items) => {
+                            if !items.is_empty() {
+                                self.library_latest.push((lib.name.clone(), items));
+                            }
+                        }
+                        Err(_) => {}
+                    }
+                }
+                self.status_msg = format!("{} libraries", self.libraries.len());
             }
             Err(e) => {
                 self.status_msg = format!("Error: {e}");
@@ -524,7 +537,36 @@ impl AppState {
     pub fn selected_item(&self) -> Option<&MediaItem> {
         match self.view {
             View::Home => self.home_items.get(self.selected),
-            View::Libraries => None,
+            View::Libraries => {
+                // Combined list: libraries + section headers + latest items
+                let mut idx = self.selected;
+
+                // Skip "Libraries" header
+                if idx == 0 {
+                    return None;
+                }
+                idx -= 1;
+
+                // Check libraries
+                if idx < self.libraries.len() {
+                    return None; // Libraries are not MediaItems
+                }
+                idx -= self.libraries.len();
+
+                // Check latest items sections
+                for (_, items) in &self.library_latest {
+                    // Skip section header
+                    if idx == 0 {
+                        return None;
+                    }
+                    idx -= 1;
+                    if idx < items.len() {
+                        return items.get(idx);
+                    }
+                    idx -= items.len();
+                }
+                None
+            }
             View::Items => self.items.get(self.selected),
             View::SearchResults => self.search_results.get(self.selected),
             View::SourceSelect => self.source_state.item.as_ref(),
@@ -537,10 +579,13 @@ impl AppState {
 
     pub fn selected_library(&self) -> Option<&Library> {
         if self.view == View::Libraries {
-            self.libraries.get(self.selected)
-        } else {
-            None
+            let idx = self.selected;
+            // Skip "Libraries" header (index 0)
+            if idx > 0 && idx <= self.libraries.len() {
+                return self.libraries.get(idx - 1);
+            }
         }
+        None
     }
 
     pub async fn browse_library(&mut self, lib: &Library) -> Result<()> {
@@ -720,7 +765,14 @@ impl AppState {
     fn current_list_len(&self) -> usize {
         match self.view {
             View::Home => self.home_items.len(),
-            View::Libraries => self.libraries.len(),
+            View::Libraries => {
+                // Libraries + section headers + latest items
+                let mut count = self.libraries.len() + 1; // +1 for "Libraries" header
+                for (_, items) in &self.library_latest {
+                    count += 1 + items.len(); // +1 for section header
+                }
+                count
+            }
             View::Items => self.items.len(),
             View::SearchResults => self.search_results.len(),
             View::SourceSelect => self.source_state.sources.len(),
