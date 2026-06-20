@@ -50,66 +50,45 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    terminal.draw(|f| {
-        let area = f.area();
+    // Animated splash screen
+    let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
+    for i in 0..15 {
+        terminal.draw(|f| {
+            let area = f.area();
+            let vertical = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(30),
+                    Constraint::Length(10),
+                    Constraint::Min(1),
+                ])
+                .split(area);
 
-        // Center the content vertically
-        let vertical = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(30),
-                Constraint::Length(8),
-                Constraint::Min(1),
-            ])
-            .split(area);
+            let logo_lines = vec![
+                Line::from("      ________       "),
+                Line::from("   __/        \\__    "),
+                Line::from("  /   ________   \\   "),
+                Line::from(" |   /        \\   |  "),
+                Line::from(" |  |   ▶▶▶▶   |  |  "),
+                Line::from("  \\  \\________/  /   "),
+                Line::from("   \\__        __/    "),
+                Line::from("      \\______/       "),
+            ];
+            f.render_widget(Clear, area);
+            f.render_widget(Paragraph::new(logo_lines).alignment(Alignment::Center), vertical[1]);
 
-        // Logo / ASCII art
-        let logo_lines = vec![
-            Line::from(""),
-            Line::from(Span::styled(
-                "  ██████╗ ███████╗███╗  EB██╗",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "  ██╔══██╗██╔════╝████╗ ██║",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "  ██████╔╝█████╗  ██╔████╔██║",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "  ██╔══██╗██╔══╝  ██║╚██╔╝██║",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "  ██║  ██║███████╗██║ ╚═╝ ██║",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "  ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-        ];
-        let logo = Paragraph::new(logo_lines).alignment(Alignment::Center);
-        f.render_widget(logo, vertical[1]);
-
-        // Loading animation area
-        let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
-        let idx = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() / 100) as usize % spinner.len();
-
-        let loading = Paragraph::new(Line::from(vec![
-            Span::styled(
-                format!("{} Connecting to server...", spinner[idx]),
-                Style::default().fg(Color::Yellow),
-            ),
-        ]))
-        .alignment(Alignment::Center);
-        f.render_widget(loading, vertical[2]);
-    })?;
+            let frame = spinner[i % spinner.len()];
+            f.render_widget(
+                Paragraph::new(Span::styled(
+                    format!("{} Connecting to server...", frame),
+                    Style::default().fg(Color::Yellow),
+                ))
+                .alignment(Alignment::Center),
+                vertical[2],
+            );
+        })?;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 
     // Connect to server and authenticate
     let mut state = match app::AppState::new(cli.server, cli.user, cli.pass).await {

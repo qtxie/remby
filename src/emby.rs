@@ -473,7 +473,7 @@ impl EmbyClient {
     }
 
     pub async fn get_latest_for_library(&self, library_id: &str, limit: usize) -> Result<Vec<MediaItem>> {
-        let url = self.api_url("/Users/Latest");
+        let url = self.api_url(&format!("/Users/{}/Items/Latest", self.user_id));
         let resp = self.authed_get(&url)
             .query(&[
                 ("ParentId", library_id),
@@ -485,6 +485,7 @@ impl EmbyClient {
             .context("Failed to fetch latest items")?;
 
         let body = resp.text().await.unwrap_or_default();
+        // API returns bare array, not {"Items": [...]}
         let items: Vec<MediaItem> = serde_json::from_str(&body)
             .unwrap_or_default();
         Ok(items)
