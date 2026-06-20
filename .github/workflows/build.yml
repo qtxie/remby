@@ -72,6 +72,8 @@ jobs:
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
 
       - name: Create release
         uses: softprops/action-gh-release@v3
