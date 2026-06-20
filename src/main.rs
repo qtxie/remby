@@ -279,13 +279,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let timeout = std::time::Duration::from_secs(120);
                                         let result = tokio::time::timeout(timeout, async {
                                             let all_libs = client.get_libraries().await.unwrap_or_default();
-                                            let libs: Vec<_> = if config.enabled_libraries.is_empty() {
-                                                all_libs
-                                            } else {
-                                                all_libs.into_iter()
-                                                    .filter(|lib| config.enabled_libraries.contains(&lib.id))
-                                                    .collect()
-                                            };
+                                            let libs = config.filter_and_sort_libraries(all_libs);
                                             let mut latest = Vec::new();
                                             for lib in &libs {
                                                 if config.latest_libraries.is_empty() || config.latest_libraries.contains(&lib.id) {
@@ -514,14 +508,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let timeout = std::time::Duration::from_secs(120);
                                             let result = tokio::time::timeout(timeout, async {
                                                 let all_libs = client.get_libraries().await.unwrap_or_default();
-                                                // Filter libraries by config
-                                                let libs: Vec<_> = if config.enabled_libraries.is_empty() {
-                                                    all_libs
-                                                } else {
-                                                    all_libs.into_iter()
-                                                        .filter(|lib| config.enabled_libraries.contains(&lib.id))
-                                                        .collect()
-                                                };
+                                                // Filter and sort libraries by config
+                                                let libs = config.filter_and_sort_libraries(all_libs);
                                                 let mut latest = Vec::new();
                                                 for lib in &libs {
                                                     // Only fetch latest for libraries in config.latest_libraries

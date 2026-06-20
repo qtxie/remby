@@ -2,12 +2,39 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::emby::Library;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RembyConfig {
     #[serde(default)]
     pub enabled_libraries: Vec<String>,
     #[serde(default)]
     pub latest_libraries: Vec<String>,
+}
+
+impl RembyConfig {
+    pub fn sort_libraries(&self, libs: Vec<Library>) -> Vec<Library> {
+        if self.enabled_libraries.is_empty() {
+            return libs;
+        }
+        let mut libs = libs;
+        libs.sort_by_key(|lib| {
+            self.enabled_libraries.iter().position(|id| id == &lib.id)
+                .unwrap_or(usize::MAX)
+        });
+        libs
+    }
+
+    pub fn filter_and_sort_libraries(&self, libs: Vec<Library>) -> Vec<Library> {
+        let filtered = if self.enabled_libraries.is_empty() {
+            libs
+        } else {
+            libs.into_iter()
+                .filter(|lib| self.enabled_libraries.contains(&lib.id))
+                .collect()
+        };
+        self.sort_libraries(filtered)
+    }
 }
 
 fn config_path() -> PathBuf {
