@@ -51,9 +51,20 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Animated splash screen
+    // Splash screen with animation during connection
     let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
-    for i in 0..15 {
+
+    // Start connection in background
+    let server = cli.server.clone();
+    let user = cli.user.clone();
+    let pass = cli.pass.clone();
+    let mut connect_task = tokio::spawn(async move {
+        app::AppState::new(server, user, pass).await
+    });
+
+    // Animate while waiting for connection
+    let mut state = None;
+    for i in 0.. {
         terminal.draw(|f| {
             let area = f.area();
             let vertical = Layout::default()
@@ -88,20 +99,21 @@ async fn main() -> Result<()> {
                 vertical[2],
             );
         })?;
+
+        if connect_task.is_finished() {
+            state = Some(connect_task.await.expect("Task panicked"));
+            break;
+        }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    // Connect to server and authenticate
-    let mut state = match app::AppState::new(cli.server, cli.user, cli.pass).await {
-        Ok(s) => s,
-        Err(e) => {
-            disable_raw_mode()?;
-            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-            terminal.show_cursor()?;
-            eprintln!("Error: {e:#}");
-            std::process::exit(1);
-        }
-    };
+    let mut state = state.unwrap().unwrap_or_else(|e| {
+        disable_raw_mode().ok();
+        execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
+        terminal.show_cursor().ok();
+        eprintln!("Error: {e:#}");
+        std::process::exit(1);
+    });
 
     if state.server.is_empty() {
         disable_raw_mode()?;
