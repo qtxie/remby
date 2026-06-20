@@ -398,6 +398,7 @@ impl EmbyClient {
                 ("UserId", self.user_id.as_str()),
                 ("Fields", "Overview,MediaSources"),
                 ("Recursive", "false"),
+                ("Limit", "1000"),
             ])
             .send()
             .await
@@ -427,6 +428,7 @@ impl EmbyClient {
                 ("UserId", self.user_id.as_str()),
                 ("SeasonId", season_id),
                 ("Fields", "Overview,MediaSources"),
+                ("Limit", "1000"),
             ])
             .send()
             .await
