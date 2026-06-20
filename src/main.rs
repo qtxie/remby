@@ -6,7 +6,7 @@ mod ui;
 
 use anyhow::Result;
 use clap::Parser;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::prelude::*;
@@ -261,6 +261,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => state.settings_cancel(),
+                                KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
+                                KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
                                 KeyCode::Up | KeyCode::Char('k') => state.settings_select_prev(),
                                 KeyCode::Down | KeyCode::Char('j') => state.settings_select_next(),
                                 KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => state.settings_switch_column(),
