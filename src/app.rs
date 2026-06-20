@@ -28,6 +28,8 @@ pub struct AppState {
     pub source_state: SourceState,
     pub track_state: TrackState,
     pub episodes: Vec<MediaItem>,
+    pub total_episodes: usize,
+    pub episodes_series_id: String,
     pub series_name: String,
     pub series_state: SeriesState,
     pub playing_state: PlayingState,
@@ -234,6 +236,8 @@ impl AppState {
             source_state: SourceState::default(),
             track_state: TrackState::default(),
             episodes: Vec::new(),
+            total_episodes: 0,
+            episodes_series_id: String::new(),
             series_name: String::new(),
             series_state: SeriesState::default(),
             playing_state: PlayingState::default(),
@@ -475,6 +479,20 @@ impl AppState {
         self.library_latest_fetched_at
             .map(|t| t.elapsed().as_secs() < CACHE_TTL_SECS)
             .unwrap_or(false)
+    }
+
+    pub fn should_load_more_episodes(&self) -> bool {
+        self.view == View::Episodes
+            && !self.loading
+            && self.total_episodes > self.episodes.len()
+            && self.selected + 5 >= self.episodes.len() * 2 / 3
+    }
+
+    pub fn should_load_more_items(&self) -> bool {
+        self.view == View::Items
+            && !self.loading
+            && self.total_items > self.items.len()
+            && self.selected + 5 >= self.items.len() * 2 / 3
     }
 
     pub async fn show_libraries(&mut self) {

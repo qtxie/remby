@@ -35,8 +35,10 @@ enum BackgroundResult {
     LibrariesLoaded(Vec<crate::emby::Library>, Vec<(String, Vec<crate::emby::MediaItem>)>),
     SettingsLoaded(Vec<crate::emby::Library>),
     SeriesInfoLoaded(app::SeriesState),
-    EpisodesLoaded(String, Vec<crate::emby::MediaItem>),
-    FolderLoaded(Vec<crate::emby::MediaItem>, String),
+    EpisodesLoaded(String, Vec<crate::emby::MediaItem>, usize, String),
+    MoreEpisodesLoaded(Vec<crate::emby::MediaItem>),
+    FolderLoaded(Vec<crate::emby::MediaItem>, String, usize),
+    MoreItemsLoaded(Vec<crate::emby::MediaItem>, String),
     SearchLoaded(Vec<crate::emby::MediaItem>),
     ItemDetailLoaded(crate::emby::MediaItem),
     Timeout(String),
@@ -207,19 +209,32 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.selected = 0;
                     state.loading = false;
                 }
-                BackgroundResult::EpisodesLoaded(name, episodes) => {
+                BackgroundResult::EpisodesLoaded(name, episodes, total, series_id) => {
                     state.series_name = name;
-                    state.status_msg = format!("{} episodes", episodes.len());
                     state.episodes = episodes;
+                    state.total_episodes = total;
+                    state.episodes_series_id = series_id;
+                    state.status_msg = format!("{} / {} episodes", state.episodes.len(), total);
                     state.view = app::View::Episodes;
                     state.selected = 0;
                     state.loading = false;
                 }
-                BackgroundResult::FolderLoaded(items, folder_id) => {
+                BackgroundResult::MoreEpisodesLoaded(more_episodes) => {
+                    state.episodes.extend(more_episodes);
+                    state.status_msg = format!("{} / {} episodes", state.episodes.len(), state.total_episodes);
+                    state.loading = false;
+                }
+                BackgroundResult::FolderLoaded(items, folder_id, total) => {
                     state.items = items;
                     state.current_folder_id = folder_id;
+                    state.total_items = total;
                     state.view = app::View::Items;
                     state.selected = 0;
+                    state.loading = false;
+                }
+                BackgroundResult::MoreItemsLoaded(more_items, _folder_id) => {
+                    state.items.extend(more_items);
+                    state.status_msg = format!("{} / {} items", state.items.len(), state.total_items);
                     state.loading = false;
                 }
                 BackgroundResult::SearchLoaded(results) => {
@@ -402,8 +417,36 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => state.go_back().await?,
-                                KeyCode::Up | KeyCode::Char('k') => state.select_prev(),
-                                KeyCode::Down | KeyCode::Char('j') => state.select_next(),
+                                KeyCode::Up | KeyCode::Char('k') => {
+                                    state.select_prev();
+                                    if state.should_load_more_episodes() {
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let series_id = state.episodes_series_id.clone();
+                                        let start = state.episodes.len();
+                                        tokio::spawn(async move {
+                                            if let Ok(episodes) = client.get_episodes_page(&series_id, start, 50).await {
+                                                let _ = tx.send(BackgroundResult::MoreEpisodesLoaded(episodes));
+                                            }
+                                        });
+                                    }
+                                }
+                                KeyCode::Down | KeyCode::Char('j') => {
+                                    state.select_next();
+                                    if state.should_load_more_episodes() {
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let series_id = state.episodes_series_id.clone();
+                                        let start = state.episodes.len();
+                                        tokio::spawn(async move {
+                                            if let Ok(episodes) = client.get_episodes_page(&series_id, start, 50).await {
+                                                let _ = tx.send(BackgroundResult::MoreEpisodesLoaded(episodes));
+                                            }
+                                        });
+                                    }
+                                }
                                 KeyCode::Enter => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         if item.is_video() {
@@ -477,7 +520,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             tokio::spawn(async move {
                                                 let timeout = std::time::Duration::from_secs(60);
                                                 match tokio::time::timeout(timeout, client.get_episodes(&series_id)).await {
-                                                    Ok(Ok(episodes)) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes)); }
+                                                    Ok(Ok((episodes, total))) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes, total, series_id)); }
                                                     _ => { let _ = tx.send(BackgroundResult::Timeout("Episodes".to_string())); }
                                                 }
                                             });
@@ -510,8 +553,36 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                     });
                                 }
-                                KeyCode::Up | KeyCode::Char('k') => state.select_prev(),
-                                KeyCode::Down | KeyCode::Char('j') => state.select_next(),
+                                KeyCode::Up | KeyCode::Char('k') => {
+                                    state.select_prev();
+                                    if state.should_load_more_items() {
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let folder_id = state.current_folder_id.clone();
+                                        let start = state.items.len();
+                                        tokio::spawn(async move {
+                                            if let Ok(result) = client.get_items(&folder_id, start, 50).await {
+                                                let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id));
+                                            }
+                                        });
+                                    }
+                                }
+                                KeyCode::Down | KeyCode::Char('j') => {
+                                    state.select_next();
+                                    if state.should_load_more_items() {
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let folder_id = state.current_folder_id.clone();
+                                        let start = state.items.len();
+                                        tokio::spawn(async move {
+                                            if let Ok(result) = client.get_items(&folder_id, start, 50).await {
+                                                let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id));
+                                            }
+                                        });
+                                    }
+                                }
                                 KeyCode::Left | KeyCode::Char('h') => {
                                     state.go_back().await?;
                                 }
@@ -584,13 +655,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                     // For series, fetch all episodes
                                                     let series_id = series_id.unwrap_or(item_id);
                                                     match client.get_episodes(&series_id).await {
-                                                        Ok(episodes) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes)); }
+                                                        Ok((episodes, total)) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes, total, series_id)); }
                                                         Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Episodes".to_string())); }
                                                     }
                                                 } else {
                                                     // For folders/seasons, use regular items
                                                     if let Ok(result) = client.get_items(&item_id, 0, 200).await {
-                                                        let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id));
+                                                        let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id, result.total));
                                                     }
                                                 }
                                             });
@@ -602,7 +673,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let folder_id = lib.id.clone();
                                         tokio::spawn(async move {
                                             if let Ok(result) = client.get_items(&folder_id, 0, 50).await {
-                                                let _ = tx.send(BackgroundResult::FolderLoaded(result.items, folder_id));
+                                                let _ = tx.send(BackgroundResult::FolderLoaded(result.items, folder_id, result.total));
                                             }
                                         });
                                     }

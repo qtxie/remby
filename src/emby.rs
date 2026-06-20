@@ -182,12 +182,15 @@ impl MediaSource {
 
 #[derive(Deserialize)]
 pub struct ItemsResponse {
-    #[serde(rename = "Items")]
+    #[serde(default, rename = "Items")]
     pub items: Vec<MediaItem>,
+    #[serde(default, rename = "TotalRecordCount")]
+    pub total: usize,
 }
 
 pub struct PageResult {
     pub items: Vec<MediaItem>,
+    pub total: usize,
 }
 
 #[derive(Deserialize, Clone)]
@@ -324,6 +327,7 @@ impl EmbyClient {
         let data: ItemsResponse = resp.json().await.context("Invalid items response")?;
         Ok(PageResult {
             items: data.items,
+            total: data.total,
         })
     }
 
@@ -393,14 +397,31 @@ impl EmbyClient {
         Ok(item)
     }
 
-    pub async fn get_episodes(&self, series_id: &str) -> Result<Vec<MediaItem>> {
+    pub async fn get_episodes(&self, series_id: &str) -> Result<(Vec<MediaItem>, usize)> {
         let url = self.api_url(&format!("/Shows/{}/Episodes", series_id));
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("Fields", "Overview,MediaSources,ChildCount"),
                 ("Recursive", "false"),
-                ("Limit", "1000"),
+                ("Limit", "50"),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch episodes")?;
+        let data: ItemsResponse = resp.json().await.context("Invalid episodes response")?;
+        Ok((data.items, data.total))
+    }
+
+    pub async fn get_episodes_page(&self, series_id: &str, start: usize, limit: usize) -> Result<Vec<MediaItem>> {
+        let url = self.api_url(&format!("/Shows/{}/Episodes", series_id));
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("UserId", self.user_id.as_str()),
+                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Recursive", "false"),
+                ("StartIndex", &start.to_string()),
+                ("Limit", &limit.to_string()),
             ])
             .send()
             .await
