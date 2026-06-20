@@ -1,15 +1,8 @@
 # remby
 
-```
-      ________       
-   __/        \__    
-  /   ________   \   
- |   /        \   |  
- |  |   ▶▶▶▶   |  |  
-  \  \________/  /   
-   \__        __/    
-      \______/       
-```
+<p align="center">
+  <img src="assets/logo.png" alt="remby logo" width="200">
+</p>
 
 A lightweight Emby client with terminal UI and mpv playback.
 
