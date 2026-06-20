@@ -575,10 +575,23 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             state.loading = true;
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
-                                            let folder_id = item.id.clone();
+                                            let item_id = item.id.clone();
+                                            let item_type = item.item_type.clone();
+                                            let series_id = item.series_id.clone();
+                                            let series_name = item.series_name.clone().unwrap_or_else(|| item.name.clone());
                                             tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items(&folder_id, 0, 50).await {
-                                                    let _ = tx.send(BackgroundResult::FolderLoaded(result.items, folder_id));
+                                                if item_type == "Series" {
+                                                    // For series, fetch all episodes
+                                                    let series_id = series_id.unwrap_or(item_id);
+                                                    match client.get_episodes(&series_id).await {
+                                                        Ok(episodes) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes)); }
+                                                        Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Episodes".to_string())); }
+                                                    }
+                                                } else {
+                                                    // For folders/seasons, use regular items
+                                                    if let Ok(result) = client.get_items(&item_id, 0, 200).await {
+                                                        let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id));
+                                                    }
                                                 }
                                             });
                                         }
