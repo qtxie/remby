@@ -151,14 +151,20 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         tokio::spawn(async move {
             let timeout = std::time::Duration::from_secs(120);
             let result = tokio::time::timeout(timeout, async {
+                // Fetch resume and latest in parallel
+                let (resume_result, latest_result) = tokio::join!(
+                    client.get_resume_items(20),
+                    client.get_latest_items(20),
+                );
+
                 let mut items = Vec::new();
-                if let Ok(resume) = client.get_resume_items(20).await {
+                if let Ok(resume) = resume_result {
                     if !resume.is_empty() {
                         items.push(crate::emby::MediaItem::separator("Continue Watching"));
                         items.extend(resume);
                     }
                 }
-                if let Ok(latest) = client.get_latest_items(20).await {
+                if let Ok(latest) = latest_result {
                     if !latest.is_empty() {
                         items.push(crate::emby::MediaItem::separator("Latest"));
                         items.extend(latest);
