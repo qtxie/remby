@@ -210,6 +210,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::EpisodesLoaded(name, episodes, total, series_id) => {
+                    state.stack.push(app::StackEntry {
+                        items: state.items.clone(),
+                        folder_id: state.current_folder_id.clone(),
+                        view: state.view.clone(),
+                    });
                     state.series_name = name;
                     state.episodes = episodes;
                     state.total_episodes = total;
@@ -225,6 +230,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::FolderLoaded(items, folder_id, total) => {
+                    state.stack.push(app::StackEntry {
+                        items: state.items.clone(),
+                        folder_id: state.current_folder_id.clone(),
+                        view: state.view.clone(),
+                    });
                     state.items = items;
                     state.current_folder_id = folder_id;
                     state.total_items = total;

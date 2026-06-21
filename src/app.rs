@@ -39,9 +39,9 @@ pub struct AppState {
 }
 
 pub(crate) struct StackEntry {
-    items: Vec<MediaItem>,
-    folder_id: String,
-    view: View,
+    pub items: Vec<MediaItem>,
+    pub folder_id: String,
+    pub view: View,
 }
 
 pub struct SourceState {
