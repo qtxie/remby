@@ -148,7 +148,8 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
                         .add_modifier(Modifier::BOLD),
                 )))
             } else {
-                let icon = if item.is_video() { "▶ " } else { "  " };
+                let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
+                let star = if is_favorite { "★ " } else { "  " };
                 let name = item.display_name();
                 let duration = item.duration_str().unwrap_or_default();
                 let dur = if !duration.is_empty() {
@@ -164,7 +165,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
                     Style::default()
                 };
                 ListItem::new(Line::from(vec![
-                    Span::styled(icon, Style::default().fg(Color::Cyan)),
+                    Span::styled(star, Style::default().fg(Color::Yellow)),
                     Span::styled(format!("{name}{dur}"), style),
                 ]))
             }
@@ -285,13 +286,6 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
     let items: Vec<ListItem> = items_source
         .iter()
         .map(|item| {
-            let icon = if item.is_folder() {
-                " "
-            } else if item.is_video() {
-                "▶"
-            } else {
-                " "
-            };
             let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
             let star = if is_favorite { "★ " } else { "  " };
             let name = item.display_name();
@@ -303,8 +297,6 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
             };
             ListItem::new(Line::from(vec![
                 Span::styled(star, Style::default().fg(Color::Yellow)),
-                Span::styled(icon, Style::default().fg(Color::Cyan)),
-                Span::raw("  "),
                 Span::raw(name),
                 Span::styled(dur, Style::default().fg(Color::DarkGray)),
             ]))
@@ -374,9 +366,6 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect) {
             String::new()
         };
         ListItem::new(Line::from(vec![
-            Span::raw("  "),
-            Span::styled("▶", Style::default().fg(Color::Cyan)),
-            Span::raw("  "),
             Span::raw(name),
             Span::styled(dur, Style::default().fg(Color::DarkGray)),
         ]))
@@ -730,10 +719,10 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
             } else if state.library_browser_state.panel != BrowserPanel::None {
                 "j/k: Navigate | Enter: Select | Esc: Close"
             } else {
-                "j/k: Navigate | Enter: Open | s: Sort | f: Filter | c: Clear filters | Esc: Back"
+                "j/k: Navigate | Enter: Open | s: Sort | f: Filter | z: Favorite | Z: View favorites | Esc: Back"
             }
         },
-        View::Favorites => "↑↓: navigate | Enter: open/play | f: unfavorite | ←/BS: back",
+        View::Favorites => "↑↓: navigate | Enter: open/play | z: unfavorite | ←/BS: back",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"

@@ -629,6 +629,36 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('s') if !has_panel => {
                                     state.library_browser_open_sort_panel();
                                 }
+                                KeyCode::Char('Z') if !has_panel => {
+                                    state.open_favorites();
+                                    state.loading = true;
+                                    let tx = bg_tx.clone();
+                                    let client = state.client.clone();
+                                    tokio::spawn(async move {
+                                        match client.get_favorites(0, 50).await {
+                                            Ok(result) => { let _ = tx.send(BackgroundResult::FavoritesLoaded(result.items, result.total)); }
+                                            Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load favorites: {}", e))); }
+                                        }
+                                    });
+                                }
+                                KeyCode::Char('z') if !has_panel => {
+                                    if let Some(item) = state.selected_item().cloned() {
+                                        let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
+                                        let new_favorite = !is_favorite;
+                                        let item_id = item.id.clone();
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            let timeout = std::time::Duration::from_secs(30);
+                                            match tokio::time::timeout(timeout, client.toggle_favorite(&item_id, new_favorite)).await {
+                                                Ok(Ok(_)) => { let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite)); }
+                                                Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Favorite failed: {}", e))); }
+                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Favorite".to_string())); }
+                                            }
+                                        });
+                                    }
+                                }
                                 KeyCode::Char('f') if !has_panel => {
                                     state.library_browser_open_filter_panel();
                                 }
@@ -836,7 +866,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         });
                                     }
                                 }
-                                KeyCode::Char('f') => {
+                                KeyCode::Char('z') => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
                                         let new_favorite = !is_favorite;
@@ -975,7 +1005,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.go_back();
                                 }
                                 KeyCode::Char('/') => state.start_search(),
-                                KeyCode::Char('F') => {
+                                KeyCode::Char('Z') => {
                                     state.open_favorites();
                                     state.loading = true;
                                     let tx = bg_tx.clone();
