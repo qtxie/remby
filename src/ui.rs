@@ -377,8 +377,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),
-            Constraint::Length(3),
+            Constraint::Length(7),
             Constraint::Min(1),
         ])
         .split(area);
@@ -386,8 +385,12 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
     // Overview panel
     let overview_text = if ss.overview.is_empty() {
         "No overview available".to_string()
-    } else if ss.overview.len() > 300 {
-        format!("{}...", &ss.overview[..300])
+    } else if ss.overview.len() > 500 {
+        let mut end = 500;
+        while !ss.overview.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}...", &ss.overview[..end])
     } else {
         ss.overview.clone()
     };
@@ -405,7 +408,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
             Constraint::Percentage(33),
             Constraint::Percentage(34),
         ])
-        .split(layout[2]);
+        .split(layout[1]);
 
     let tabs = [
         ("Seasons", &ss.seasons, SeriesSection::Seasons),
