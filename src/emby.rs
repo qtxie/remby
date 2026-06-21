@@ -403,8 +403,7 @@ impl EmbyClient {
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("Fields", "Overview,MediaSources,ChildCount"),
-                ("Recursive", "false"),
-                ("Limit", "50"),
+                ("Recursive", "true"),
             ])
             .send()
             .await
