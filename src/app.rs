@@ -37,6 +37,8 @@ pub struct AppState {
     pub settings_state: SettingsState,
     pub config: RembyConfig,
     pub library_browser_state: LibraryBrowserState,
+    pub favorites: Vec<MediaItem>,
+    pub total_favorites: usize,
 }
 
 pub(crate) struct StackEntry {
@@ -283,6 +285,7 @@ pub enum View {
     Playing,
     Settings,
     LibraryBrowser,
+    Favorites,
 }
 
 impl AppState {
@@ -334,6 +337,8 @@ impl AppState {
             settings_state: SettingsState::default(),
             config,
             library_browser_state: LibraryBrowserState::default(),
+            favorites: Vec::new(),
+            total_favorites: 0,
         })
     }
 
@@ -531,6 +536,7 @@ impl AppState {
             View::Playing => self.track_state.item.as_ref(),
             View::Settings => None,
             View::LibraryBrowser => self.library_browser_state.items.get(self.selected),
+            View::Favorites => self.favorites.get(self.selected),
         }
     }
 
@@ -1102,6 +1108,17 @@ impl AppState {
         bs.filter_folder = None;
     }
 
+    pub fn open_favorites(&mut self) {
+        self.navigate_to(View::Favorites);
+    }
+
+    pub fn is_item_favorite(&self) -> bool {
+        self.selected_item()
+            .and_then(|item| item.user_data.as_ref())
+            .map(|ud| ud.is_favorite)
+            .unwrap_or(false)
+    }
+
     fn current_list_len(&self) -> usize {
         match self.view {
             View::Home => self.home_items.len(),
@@ -1128,6 +1145,7 @@ impl AppState {
             View::Playing => 0,
             View::Settings => self.settings_state.libraries.len(),
             View::LibraryBrowser => self.library_browser_state.items.len(),
+            View::Favorites => self.favorites.len(),
         }
     }
 }

@@ -22,6 +22,7 @@ pub fn render(f: &mut Frame, state: &AppState) {
         View::Libraries => render_libraries(f, state, layout[1]),
         View::Items => render_items(f, state, layout[1]),
         View::SearchResults => render_items(f, state, layout[1]),
+        View::Favorites => render_items(f, state, layout[1]),
         View::SourceSelect => render_source_select(f, state, layout[1]),
         View::TrackSelect => render_track_select(f, state, layout[1]),
         View::Episodes => render_episodes(f, state, layout[1]),
@@ -50,6 +51,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
                 format!("Remby [{count}]")
             }
             View::SearchResults => format!("Search: {}", state.search_query),
+            View::Favorites => format!("Favorites ({})", state.favorites.len()),
             View::TrackSelect => "Select Tracks".to_string(),
             View::SourceSelect => "Select Source".to_string(),
             View::Episodes => format!("{} - Episodes", state.series_name),
@@ -271,10 +273,12 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
     let items_source = match state.view {
         View::Items => &state.items,
         View::SearchResults => &state.search_results,
+        View::Favorites => &state.favorites,
         _ => &state.items,
     };
     let title = match state.view {
         View::SearchResults => "Search Results",
+        View::Favorites => "Favorites",
         _ => "Items",
     };
 
@@ -288,6 +292,8 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
             } else {
                 " "
             };
+            let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
+            let star = if is_favorite { "★ " } else { "  " };
             let name = item.display_name();
             let duration = item.duration_str().unwrap_or_default();
             let dur = if !duration.is_empty() {
@@ -296,6 +302,7 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
                 String::new()
             };
             ListItem::new(Line::from(vec![
+                Span::styled(star, Style::default().fg(Color::Yellow)),
                 Span::styled(icon, Style::default().fg(Color::Cyan)),
                 Span::raw("  "),
                 Span::raw(name),
@@ -741,6 +748,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
                 "j/k: Navigate | Enter: Open | s: Sort | f: Filter | c: Clear filters | Esc: Back"
             }
         },
+        View::Favorites => "↑↓: navigate | Enter: open/play | f: unfavorite | ←/BS: back",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"

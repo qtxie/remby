@@ -43,6 +43,8 @@ enum BackgroundResult {
     ItemDetailLoaded(crate::emby::MediaItem),
     LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<crate::emby::MediaItem>),
     MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
+    FavoritesLoaded(Vec<crate::emby::MediaItem>, usize),
+    FavoriteToggled(String, bool),
     Timeout(String),
 }
 
@@ -286,6 +288,50 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         state.status_msg = format!("{} / {} items", state.library_browser_state.items.len(), total);
                     }
                     state.loading = false;
+                }
+                BackgroundResult::FavoritesLoaded(items, total) => {
+                    state.favorites = items;
+                    state.total_favorites = total;
+                    state.loading = false;
+                    state.status_msg = format!("{} / {} favorites", state.favorites.len(), total);
+                }
+                BackgroundResult::FavoriteToggled(item_id, is_favorite) => {
+                    // Update favorite status in all relevant lists
+                    for item in state.home_items.iter_mut() {
+                        if item.id == item_id {
+                            if let Some(ref mut ud) = item.user_data {
+                                ud.is_favorite = is_favorite;
+                            } else {
+                                let mut ud = crate::emby::UserData::default();
+                                ud.is_favorite = is_favorite;
+                                item.user_data = Some(ud);
+                            }
+                        }
+                    }
+                    for item in state.items.iter_mut() {
+                        if item.id == item_id {
+                            if let Some(ref mut ud) = item.user_data {
+                                ud.is_favorite = is_favorite;
+                            } else {
+                                let mut ud = crate::emby::UserData::default();
+                                ud.is_favorite = is_favorite;
+                                item.user_data = Some(ud);
+                            }
+                        }
+                    }
+                    for item in state.library_browser_state.items.iter_mut() {
+                        if item.id == item_id {
+                            if let Some(ref mut ud) = item.user_data {
+                                ud.is_favorite = is_favorite;
+                            } else {
+                                let mut ud = crate::emby::UserData::default();
+                                ud.is_favorite = is_favorite;
+                                item.user_data = Some(ud);
+                            }
+                        }
+                    }
+                    state.loading = false;
+                    state.status_msg = if is_favorite { "Added to favorites" } else { "Removed from favorites" }.to_string();
                 }
             }
         }
@@ -928,6 +974,21 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         });
                                     }
                                 }
+                                KeyCode::Char('f') => {
+                                    if let Some(item) = state.selected_item().cloned() {
+                                        let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
+                                        let new_favorite = !is_favorite;
+                                        let item_id = item.id.clone();
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            if let Ok(_) = client.toggle_favorite(&item_id, new_favorite).await {
+                                                let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite));
+                                            }
+                                        });
+                                    }
+                                }
                                 KeyCode::Left | KeyCode::Char('h') => {
                                     state.go_back();
                                 }
@@ -1048,6 +1109,17 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.go_back();
                                 }
                                 KeyCode::Char('/') => state.start_search(),
+                                KeyCode::Char('F') => {
+                                    state.open_favorites();
+                                    state.loading = true;
+                                    let tx = bg_tx.clone();
+                                    let client = state.client.clone();
+                                    tokio::spawn(async move {
+                                        if let Ok(result) = client.get_favorites(0, 50).await {
+                                            let _ = tx.send(BackgroundResult::FavoritesLoaded(result.items, result.total));
+                                        }
+                                    });
+                                }
                                 KeyCode::Char('s') => {
                                     if state.libraries.is_empty() {
                                         state.loading = true;

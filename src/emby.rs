@@ -69,6 +69,8 @@ pub struct MediaItem {
 pub struct UserData {
     #[serde(default, rename = "PlaybackPositionTicks")]
     pub playback_position_ticks: Option<i64>,
+    #[serde(default, rename = "IsFavorite")]
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -594,6 +596,44 @@ impl EmbyClient {
 
         let data: ItemsResponse = resp.json().await.context("Invalid folders response")?;
         Ok(data.items)
+    }
+
+    pub async fn toggle_favorite(&self, item_id: &str, is_favorite: bool) -> Result<()> {
+        let url = self.api_url(&format!("/Users/{}/Items/{}/Favorite", self.user_id, item_id));
+        let resp = if is_favorite {
+            self.authed_get(&url).send().await
+        } else {
+            self.http.delete(&url)
+                .header("X-Emby-Authorization", auth_header(&self.token))
+                .header("X-Emby-Token", &self.token)
+                .send()
+                .await
+        };
+        resp.context("Failed to toggle favorite")?;
+        Ok(())
+    }
+
+    pub async fn get_favorites(&self, start: usize, limit: usize) -> Result<PageResult> {
+        let url = self.api_url(&format!("/Users/{}/Items", self.user_id));
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("Recursive", "true"),
+                ("Filters", "IsFavorite"),
+                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("StartIndex", &start.to_string()),
+                ("Limit", &limit.to_string()),
+                ("SortBy", "SortName"),
+                ("SortOrder", "Ascending"),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch favorites")?;
+
+        let data: ItemsResponse = resp.json().await.context("Invalid favorites response")?;
+        Ok(PageResult {
+            items: data.items,
+            total: data.total,
+        })
     }
 
     pub async fn get_items_filtered(
