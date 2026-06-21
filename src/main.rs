@@ -210,18 +210,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::EpisodesLoaded(name, episodes, total, series_id) => {
-                    state.stack.push(app::StackEntry {
-                        items: state.items.clone(),
-                        folder_id: state.current_folder_id.clone(),
-                        view: state.view.clone(),
-                    });
                     state.series_name = name;
                     state.episodes = episodes;
                     state.total_episodes = total;
                     state.episodes_series_id = series_id;
                     state.status_msg = format!("{} / {} episodes", state.episodes.len(), total);
-                    state.view = app::View::Episodes;
-                    state.selected = 0;
+                    state.navigate_to(app::View::Episodes);
                     state.loading = false;
                 }
                 BackgroundResult::MoreEpisodesLoaded(more_episodes) => {
@@ -230,16 +224,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::FolderLoaded(items, folder_id, total) => {
-                    state.stack.push(app::StackEntry {
-                        items: state.items.clone(),
-                        folder_id: state.current_folder_id.clone(),
-                        view: state.view.clone(),
-                    });
                     state.items = items;
                     state.current_folder_id = folder_id;
                     state.total_items = total;
-                    state.view = app::View::Items;
-                    state.selected = 0;
+                    state.navigate_to(app::View::Items);
                     state.loading = false;
                 }
                 BackgroundResult::MoreItemsLoaded(more_items, _folder_id) => {
@@ -249,8 +237,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 }
                 BackgroundResult::SearchLoaded(results) => {
                     state.search_results = results;
-                    state.view = app::View::SearchResults;
-                    state.selected = 0;
+                    state.navigate_to(app::View::SearchResults);
                     state.loading = false;
                 }
                 BackgroundResult::ItemDetailLoaded(detail) => {
@@ -346,7 +333,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::SourceSelect => {
                             match key.code {
                                 KeyCode::Char('q') => break,
-                                KeyCode::Esc => state.go_back().await?,
+                                KeyCode::Esc => state.go_back(),
                                 KeyCode::Up | KeyCode::Char('k') => state.select_prev(),
                                 KeyCode::Down | KeyCode::Char('j') => state.select_next(),
                                 KeyCode::Enter => {
@@ -362,7 +349,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::TrackSelect => {
                             match key.code {
                                 KeyCode::Char('q') => break,
-                                KeyCode::Esc => state.go_back().await?,
+                                KeyCode::Esc => state.go_back(),
                                 KeyCode::Left | KeyCode::Char('h') => state.track_section_prev(),
                                 KeyCode::Right | KeyCode::Char('l') => state.track_section_next(),
                                 KeyCode::Up | KeyCode::Char('k') => state.track_select_prev(),
@@ -396,7 +383,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => {
                                     state.kill_mpv();
-                                    state.go_back().await?;
+                                    state.go_back();
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
                                     if state.playing_state.resume_position.is_some() {
@@ -426,7 +413,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::Episodes => {
                             match key.code {
                                 KeyCode::Char('q') => break,
-                                KeyCode::Esc => state.go_back().await?,
+                                KeyCode::Esc => state.go_back(),
                                 KeyCode::Up | KeyCode::Char('k') => {
                                     state.select_prev();
                                     if state.should_load_more_episodes() {
@@ -478,7 +465,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::SeriesInfo => {
                             match key.code {
                                 KeyCode::Char('q') => break,
-                                KeyCode::Esc => state.go_back().await?,
+                                KeyCode::Esc => state.go_back(),
                                 KeyCode::Left | KeyCode::Char('h') => state.series_section_prev(),
                                 KeyCode::Right | KeyCode::Char('l') => state.series_section_next(),
                                 KeyCode::Up | KeyCode::Char('k') => state.series_select_prev(),
@@ -547,7 +534,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if state.searching {
                                         state.cancel_search();
                                     } else {
-                                        state.go_back().await?;
+                                        state.go_back();
                                     }
                                 }
                                 KeyCode::Char(c) if state.searching => state.search_input(c),
@@ -594,7 +581,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Left | KeyCode::Char('h') => {
-                                    state.go_back().await?;
+                                    state.go_back();
                                 }
                                 KeyCode::Right | KeyCode::Char('l') => {
                                     state.show_libraries().await;
@@ -689,7 +676,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Backspace => {
-                                    state.go_back().await?;
+                                    state.go_back();
                                 }
                                 KeyCode::Char('/') => state.start_search(),
                                 KeyCode::Char('s') => {

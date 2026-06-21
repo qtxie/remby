@@ -248,17 +248,11 @@ impl AppState {
     }
 
     pub fn open_source_select(&mut self, item: &MediaItem, sources: Vec<MediaSource>) {
-        self.stack.push(StackEntry {
-            items: self.items.clone(),
-            folder_id: self.current_folder_id.clone(),
-            view: self.view.clone(),
-        });
         self.source_state = SourceState {
             item: Some(item.clone()),
             sources,
         };
-        self.selected = 0;
-        self.view = View::SourceSelect;
+        self.navigate_to(View::SourceSelect);
     }
 
     pub fn series_section_next(&mut self) {
@@ -352,53 +346,36 @@ impl AppState {
         self.source_state.sources.get(self.selected)
     }
 
-    pub async fn go_back(&mut self) -> Result<()> {
+    pub fn navigate_to(&mut self, view: View) {
+        if self.view != view {
+            self.stack.push(StackEntry {
+                items: self.items.clone(),
+                folder_id: self.current_folder_id.clone(),
+                view: self.view.clone(),
+            });
+            if self.stack.len() > 50 {
+                self.stack.remove(0);
+            }
+        }
+        self.view = view;
+        self.selected = 0;
+    }
+
+    pub fn go_back(&mut self) {
         self.status_msg.clear();
         if self.searching {
             self.cancel_search();
-            return Ok(());
+            return;
         }
-        match self.view {
-            View::Home => {}
-            View::Libraries => {
-                self.view = View::Home;
-                self.selected = 0;
-            }
-            View::Items | View::SearchResults => {
-                if let Some(prev) = self.stack.pop() {
-                    self.items = prev.items;
-                    self.current_folder_id = prev.folder_id;
-                    self.view = prev.view;
-                    self.selected = 0;
-                }
-            }
-            View::SourceSelect | View::TrackSelect | View::Playing => {
-                if let Some(prev) = self.stack.pop() {
-                    self.items = prev.items;
-                    self.current_folder_id = prev.folder_id;
-                    self.view = prev.view;
-                    self.selected = 0;
-                } else {
-                    self.view = View::Home;
-                    self.selected = 0;
-                }
-            }
-            View::Episodes | View::SeriesInfo => {
-                if let Some(prev) = self.stack.pop() {
-                    self.items = prev.items;
-                    self.current_folder_id = prev.folder_id;
-                    self.view = prev.view;
-                    self.selected = 0;
-                } else {
-                    self.view = View::Home;
-                    self.selected = 0;
-                }
-            }
-            View::Settings => {
-                self.settings_cancel();
-            }
+        if let Some(prev) = self.stack.pop() {
+            self.items = prev.items;
+            self.current_folder_id = prev.folder_id;
+            self.view = prev.view;
+            self.selected = 0;
+        } else {
+            self.view = View::Home;
+            self.selected = 0;
         }
-        Ok(())
     }
 
     pub fn select_next(&mut self) {
@@ -497,13 +474,7 @@ impl AppState {
     }
 
     pub async fn show_libraries(&mut self) {
-        self.stack.push(StackEntry {
-            items: self.items.clone(),
-            folder_id: self.current_folder_id.clone(),
-            view: self.view.clone(),
-        });
-        self.view = View::Libraries;
-        self.selected = 0;
+        self.navigate_to(View::Libraries);
         if !self.is_libraries_cache_valid() || !self.is_latest_cache_valid() {
             self.loading = true;
             self.status_msg = "Loading libraries...".to_string();
@@ -530,11 +501,6 @@ impl AppState {
     }
 
     pub fn open_track_select(&mut self, item: &MediaItem, source: &MediaSource) {
-        self.stack.push(StackEntry {
-            items: self.items.clone(),
-            folder_id: self.current_folder_id.clone(),
-            view: self.view.clone(),
-        });
         self.track_state = TrackState {
             item: Some(item.clone()),
             media_source: Some(source.clone()),
@@ -552,7 +518,7 @@ impl AppState {
             selected_subtitle: 0,
             section: TrackSection::Video,
         };
-        self.view = View::TrackSelect;
+        self.navigate_to(View::TrackSelect);
     }
 
     pub fn track_section_next(&mut self) {
@@ -624,8 +590,7 @@ impl AppState {
             selected: 0,
             column: SettingsColumn::Enabled,
         };
-        self.view = View::Settings;
-        self.selected = 0;
+        self.navigate_to(View::Settings);
     }
 
     pub fn settings_select_next(&mut self) {
@@ -694,22 +659,15 @@ impl AppState {
         self.libraries_fetched_at = None;
         self.library_latest.clear();
         self.library_latest_fetched_at = None;
-        self.view = View::Libraries;
-        self.selected = 0;
+        self.navigate_to(View::Libraries);
         self.loading = true;
     }
 
     pub fn settings_cancel(&mut self) {
-        self.view = View::Home;
-        self.selected = 0;
+        self.go_back();
     }
 
     pub fn open_playing(&mut self, item_name: &str, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>) {
-        self.stack.push(StackEntry {
-            items: self.items.clone(),
-            folder_id: self.current_folder_id.clone(),
-            view: self.view.clone(),
-        });
         self.playing_state = PlayingState {
             item_name: item_name.to_string(),
             url: url.to_string(),
@@ -720,7 +678,7 @@ impl AppState {
             option_selected: 0,
             playing: false,
         };
-        self.view = View::Playing;
+        self.navigate_to(View::Playing);
     }
 
     fn current_list_len(&self) -> usize {
