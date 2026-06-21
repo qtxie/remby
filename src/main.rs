@@ -979,14 +979,15 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
                                         let new_favorite = !is_favorite;
                                         let item_id = item.id.clone();
-                                        let item_name = item.name.clone();
                                         state.loading = true;
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
-                                            match client.toggle_favorite(&item_id, new_favorite).await {
-                                                Ok(_) => { let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite)); }
-                                                Err(e) => { let _ = tx.send(BackgroundResult::Timeout(format!("Favorite: {}", e))); }
+                                            let timeout = std::time::Duration::from_secs(10);
+                                            match tokio::time::timeout(timeout, client.toggle_favorite(&item_id, new_favorite)).await {
+                                                Ok(Ok(_)) => { let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite)); }
+                                                Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Timeout(format!("Favorite: {}", e))); }
+                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Favorite: timeout".to_string())); }
                                             }
                                         });
                                     }
