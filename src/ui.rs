@@ -942,7 +942,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
 
     match bs.filter_section {
         FilterSection::Genre => {
-            for (i, (genre, _count)) in bs.available_genres.iter().enumerate() {
+            for (i, genre) in bs.available_genres.iter().enumerate() {
                 let selected = i == bs.panel_selected;
                 let active = bs.filter_genre.as_ref() == Some(genre);
 
@@ -972,7 +972,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
             }
         }
         FilterSection::Tag => {
-            for (i, (tag, _count)) in bs.available_tags.iter().enumerate() {
+            for (i, tag) in bs.available_tags.iter().enumerate() {
                 let selected = i == bs.panel_selected;
                 let active = bs.filter_tag.as_ref() == Some(tag);
 
@@ -1001,7 +1001,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
             }
         }
         FilterSection::Studio => {
-            for (i, (studio, _count)) in bs.available_studios.iter().enumerate() {
+            for (i, studio) in bs.available_studios.iter().enumerate() {
                 let selected = i == bs.panel_selected;
                 let active = bs.filter_studio.as_ref() == Some(studio);
 

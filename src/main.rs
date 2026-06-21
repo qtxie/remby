@@ -41,7 +41,7 @@ enum BackgroundResult {
     MoreItemsLoaded(Vec<crate::emby::MediaItem>, String),
     SearchLoaded(Vec<crate::emby::MediaItem>),
     ItemDetailLoaded(crate::emby::MediaItem),
-    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<(String, u32)>, Vec<(String, u32)>, Vec<(String, u32)>, Vec<crate::emby::MediaItem>),
+    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<crate::emby::MediaItem>),
     MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
     Timeout(String),
 }

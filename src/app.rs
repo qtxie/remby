@@ -174,9 +174,9 @@ pub struct LibraryBrowserState {
     pub filter_studio: Option<String>,
     pub filter_years: Option<(u32, u32)>,
     pub filter_folder: Option<String>,
-    pub available_genres: Vec<(String, u32)>,
-    pub available_tags: Vec<(String, u32)>,
-    pub available_studios: Vec<(String, u32)>,
+    pub available_genres: Vec<String>,
+    pub available_tags: Vec<String>,
+    pub available_studios: Vec<String>,
     pub available_folders: Vec<MediaItem>,
     pub panel: BrowserPanel,
     pub panel_selected: usize,
@@ -892,7 +892,7 @@ impl AppState {
 
     pub fn library_browser_toggle_genre(&mut self) {
         let bs = &mut self.library_browser_state;
-        if let Some((genre, _)) = bs.available_genres.get(bs.panel_selected).cloned() {
+        if let Some(genre) = bs.available_genres.get(bs.panel_selected).cloned() {
             if bs.filter_genre.as_ref() == Some(&genre) {
                 bs.filter_genre = None;
             } else {
@@ -994,7 +994,7 @@ impl AppState {
 
     pub fn library_browser_toggle_tag(&mut self) {
         let bs = &mut self.library_browser_state;
-        if let Some((tag, _)) = bs.available_tags.get(bs.panel_selected).cloned() {
+        if let Some(tag) = bs.available_tags.get(bs.panel_selected).cloned() {
             if bs.filter_tag.as_ref() == Some(&tag) {
                 bs.filter_tag = None;
             } else {
@@ -1005,7 +1005,7 @@ impl AppState {
 
     pub fn library_browser_toggle_studio(&mut self) {
         let bs = &mut self.library_browser_state;
-        if let Some((studio, _)) = bs.available_studios.get(bs.panel_selected).cloned() {
+        if let Some(studio) = bs.available_studios.get(bs.panel_selected).cloned() {
             if bs.filter_studio.as_ref() == Some(&studio) {
                 bs.filter_studio = None;
             } else {
