@@ -741,7 +741,9 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
         }
         View::Settings => "↑↓: nav | ←/→: col | Space: toggle | Shift+↑↓: move | Enter: save | Esc: cancel",
         View::LibraryBrowser => {
-            if state.library_browser_state.panel != BrowserPanel::None {
+            if state.library_browser_state.panel == BrowserPanel::Filter {
+                "j/k: Navigate | ←/→: Section | Enter: Select | Esc: Close"
+            } else if state.library_browser_state.panel != BrowserPanel::None {
                 "j/k: Navigate | Enter: Select | Esc: Close"
             } else {
                 "j/k: Navigate | Enter: Open | s: Sort | f: Filter | c: Clear filters | Esc: Back"

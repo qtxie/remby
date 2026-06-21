@@ -578,6 +578,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('f') if !has_panel => {
                                     state.library_browser_open_filter_panel();
                                 }
+                                KeyCode::Left | KeyCode::Char('h') if has_panel && state.library_browser_state.panel == app::BrowserPanel::Filter => {
+                                    state.library_browser_filter_section_prev();
+                                }
+                                KeyCode::Right | KeyCode::Char('l') if has_panel && state.library_browser_state.panel == app::BrowserPanel::Filter => {
+                                    state.library_browser_filter_section_next();
+                                }
                                 KeyCode::Char('c') if !has_panel => {
                                     state.library_browser_clear_filters();
                                     state.loading = true;

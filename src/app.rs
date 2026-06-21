@@ -844,6 +844,34 @@ impl AppState {
         self.library_browser_state.filter_year_field = None;
     }
 
+    pub fn library_browser_filter_section_next(&mut self) {
+        let bs = &mut self.library_browser_state;
+        bs.filter_section = match bs.filter_section {
+            FilterSection::Genre => FilterSection::Tag,
+            FilterSection::Tag => FilterSection::Studio,
+            FilterSection::Studio => FilterSection::Year,
+            FilterSection::Year => FilterSection::Folder,
+            FilterSection::Folder => FilterSection::Genre,
+        };
+        bs.panel_selected = 0;
+        bs.filter_year_field = None;
+        bs.filter_year_input.clear();
+    }
+
+    pub fn library_browser_filter_section_prev(&mut self) {
+        let bs = &mut self.library_browser_state;
+        bs.filter_section = match bs.filter_section {
+            FilterSection::Genre => FilterSection::Folder,
+            FilterSection::Tag => FilterSection::Genre,
+            FilterSection::Studio => FilterSection::Tag,
+            FilterSection::Year => FilterSection::Studio,
+            FilterSection::Folder => FilterSection::Year,
+        };
+        bs.panel_selected = 0;
+        bs.filter_year_field = None;
+        bs.filter_year_input.clear();
+    }
+
     pub fn library_browser_close_panel(&mut self) {
         self.library_browser_state.panel = BrowserPanel::None;
         self.library_browser_state.filter_year_field = None;
