@@ -41,7 +41,7 @@ enum BackgroundResult {
     MoreItemsLoaded(Vec<crate::emby::MediaItem>, String),
     SearchLoaded(Vec<crate::emby::MediaItem>),
     ItemDetailLoaded(crate::emby::MediaItem),
-    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<crate::emby::MediaItem>),
+    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<(String, u32)>, Vec<(String, u32)>, Vec<(String, u32)>, Vec<crate::emby::MediaItem>),
     MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
     Timeout(String),
 }
@@ -293,8 +293,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    // Don't handle keys while loading
+                    // Allow ESC to interrupt loading
                     if state.loading {
+                        if key.code == KeyCode::Esc {
+                            state.loading = false;
+                            state.status_msg.clear();
+                        }
                         continue;
                     }
 

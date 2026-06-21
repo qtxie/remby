@@ -511,7 +511,7 @@ impl EmbyClient {
         url.to_string()
     }
 
-    pub async fn get_genres(&self, parent_id: &str) -> Result<Vec<String>> {
+    pub async fn get_genres(&self, parent_id: &str) -> Result<Vec<(String, u32)>> {
         let url = self.api_url("/Genres");
         let resp = self.authed_get(&url)
             .query(&[
@@ -528,13 +528,17 @@ impl EmbyClient {
             .cloned()
             .unwrap_or_default();
 
-        let genres: Vec<String> = items.iter()
-            .filter_map(|item| item.get("Name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        let genres: Vec<(String, u32)> = items.iter()
+            .filter_map(|item| {
+                let name = item.get("Name").and_then(|v| v.as_str())?.to_string();
+                let count = item.get("ChildCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                Some((name, count))
+            })
             .collect();
         Ok(genres)
     }
 
-    pub async fn get_tags(&self, parent_id: &str) -> Result<Vec<String>> {
+    pub async fn get_tags(&self, parent_id: &str) -> Result<Vec<(String, u32)>> {
         let url = self.api_url("/Tags");
         let resp = self.authed_get(&url)
             .query(&[
@@ -551,13 +555,17 @@ impl EmbyClient {
             .cloned()
             .unwrap_or_default();
 
-        let tags: Vec<String> = items.iter()
-            .filter_map(|item| item.get("Name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        let tags: Vec<(String, u32)> = items.iter()
+            .filter_map(|item| {
+                let name = item.get("Name").and_then(|v| v.as_str())?.to_string();
+                let count = item.get("ChildCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                Some((name, count))
+            })
             .collect();
         Ok(tags)
     }
 
-    pub async fn get_studios(&self, parent_id: &str) -> Result<Vec<String>> {
+    pub async fn get_studios(&self, parent_id: &str) -> Result<Vec<(String, u32)>> {
         let url = self.api_url("/Studios");
         let resp = self.authed_get(&url)
             .query(&[
@@ -574,8 +582,12 @@ impl EmbyClient {
             .cloned()
             .unwrap_or_default();
 
-        let studios: Vec<String> = items.iter()
-            .filter_map(|item| item.get("Name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        let studios: Vec<(String, u32)> = items.iter()
+            .filter_map(|item| {
+                let name = item.get("Name").and_then(|v| v.as_str())?.to_string();
+                let count = item.get("ChildCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                Some((name, count))
+            })
             .collect();
         Ok(studios)
     }
