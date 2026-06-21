@@ -704,7 +704,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
         View::Home => "↑↓: navigate | Enter: play/open | l: libraries | /: search | q: quit",
-        View::ContinueWatching | View::LatestItems => "↑↓: navigate | Enter: play | ←/BS: back",
+        View::ContinueWatching | View::LatestItems => "↑↓: navigate | Enter: play | /: search | ←/BS: back",
         View::Libraries => "↑↓: select | Enter: open | ←/BS: back",
         View::Items => "↑↓: navigate | Enter: open/play | ←/BS: back | /: search",
         View::SearchResults => "↑↓: navigate | Enter: play | ←/BS: back",
@@ -728,7 +728,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
             } else if state.library_browser_state.panel != BrowserPanel::None {
                 "j/k: Navigate | Enter: Select | Esc: Close"
             } else {
-                "j/k: Navigate | Enter: Open | s: Sort | f: Filter | z: Favorite | Z: View favorites | Esc: Back"
+                "j/k: Navigate | Enter: Open | s: Sort | f: Filter | /: search | z: Favorite | Z: View favorites | Esc: Back"
             }
         },
         View::Favorites => "↑↓: navigate | Enter: open/play | z: unfavorite | ←/BS: back",

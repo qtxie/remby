@@ -403,6 +403,24 @@ impl EmbyClient {
         Ok(data.items)
     }
 
+    pub async fn search_in_library(&self, query: &str, parent_id: &str) -> Result<Vec<MediaItem>> {
+        let url = self.api_url(&format!("/Users/{}/Items", self.user_id));
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("SearchTerm", query),
+                ("ParentId", parent_id),
+                ("Recursive", "true"),
+                ("IncludeItemTypes", "Movie,Series,Episode"),
+                ("Limit", "50"),
+            ])
+            .send()
+            .await
+            .context("Search request failed")?;
+
+        let data: ItemsResponse = resp.json().await.context("Invalid search response")?;
+        Ok(data.items)
+    }
+
     pub async fn get_item_detail(&self, item_id: &str) -> Result<MediaItem> {
         let url = self.api_url(&format!("/Users/{}/Items/{}", self.user_id, item_id));
         let resp = self.authed_get(&url)

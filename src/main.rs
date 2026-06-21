@@ -651,6 +651,30 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::LibraryBrowser => {
                             let has_panel = state.library_browser_state.panel != app::BrowserPanel::None;
 
+                            if state.searching {
+                                match key.code {
+                                    KeyCode::Esc => state.cancel_search(),
+                                    KeyCode::Char(c) => state.search_input(c),
+                                    KeyCode::Backspace => state.search_backspace(),
+                                    KeyCode::Enter => {
+                                        let query = state.search_query.clone();
+                                        let lib_id = state.library_browser_state.library_id.clone();
+                                        state.loading = true;
+                                        state.loading_msg = format!("Searching for \"{}\"...", query);
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            match client.search_in_library(&query, &lib_id).await {
+                                                Ok(results) => { let _ = tx.send(BackgroundResult::SearchLoaded(results)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Search failed: {}", e))); }
+                                            }
+                                        });
+                                    }
+                                    _ => {}
+                                }
+                                continue;
+                            }
+
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => {
@@ -708,6 +732,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('c') if !has_panel => {
                                     state.library_browser_clear_filters();
                                     reload_library_items(state, &bg_tx, 0);
+                                }
+                                KeyCode::Char('/') if !has_panel => {
+                                    let lib_id = state.library_browser_state.library_id.clone();
+                                    state.start_search(app::SearchContext::Library(lib_id));
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
                                     if has_panel {
@@ -844,18 +872,45 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Backspace if state.searching => state.search_backspace(),
                                 KeyCode::Enter if state.searching => {
                                     let query = state.search_query.clone();
+                                    let context = state.search_context.clone();
                                     state.loading = true;
                                     state.loading_msg = format!("Searching for \"{}\"...", query);
-                                    let tx = bg_tx.clone();
-                                    let client = state.client.clone();
-                                    tokio::spawn(async move {
-                                        match client.search(&query).await {
-                                            Ok(results) => { let _ = tx.send(BackgroundResult::SearchLoaded(results)); }
-                                            Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Search failed: {}", e))); }
+                                    match &context {
+                                        app::SearchContext::LocalHome => {
+                                            let q = query.to_lowercase();
+                                            let results: Vec<_> = state.home_items.iter()
+                                                .filter(|item| item.name.to_lowercase().contains(&q))
+                                                .cloned()
+                                                .collect();
+                                            state.search_results = results;
+                                            state.navigate_to(app::View::SearchResults);
+                                            state.loading = false;
                                         }
-                                    });
+                                        app::SearchContext::Library(parent_id) => {
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let parent_id = parent_id.clone();
+                                            tokio::spawn(async move {
+                                                match client.search_in_library(&query, &parent_id).await {
+                                                    Ok(results) => { let _ = tx.send(BackgroundResult::SearchLoaded(results)); }
+                                                    Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Search failed: {}", e))); }
+                                                }
+                                            });
+                                        }
+                                        app::SearchContext::ServerWide => {
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            tokio::spawn(async move {
+                                                match client.search(&query).await {
+                                                    Ok(results) => { let _ = tx.send(BackgroundResult::SearchLoaded(results)); }
+                                                    Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Search failed: {}", e))); }
+                                                }
+                                            });
+                                        }
+                                    }
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
+                                    if state.searching { continue; }
                                     state.select_prev();
                                     if state.should_load_more_items() {
                                         state.loading = true;
@@ -891,6 +946,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
+                                    if state.searching { continue; }
                                     state.select_next();
                                     if state.should_load_more_items() {
                                         state.loading = true;
@@ -926,9 +982,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::PageUp => {
+                                    if state.searching { continue; }
                                     state.page_up();
                                 }
                                 KeyCode::PageDown => {
+                                    if state.searching { continue; }
                                     state.page_down();
                                     if state.should_load_more_items() {
                                         state.loading = true;
@@ -946,6 +1004,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Char('z') => {
+                                    if state.searching { continue; }
                                     if let Some(item) = state.selected_item().cloned() {
                                         let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
                                         let new_favorite = !is_favorite;
@@ -965,9 +1024,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Left | KeyCode::Char('h') => {
+                                    if state.searching { continue; }
                                     state.go_back();
                                 }
                                 KeyCode::Right | KeyCode::Char('l') => {
+                                    if state.searching { continue; }
                                     state.show_libraries().await;
                                     if !state.is_libraries_cache_valid() || !state.is_latest_cache_valid() {
                                         state.loading_msg = "Loading libraries...".to_string();
@@ -1121,10 +1182,20 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Backspace => {
+                                    if state.searching { continue; }
                                     state.go_back();
                                 }
-                                KeyCode::Char('/') => state.start_search(),
+                                KeyCode::Char('/') => {
+                                    if state.searching { continue; }
+                                    let context = if matches!(state.view, app::View::ContinueWatching | app::View::LatestItems) {
+                                        app::SearchContext::LocalHome
+                                    } else {
+                                        app::SearchContext::ServerWide
+                                    };
+                                    state.start_search(context);
+                                }
                                 KeyCode::Char('Z') => {
+                                    if state.searching { continue; }
                                     state.open_favorites();
                                     state.loading = true;
                                     state.loading_msg = "Loading favorites...".to_string();
@@ -1138,6 +1209,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     });
                                 }
                                 KeyCode::Char('s') => {
+                                    if state.searching { continue; }
                                     if state.libraries.is_empty() {
                                         state.loading = true;
                                         state.loading_msg = "Loading libraries...".to_string();
@@ -1152,6 +1224,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Char('e') => {
+                                    if state.searching { continue; }
                                     if let Some(item) = state.selected_item().cloned() {
                                         state.loading = true;
                                         state.loading_msg = format!("Loading {}...", item.display_name());

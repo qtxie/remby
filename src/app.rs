@@ -19,6 +19,13 @@ impl Message {
     pub fn error(s: impl Into<String>) -> Self { Message::Error(s.into()) }
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub enum SearchContext {
+    ServerWide,
+    LocalHome,
+    Library(String),
+}
+
 pub struct AppState {
     pub client: EmbyClient,
     pub server: String,
@@ -35,6 +42,7 @@ pub struct AppState {
     pub stack: Vec<StackEntry>,
     pub status_msg: Option<Message>,
     pub searching: bool,
+    pub search_context: SearchContext,
     pub search_query: String,
     pub search_results: Vec<MediaItem>,
     pub view: View,
@@ -340,6 +348,7 @@ impl AppState {
             stack: Vec::new(),
             status_msg: None,
             searching: false,
+            search_context: SearchContext::ServerWide,
             search_query: String::new(),
             search_results: Vec::new(),
             view: View::Home,
@@ -613,8 +622,9 @@ impl AppState {
         }
     }
 
-    pub fn start_search(&mut self) {
+    pub fn start_search(&mut self, context: SearchContext) {
         self.searching = true;
+        self.search_context = context;
         self.search_query.clear();
         self.search_results.clear();
     }
