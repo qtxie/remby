@@ -334,7 +334,7 @@ impl EmbyClient {
             .query(&[
                 ("ParentId", parent_id),
                 ("Recursive", "false"),
-                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
                 ("StartIndex", &start.to_string()),
                 ("Limit", &limit.to_string()),
             ])
@@ -356,7 +356,7 @@ impl EmbyClient {
             .query(&[
                 ("Limit", limit_str.as_str()),
                 ("Recursive", "true"),
-                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
                 ("IncludeItemTypes", "Movie,Episode"),
             ])
             .send()
@@ -377,7 +377,7 @@ impl EmbyClient {
                 ("SortBy", "DateCreated"),
                 ("SortOrder", "Descending"),
                 ("Limit", limit_str.as_str()),
-                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
             ])
             .send()
             .await
@@ -420,7 +420,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
                 ("Recursive", "true"),
                 ("Limit", "100"),
             ])
@@ -436,7 +436,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
                 ("Recursive", "false"),
                 ("StartIndex", &start.to_string()),
                 ("Limit", &limit.to_string()),
@@ -453,7 +453,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview,ChildCount"),
+                ("Fields", "Overview,ChildCount,UserData"),
             ])
             .send()
             .await
@@ -468,7 +468,7 @@ impl EmbyClient {
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("SeasonId", season_id),
-                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
                 ("Limit", "1000"),
             ])
             .send()
@@ -484,7 +484,7 @@ impl EmbyClient {
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("Limit", "12"),
-                ("Fields", "Overview,ChildCount"),
+                ("Fields", "Overview,ChildCount,UserData"),
             ])
             .send()
             .await
@@ -636,7 +636,7 @@ impl EmbyClient {
             .query(&[
                 ("Recursive", "true"),
                 ("Filters", "IsFavorite"),
-                ("Fields", "Overview,MediaSources,ChildCount"),
+                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
                 ("StartIndex", &start.to_string()),
                 ("Limit", &limit.to_string()),
                 ("SortBy", "SortName"),
@@ -669,7 +669,7 @@ impl EmbyClient {
         let mut query = vec![
             ("ParentId", parent_id.to_string()),
             ("Recursive", "true".to_string()),
-            ("Fields", "Overview,MediaSources,ChildCount".to_string()),
+            ("Fields", "Overview,MediaSources,ChildCount,UserData".to_string()),
             ("StartIndex", start.to_string()),
             ("Limit", limit.to_string()),
             ("SortBy", sort_by.to_string()),
