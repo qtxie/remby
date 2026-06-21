@@ -571,7 +571,34 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => {
                                     if has_panel {
+                                        let was_filter = state.library_browser_state.panel == app::BrowserPanel::Filter;
                                         state.library_browser_close_panel();
+                                        if was_filter {
+                                            // Apply filters when closing filter panel
+                                            state.loading = true;
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let lib_id = state.library_browser_state.library_id.clone();
+                                            let sort_by = match state.library_browser_state.sort_by {
+                                                app::ItemSort::Name => "SortName",
+                                                app::ItemSort::Year => "ProductionYear",
+                                                app::ItemSort::Rating => "CommunityRating",
+                                                app::ItemSort::DateAdded => "DateCreated",
+                                            }.to_string();
+                                            let sort_order = match state.library_browser_state.sort_order {
+                                                app::SortOrder::Asc => "Ascending",
+                                                app::SortOrder::Desc => "Descending",
+                                            }.to_string();
+                                            let genre = state.library_browser_state.filter_genre.clone();
+                                            let tag = state.library_browser_state.filter_tag.clone();
+                                            let studio = state.library_browser_state.filter_studio.clone();
+                                            let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+                                            tokio::spawn(async move {
+                                                if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                    let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
+                                                }
+                                            });
+                                        }
                                     } else {
                                         state.go_back();
                                     }
