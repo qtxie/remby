@@ -112,7 +112,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
 
     if let Some(ref msg) = state.status_msg {
         let (text, color) = match msg {
-            crate::app::Message::Info(s) => (s.as_str(), Color::DarkGray),
+            crate::app::Message::Info(s) => (s.as_str(), Color::Cyan),
             crate::app::Message::Success(s) => (s.as_str(), Color::Green),
             crate::app::Message::Error(s) => (s.as_str(), Color::Red),
         };
