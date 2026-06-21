@@ -110,21 +110,16 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(Clear, area);
     f.render_widget(block, area);
 
-    if !state.status_msg.is_empty() {
-        let is_loading = state.status_msg.contains("Loading");
-        let status = if is_loading {
-            Line::from(vec![
-                Span::styled(
-                    &state.status_msg,
-                    Style::default().fg(Color::Yellow),
-                ),
-            ])
-        } else {
-            Line::from(Span::styled(
-                &state.status_msg,
-                Style::default().fg(Color::DarkGray),
-            ))
+    if let Some(ref msg) = state.status_msg {
+        let (text, color) = match msg {
+            crate::app::Message::Info(s) => (s.as_str(), Color::DarkGray),
+            crate::app::Message::Success(s) => (s.as_str(), Color::Green),
+            crate::app::Message::Error(s) => (s.as_str(), Color::Red),
         };
+        let status = Line::from(Span::styled(
+            text,
+            Style::default().fg(color),
+        ));
         f.render_widget(Paragraph::new(status), Rect {
             x: inner.x + 1,
             y: inner.y,

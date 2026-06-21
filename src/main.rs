@@ -165,6 +165,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
 
     // Load home in background
     state.loading = true;
+    state.loading_msg = "Loading home...".to_string();
     {
         let tx = bg_tx.clone();
         let client = state.client.clone();
@@ -214,7 +215,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.library_latest = latest;
                     state.library_latest_fetched_at = Some(std::time::Instant::now());
                     state.loading = false;
-                    state.status_msg = format!("{} libraries", state.libraries.len());
+                    state.status_msg = Some(app::Message::info(format!("{} libraries", state.libraries.len())));
                 }
                 BackgroundResult::SettingsLoaded(libs) => {
                     state.libraries = libs;
@@ -232,12 +233,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.episodes = episodes;
                     state.total_episodes = total;
                     state.episodes_series_id = series_id;
-                    state.status_msg = format!("{} / {} episodes", state.episodes.len(), total);
+                    state.status_msg = Some(app::Message::info(format!("{} / {} episodes", state.episodes.len(), total)));
                     state.loading = false;
                 }
                 BackgroundResult::MoreEpisodesLoaded(more_episodes) => {
                     state.episodes.extend(more_episodes);
-                    state.status_msg = format!("{} / {} episodes", state.episodes.len(), state.total_episodes);
+                    state.status_msg = Some(app::Message::info(format!("{} / {} episodes", state.episodes.len(), state.total_episodes)));
                     state.loading = false;
                 }
                 BackgroundResult::FolderLoaded(items, folder_id, total) => {
@@ -249,7 +250,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 }
                 BackgroundResult::MoreItemsLoaded(more_items, _folder_id) => {
                     state.items.extend(more_items);
-                    state.status_msg = format!("{} / {} items", state.items.len(), state.total_items);
+                    state.status_msg = Some(app::Message::info(format!("{} / {} items", state.items.len(), state.total_items)));
                     state.loading = false;
                 }
                 BackgroundResult::SearchLoaded(results) => {
@@ -272,11 +273,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 }
                 BackgroundResult::Timeout(task) => {
                     state.loading = false;
-                    state.status_msg = format!("{} timed out", task);
+                    state.status_msg = Some(app::Message::error(format!("{} timed out", task)));
                 }
                 BackgroundResult::Error(msg) => {
                     state.loading = false;
-                    state.status_msg = msg;
+                    state.status_msg = Some(app::Message::error(msg));
                 }
                 BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres, tags, studios, folders) => {
                     if state.library_browser_state.library_id == lib_id {
@@ -297,13 +298,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         }
                     }
                     state.loading = false;
-                    state.status_msg = format!("{} / {} items", state.library_browser_state.items.len(), total);
+                    state.status_msg = Some(app::Message::info(format!("{} / {} items", state.library_browser_state.items.len(), total)));
                 }
                 BackgroundResult::MoreLibraryBrowserLoaded(more_items, lib_id) => {
                     if state.library_browser_state.library_id == lib_id {
                         state.library_browser_state.items.extend(more_items);
                         let total = state.library_browser_state.total;
-                        state.status_msg = format!("{} / {} items", state.library_browser_state.items.len(), total);
+                        state.status_msg = Some(app::Message::info(format!("{} / {} items", state.library_browser_state.items.len(), total)));
                     }
                     state.loading = false;
                 }
@@ -311,7 +312,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.favorites = items;
                     state.total_favorites = total;
                     state.loading = false;
-                    state.status_msg = format!("{} / {} favorites", state.favorites.len(), total);
+                    state.status_msg = Some(app::Message::info(format!("{} / {} favorites", state.favorites.len(), total)));
                 }
                 BackgroundResult::FavoriteToggled(item_id, is_favorite) => {
                     update_favorite_in_list(&mut state.home_items, &item_id, is_favorite);
@@ -322,17 +323,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         state.total_favorites = state.total_favorites.saturating_sub(1);
                     }
                     state.loading = false;
-                    state.status_msg = if is_favorite { "Added to favorites" } else { "Removed from favorites" }.to_string();
+                    state.status_msg = Some(app::Message::success(if is_favorite { "Added to favorites" } else { "Removed from favorites" }));
                 }
             }
         }
 
         // Update spinner
         if state.loading {
-            state.status_msg = format!("{} Loading", SPINNER[spin_idx % SPINNER.len()]);
+            state.status_msg = Some(app::Message::info(format!(
+                "{} {}",
+                SPINNER[spin_idx % SPINNER.len()],
+                state.loading_msg
+            )));
             spin_idx += 1;
-        } else {
-            state.status_msg.clear();
         }
         terminal.draw(|f| ui::render(f, state))?;
 
@@ -343,7 +346,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     if state.loading {
                         if key.code == KeyCode::Esc {
                             state.loading = false;
-                            state.status_msg.clear();
+                            state.status_msg = None;
                         }
                         continue;
                     }
@@ -363,7 +366,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('J') => state.settings_move_down(),
                                 KeyCode::Enter => {
                                     state.settings_save();
-                                    // Reload libraries with new settings
+                                    state.loading_msg = "Loading libraries...".to_string();
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     let config = state.config.clone();
@@ -489,6 +492,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_prev();
                                     if state.should_load_more_episodes() {
                                         state.loading = true;
+                                        state.loading_msg = format!("Loading more episodes for {}...", state.series_name);
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let series_id = state.episodes_series_id.clone();
@@ -505,6 +509,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_next();
                                     if state.should_load_more_episodes() {
                                         state.loading = true;
+                                        state.loading_msg = format!("Loading more episodes for {}...", state.series_name);
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let series_id = state.episodes_series_id.clone();
@@ -533,6 +538,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if let Some(item) = state.selected_item().cloned() {
                                         if item.is_video() {
                                             state.loading = true;
+                                            state.loading_msg = format!("Loading {}...", item.display_name());
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
@@ -581,6 +587,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         app::SeriesSection::Similar => {
                                             if let Some(item) = state.series_selected_item().cloned() {
                                                 state.loading = true;
+                                                state.loading_msg = format!("Loading similar to {}...", item.display_name());
                                                 let tx = bg_tx.clone();
                                                 let client = state.client.clone();
                                                 let item_clone = item.clone();
@@ -598,6 +605,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let series_id = item.series_id.clone().unwrap_or_else(|| item.id.clone());
                                             let series_name = item.series_name.clone().unwrap_or_default();
                                             state.loading = true;
+                                            state.loading_msg = format!("Loading episodes for {}...", series_name);
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             tokio::spawn(async move {
@@ -632,6 +640,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('Z') if !has_panel => {
                                     state.open_favorites();
                                     state.loading = true;
+                                    state.loading_msg = "Loading favorites...".to_string();
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     tokio::spawn(async move {
@@ -647,6 +656,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let new_favorite = !is_favorite;
                                         let item_id = item.id.clone();
                                         state.loading = true;
+                                        state.loading_msg = "Updating favorite...".to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
@@ -743,6 +753,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if let Some(item) = state.selected_item().cloned() {
                                             if item.is_video() {
                                                 state.loading = true;
+                                                state.loading_msg = format!("Loading {}...", item.display_name());
                                                 let tx = bg_tx.clone();
                                                 let client = state.client.clone();
                                                 let item_id = item.id.clone();
@@ -755,6 +766,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 });
                                             } else if item.is_navigable() {
                                                 state.loading = true;
+                                                state.loading_msg = format!("Loading {}...", item.display_name());
                                                 let tx = bg_tx.clone();
                                                 let client = state.client.clone();
                                                 let item_id = item.id.clone();
@@ -806,6 +818,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Enter if state.searching => {
                                     let query = state.search_query.clone();
                                     state.loading = true;
+                                    state.loading_msg = format!("Searching for \"{}\"...", query);
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     tokio::spawn(async move {
@@ -819,6 +832,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_prev();
                                     if state.should_load_more_items() {
                                         state.loading = true;
+                                        state.loading_msg = "Loading more items...".to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let folder_id = state.current_folder_id.clone();
@@ -835,6 +849,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_next();
                                     if state.should_load_more_items() {
                                         state.loading = true;
+                                        state.loading_msg = "Loading more items...".to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let folder_id = state.current_folder_id.clone();
@@ -854,6 +869,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.page_down();
                                     if state.should_load_more_items() {
                                         state.loading = true;
+                                        state.loading_msg = "Loading more items...".to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let folder_id = state.current_folder_id.clone();
@@ -872,6 +888,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let new_favorite = !is_favorite;
                                         let item_id = item.id.clone();
                                         state.loading = true;
+                                        state.loading_msg = "Updating favorite...".to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
@@ -890,6 +907,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Right | KeyCode::Char('l') => {
                                     state.show_libraries().await;
                                     if !state.is_libraries_cache_valid() || !state.is_latest_cache_valid() {
+                                        state.loading_msg = "Loading libraries...".to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let config = state.config.clone();
@@ -933,6 +951,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                         if item.is_video() {
                                             state.loading = true;
+                                            state.loading_msg = format!("Loading {}...", item.display_name());
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
@@ -945,6 +964,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             });
                                         } else if item.is_navigable() {
                                             state.loading = true;
+                                            state.loading_msg = format!("Loading {}...", item.display_name());
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
@@ -970,6 +990,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     } else if let Some(lib) = state.selected_library().cloned() {
                                         state.open_library_browser(lib.id.clone(), lib.name.clone());
                                         state.loading = true;
+                                        state.loading_msg = format!("Loading {}...", lib.name);
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let library_id = lib.id.clone();
@@ -1008,6 +1029,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('Z') => {
                                     state.open_favorites();
                                     state.loading = true;
+                                    state.loading_msg = "Loading favorites...".to_string();
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     tokio::spawn(async move {
@@ -1020,6 +1042,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('s') => {
                                     if state.libraries.is_empty() {
                                         state.loading = true;
+                                        state.loading_msg = "Loading libraries...".to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
@@ -1033,6 +1056,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('e') => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         state.loading = true;
+                                        state.loading_msg = format!("Loading {}...", item.display_name());
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {

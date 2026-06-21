@@ -6,6 +6,18 @@ use crate::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
 
 const CACHE_TTL_SECS: u64 = 300; // 5 minutes
 
+pub enum Message {
+    Info(String),
+    Success(String),
+    Error(String),
+}
+
+impl Message {
+    pub fn info(s: impl Into<String>) -> Self { Message::Info(s.into()) }
+    pub fn success(s: impl Into<String>) -> Self { Message::Success(s.into()) }
+    pub fn error(s: impl Into<String>) -> Self { Message::Error(s.into()) }
+}
+
 pub struct AppState {
     pub client: EmbyClient,
     pub server: String,
@@ -17,9 +29,10 @@ pub struct AppState {
     pub total_items: usize,
     pub current_folder_id: String,
     pub loading: bool,
+    pub loading_msg: String,
     pub selected: usize,
     pub stack: Vec<StackEntry>,
-    pub status_msg: String,
+    pub status_msg: Option<Message>,
     pub searching: bool,
     pub search_query: String,
     pub search_results: Vec<MediaItem>,
@@ -317,9 +330,10 @@ impl AppState {
             total_items: 0,
             current_folder_id: String::new(),
             loading: false,
+            loading_msg: String::new(),
             selected: 0,
             stack: Vec::new(),
-            status_msg: String::new(),
+            status_msg: None,
             searching: false,
             search_query: String::new(),
             search_results: Vec::new(),
@@ -408,7 +422,7 @@ impl AppState {
                 .unwrap_or("")
                 .to_string();
             self.loading = true;
-            self.status_msg = format!("Loading {}...", season.name);
+            self.status_msg = Some(Message::info(format!("Loading {}...", season.name)));
             if let Ok(eps) = self.client.get_season_episodes(&series_id, &season.id).await {
                 self.series_state.episodes = eps;
                 self.series_state.selected_episode = 0;
@@ -416,7 +430,7 @@ impl AppState {
                 self.selected = 0;
             }
             self.loading = false;
-            self.status_msg = String::new();
+            self.status_msg = None;
         }
         Ok(())
     }
@@ -456,7 +470,7 @@ impl AppState {
     }
 
     pub fn go_back(&mut self) {
-        self.status_msg.clear();
+        self.status_msg = None;
         if self.searching {
             self.cancel_search();
             return;
@@ -565,21 +579,21 @@ impl AppState {
         self.view == View::Episodes
             && !self.loading
             && self.total_episodes > self.episodes.len()
-            && self.selected + 5 >= self.episodes.len() * 2 / 3
+            && self.selected >= self.episodes.len()
     }
 
     pub fn should_load_more_items(&self) -> bool {
         self.view == View::Items
             && !self.loading
             && self.total_items > self.items.len()
-            && self.selected + 5 >= self.items.len() * 2 / 3
+            && self.selected >= self.items.len()
     }
 
     pub async fn show_libraries(&mut self) {
         self.navigate_to(View::Libraries);
         if !self.is_libraries_cache_valid() || !self.is_latest_cache_valid() {
             self.loading = true;
-            self.status_msg = "Loading libraries...".to_string();
+            self.status_msg = Some(Message::info("Loading libraries..."));
         }
     }
 
@@ -753,9 +767,9 @@ impl AppState {
         self.config.enabled_libraries = enabled;
         self.config.latest_libraries = latest;
         if let Err(e) = crate::config::save_config(&self.config) {
-            self.status_msg = format!("Save error: {e}");
+            self.status_msg = Some(Message::error(format!("Save error: {e}")));
         } else {
-            self.status_msg = "Settings saved".to_string();
+            self.status_msg = Some(Message::success("Settings saved"));
         }
         self.libraries.clear();
         self.libraries_fetched_at = None;
