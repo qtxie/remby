@@ -631,6 +631,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let lib_id = bs.library_id.clone();
+                                            let parent_id = bs.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
                                             let sort_by = match bs.sort_by {
                                                 app::ItemSort::Name => "SortName",
                                                 app::ItemSort::Year => "ProductionYear",
@@ -646,9 +647,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let studio = bs.filter_studio.clone();
                                             let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
+                                            let lib_id2 = lib_id.clone();
                                             tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
+                                                if let Ok(result) = client.get_items_filtered(&parent_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id2));
                                                 }
                                             });
                                         }
@@ -665,6 +667,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let lib_id = bs.library_id.clone();
+                                            let parent_id = bs.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
                                             let sort_by = match bs.sort_by {
                                                 app::ItemSort::Name => "SortName",
                                                 app::ItemSort::Year => "ProductionYear",
@@ -680,9 +683,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let studio = bs.filter_studio.clone();
                                             let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
+                                            let lib_id2 = lib_id.clone();
                                             tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
+                                                if let Ok(result) = client.get_items_filtered(&parent_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id2));
                                                 }
                                             });
                                         }
@@ -710,6 +714,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let lib_id = bs.library_id.clone();
+                                            let parent_id = bs.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
                                             let sort_by = match bs.sort_by {
                                                 app::ItemSort::Name => "SortName",
                                                 app::ItemSort::Year => "ProductionYear",
@@ -725,9 +730,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let studio = bs.filter_studio.clone();
                                             let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
+                                            let lib_id2 = lib_id.clone();
                                             tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
+                                                if let Ok(result) = client.get_items_filtered(&parent_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id2));
                                                 }
                                             });
                                         }
@@ -742,6 +748,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 let tx = bg_tx.clone();
                                                 let client = state.client.clone();
                                                 let lib_id = state.library_browser_state.library_id.clone();
+                                                let parent_id = state.library_browser_state.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
                                                 let sort_by = match state.library_browser_state.sort_by {
                                                     app::ItemSort::Name => "SortName",
                                                     app::ItemSort::Year => "ProductionYear",
@@ -757,7 +764,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 let studio = state.library_browser_state.filter_studio.clone();
                                                 let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                                 tokio::spawn(async move {
-                                                    if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                    if let Ok(result) = client.get_items_filtered(&parent_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
                                                         let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
                                                     }
                                                 });
@@ -788,8 +795,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                     let tag = state.library_browser_state.filter_tag.clone();
                                                     let studio = state.library_browser_state.filter_studio.clone();
                                                     let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+                                                    let folder = state.library_browser_state.filter_folder.clone();
+                                                    let parent_id = folder.unwrap_or_else(|| lib_id.clone());
                                                     tokio::spawn(async move {
-                                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                        if let Ok(result) = client.get_items_filtered(&parent_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
                                                             let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
                                                         }
                                                     });
