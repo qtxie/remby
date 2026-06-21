@@ -502,12 +502,6 @@ impl AppState {
                 // Combined list: libraries + section headers + latest items
                 let mut idx = self.selected;
 
-                // Skip "Libraries" header
-                if idx == 0 {
-                    return None;
-                }
-                idx -= 1;
-
                 // Check libraries
                 if idx < self.libraries.len() {
                     return None; // Libraries are not MediaItems
@@ -543,10 +537,8 @@ impl AppState {
     pub fn selected_library(&self) -> Option<&Library> {
         if self.view == View::Libraries {
             let idx = self.selected;
-            // Skip "Libraries" header (index 0)
-            if idx > 0 && idx <= self.libraries.len() {
-                return self.libraries.get(idx - 1);
-            }
+            // Libraries are at index 0..n (header is not selectable)
+            return self.libraries.get(idx);
         }
         None
     }
@@ -1114,8 +1106,8 @@ impl AppState {
         match self.view {
             View::Home => self.home_items.len(),
             View::Libraries => {
-                // Libraries + section headers + latest items
-                let mut count = self.libraries.len() + 1; // +1 for "Libraries" header
+                // Libraries + latest items (header is not selectable)
+                let mut count = self.libraries.len();
                 for (_, items) in &self.library_latest {
                     count += 1 + items.len(); // +1 for section header
                 }

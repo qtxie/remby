@@ -181,23 +181,15 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
     let mut items: Vec<ListItem> = Vec::new();
-    let mut idx = 0;
 
-    // Libraries header
-    let style = if state.view == View::Libraries && state.selected == idx {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::Cyan)
-    };
-    let prefix = if state.view == View::Libraries && state.selected == idx { "▸ " } else { "  " };
+    // Libraries header (not selectable)
     items.push(ListItem::new(Line::from(Span::styled(
-        format!("{}Libraries", prefix),
-        style,
+        "  Libraries",
+        Style::default().fg(Color::Cyan),
     ))));
-    idx += 1;
 
-    // Library items
-    for lib in &state.libraries {
+    // Library items (selectable from index 0)
+    for (i, lib) in state.libraries.iter().enumerate() {
         let icon = match lib.collection_type.as_deref() {
             Some("movies") => " ",
             Some("tvshows") => " ",
@@ -205,7 +197,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
             Some("books") => " ",
             _ => " ",
         };
-        let selected = state.view == View::Libraries && state.selected == idx;
+        let selected = state.view == View::Libraries && state.selected == i;
         let prefix = if selected { "▸ " } else { "  " };
         let style = if selected {
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
@@ -218,10 +210,10 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
             Span::raw("  "),
             Span::styled(&lib.name, style),
         ])));
-        idx += 1;
     }
 
     // Latest items sections
+    let mut idx = state.libraries.len();
     for (lib_name, latest_items) in &state.library_latest {
         let selected = state.view == View::Libraries && state.selected == idx;
         let prefix = if selected { "▸ " } else { "  " };
