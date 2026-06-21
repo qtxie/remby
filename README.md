@@ -17,14 +17,16 @@ A lightweight Emby client with terminal UI and mpv playback.
 ### Features
 
 - **Home page** with Continue Watching and Latest media
-- **Browse** libraries, folders, and media items
+- **Library browser** with sort (Name/Year/Rating/Date Added) and filter (Genre/Tag/Studio/Year/Folder)
+- **Favorites** — toggle favorite with `z`, view favorites with `Z`
+- **Settings** — configure which libraries appear, toggle latest items, reorder
 - **Search** across movies, series, and episodes
 - **Source selection** with detailed info (resolution, codec, audio, file size)
 - **Track selection** for video, audio, and subtitle
 - **Resume playback** — choose to resume from saved position or play from start
 - **Series info** — view seasons, episodes, and similar shows
 - **mpv integration** — launches mpv for playback with full track support
-- **Progressive loading** — items load in the background with animated spinner
+- **Lazy loading** — items load at end of list with context-aware messages
 - **Keyboard driven** — vim-style navigation (j/k/h/l)
 
 ### Requirements
@@ -72,16 +74,51 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 
 ### Keyboard Shortcuts
 
+#### Global
+
 | Key | Action |
 |-----|--------|
 | `↑`/`↓` or `k`/`j` | Navigate up/down |
-| `←`/`→` or `h`/`l` | Navigate left/right (sections) / Go back |
+| `←`/`→` or `h`/`l` | Navigate left/right / Go back |
 | `Enter` | Select / Play |
 | `Esc` | Go back / Cancel |
+| `q` | Quit |
 | `/` | Start search |
 | `e` | Show series info |
 | `l` | Open libraries |
-| `q` | Quit |
+| `z` | Toggle favorite |
+| `Z` | View favorites |
+| `s` | Open settings |
+
+#### Library Browser
+
+| Key | Action |
+|-----|--------|
+| `s` | Open sort panel |
+| `f` | Open filter panel |
+| `z` | Toggle favorite |
+| `Z` | View favorites |
+| `c` | Clear all filters |
+| `Enter` | Open item / Apply sort/filter |
+| Left/Right | Switch filter section |
+| `Esc` | Close panel / Go back |
+
+#### Filter Panel
+
+| Key | Action |
+|-----|--------|
+| `↑`/`↓` or `k`/`j` | Navigate items |
+| `Enter` | Select / Toggle filter |
+| `Left`/`Right` | Switch section (Genre/Tag/Studio/Year/Folder) |
+| `Esc` | Cancel without applying |
+
+#### Sort Panel
+
+| Key | Action |
+|-----|--------|
+| `↑`/`↓` or `k`/`j` | Navigate options |
+| `Enter` | Select sort order |
+| `Esc` | Cancel |
 
 ---
 
@@ -90,14 +127,16 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 ### 功能特性
 
 - **首页** — 继续观看和最近添加
-- **浏览** — 媒体库、文件夹和媒体项目
+- **媒体库浏览** — 支持排序（名称/年份/评分/添加日期）和筛选（类型/标签/制片厂/年份/文件夹）
+- **收藏** — 按 `z` 切换收藏，按 `Z` 查看收藏列表
+- **设置** — 配置显示哪些媒体库、是否显示最新内容、调整顺序
 - **搜索** — 搜索电影、剧集和剧集
 - **源选择** — 显示详细信息（分辨率、编码、音频、文件大小）
 - **轨道选择** — 选择视频、音频和字幕轨道
 - **断点续播** — 从上次播放位置继续或从头播放
 - **剧集信息** — 查看季、集和相似剧集
 - **mpv 集成** — 使用 mpv 播放，支持完整轨道选择
-- **渐进加载** — 后台加载数据，带加载动画
+- **懒加载** — 滚动到底部自动加载更多，带上下文提示信息
 - **键盘驱动** — 支持 vim 风格导航（j/k/h/l）
 
 ### 环境要求
@@ -138,16 +177,51 @@ remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 
 ### 快捷键
 
+#### 全局
+
 | 按键 | 功能 |
 |------|------|
 | `↑`/`↓` 或 `k`/`j` | 上下导航 |
-| `←`/`→` 或 `h`/`l` | 左右切换（章节）/ 返回 |
+| `←`/`→` 或 `h`/`l` | 左右切换 / 返回 |
 | `Enter` | 选择 / 播放 |
 | `Esc` | 返回 / 取消 |
+| `q` | 退出 |
 | `/` | 搜索 |
 | `e` | 显示剧集信息 |
 | `l` | 打开媒体库 |
-| `q` | 退出 |
+| `z` | 切换收藏 |
+| `Z` | 查看收藏 |
+| `s` | 打开设置 |
+
+#### 媒体库浏览
+
+| 按键 | 功能 |
+|------|------|
+| `s` | 打开排序面板 |
+| `f` | 打开筛选面板 |
+| `z` | 切换收藏 |
+| `Z` | 查看收藏 |
+| `c` | 清除所有筛选 |
+| `Enter` | 打开项目 / 应用排序或筛选 |
+| `←`/`→` | 切换筛选分类 |
+| `Esc` | 关闭面板 / 返回 |
+
+#### 筛选面板
+
+| 按键 | 功能 |
+|------|------|
+| `↑`/`↓` 或 `k`/`j` | 导航选项 |
+| `Enter` | 选择 / 切换筛选 |
+| `←`/`→` | 切换分类（类型/标签/制片厂/年份/文件夹） |
+| `Esc` | 取消不应用 |
+
+#### 排序面板
+
+| 按键 | 功能 |
+|------|------|
+| `↑`/`↓` 或 `k`/`j` | 导航选项 |
+| `Enter` | 选择排序方式 |
+| `Esc` | 取消 |
 
 ---
 
