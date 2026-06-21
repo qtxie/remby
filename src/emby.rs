@@ -601,13 +601,19 @@ impl EmbyClient {
     pub async fn toggle_favorite(&self, item_id: &str, is_favorite: bool) -> Result<()> {
         let url = self.api_url(&format!("/Users/{}/Items/{}/Favorite", self.user_id, item_id));
         let resp = if is_favorite {
-            self.authed_get(&url).send().await
+            // POST to add favorite
+            let mut req = self.http.post(&url);
+            for (k, v) in base_headers(&self.token, &self.user_id) {
+                req = req.header(k, v);
+            }
+            req.send().await
         } else {
-            self.http.delete(&url)
-                .header("X-Emby-Authorization", auth_header(&self.token))
-                .header("X-Emby-Token", &self.token)
-                .send()
-                .await
+            // DELETE to remove favorite
+            let mut req = self.http.delete(&url);
+            for (k, v) in base_headers(&self.token, &self.user_id) {
+                req = req.header(k, v);
+            }
+            req.send().await
         };
         resp.context("Failed to toggle favorite")?;
         Ok(())
