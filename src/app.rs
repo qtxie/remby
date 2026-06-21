@@ -860,20 +860,26 @@ impl AppState {
 
     pub fn library_browser_select_sort(&mut self) {
         let bs = &mut self.library_browser_state;
-        bs.sort_by = match bs.panel_selected {
-            0 => ItemSort::Name,
-            1 => ItemSort::Year,
-            2 => ItemSort::Rating,
-            3 => ItemSort::DateAdded,
-            _ => ItemSort::Name,
-        };
+        match bs.panel_selected {
+            0 => bs.sort_by = ItemSort::Name,
+            1 => bs.sort_by = ItemSort::Year,
+            2 => bs.sort_by = ItemSort::Rating,
+            3 => bs.sort_by = ItemSort::DateAdded,
+            4 => {
+                bs.sort_order = match bs.sort_order {
+                    SortOrder::Asc => SortOrder::Desc,
+                    SortOrder::Desc => SortOrder::Asc,
+                };
+            }
+            _ => {}
+        }
         bs.panel = BrowserPanel::None;
     }
 
     pub fn library_browser_panel_next(&mut self) {
         let bs = &mut self.library_browser_state;
         let len = match bs.panel {
-            BrowserPanel::Sort => 4,
+            BrowserPanel::Sort => 5,
             BrowserPanel::Filter => {
                 if bs.filter_year_field.is_some() {
                     2
@@ -897,7 +903,7 @@ impl AppState {
     pub fn library_browser_panel_prev(&mut self) {
         let bs = &mut self.library_browser_state;
         let len = match bs.panel {
-            BrowserPanel::Sort => 4,
+            BrowserPanel::Sort => 5,
             BrowserPanel::Filter => {
                 if bs.filter_year_field.is_some() {
                     2

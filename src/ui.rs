@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
-use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, TrackSection, View};
+use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SortOrder, TrackSection, View};
 
 pub fn render(f: &mut Frame, state: &AppState) {
     let area = f.area();
@@ -876,16 +876,24 @@ fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
     let bs = &state.library_browser_state;
-    let options = ["Name", "Year", "Rating", "Date Added"];
+    let order_label = match bs.sort_order {
+        SortOrder::Asc => "Order: Ascending",
+        SortOrder::Desc => "Order: Descending",
+    };
+    let options = ["Name", "Year", "Rating", "Date Added", order_label];
 
     let items: Vec<ListItem> = options.iter().enumerate().map(|(i, opt)| {
         let selected = i == bs.panel_selected;
-        let current = match bs.sort_by {
-            ItemSort::Name => 0,
-            ItemSort::Year => 1,
-            ItemSort::Rating => 2,
-            ItemSort::DateAdded => 3,
-        } == i;
+        let current = if i < 4 {
+            (match bs.sort_by {
+                ItemSort::Name => 0,
+                ItemSort::Year => 1,
+                ItemSort::Rating => 2,
+                ItemSort::DateAdded => 3,
+            }) == i
+        } else {
+            false
+        };
 
         let style = if selected {
             Style::default().fg(Color::Black).bg(Color::Cyan)
@@ -902,7 +910,7 @@ fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(" Sort By "));
 
-    let popup = centered_rect(30, 12, area);
+    let popup = centered_rect(30, 14, area);
     f.render_widget(Clear, popup);
     f.render_widget(list, popup);
 }
