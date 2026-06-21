@@ -204,9 +204,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::SeriesInfoLoaded(ss) => {
+                    state.navigate_to(app::View::SeriesInfo);
                     state.series_state = ss;
-                    state.view = app::View::SeriesInfo;
-                    state.selected = 0;
                     state.loading = false;
                 }
                 BackgroundResult::EpisodesLoaded(name, episodes, total, series_id) => {
