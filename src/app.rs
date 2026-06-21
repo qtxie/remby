@@ -878,6 +878,12 @@ impl AppState {
         self.library_browser_state.filter_year_input.clear();
     }
 
+    pub fn library_browser_filter_apply(&mut self) {
+        self.library_browser_state.panel = BrowserPanel::None;
+        self.library_browser_state.filter_year_field = None;
+        self.library_browser_state.filter_year_input.clear();
+    }
+
     pub fn library_browser_select_sort(&mut self) {
         let bs = &mut self.library_browser_state;
         bs.sort_by = match bs.panel_selected {
@@ -955,7 +961,15 @@ impl AppState {
         match bs.filter_section {
             FilterSection::Genre => {
                 if bs.panel_selected < bs.available_genres.len() {
-                    self.library_browser_toggle_genre();
+                    let genre = bs.available_genres.get(bs.panel_selected).cloned();
+                    if let Some(genre) = genre {
+                        if bs.filter_genre.as_ref() == Some(&genre) {
+                            // Already selected - apply and close
+                            bs.panel = BrowserPanel::None;
+                            return;
+                        }
+                        bs.filter_genre = Some(genre);
+                    }
                 } else {
                     bs.filter_section = FilterSection::Tag;
                     bs.panel_selected = 0;
@@ -963,7 +977,14 @@ impl AppState {
             }
             FilterSection::Tag => {
                 if bs.panel_selected < bs.available_tags.len() {
-                    self.library_browser_toggle_tag();
+                    let tag = bs.available_tags.get(bs.panel_selected).cloned();
+                    if let Some(tag) = tag {
+                        if bs.filter_tag.as_ref() == Some(&tag) {
+                            bs.panel = BrowserPanel::None;
+                            return;
+                        }
+                        bs.filter_tag = Some(tag);
+                    }
                 } else {
                     bs.filter_section = FilterSection::Studio;
                     bs.panel_selected = 0;
@@ -971,7 +992,14 @@ impl AppState {
             }
             FilterSection::Studio => {
                 if bs.panel_selected < bs.available_studios.len() {
-                    self.library_browser_toggle_studio();
+                    let studio = bs.available_studios.get(bs.panel_selected).cloned();
+                    if let Some(studio) = studio {
+                        if bs.filter_studio.as_ref() == Some(&studio) {
+                            bs.panel = BrowserPanel::None;
+                            return;
+                        }
+                        bs.filter_studio = Some(studio);
+                    }
                 } else {
                     bs.filter_section = FilterSection::Year;
                     bs.panel_selected = 0;
@@ -986,7 +1014,14 @@ impl AppState {
             }
             FilterSection::Folder => {
                 if bs.panel_selected < bs.available_folders.len() {
-                    self.library_browser_toggle_folder();
+                    let folder_id = bs.available_folders.get(bs.panel_selected).map(|f| f.id.clone());
+                    if let Some(folder_id) = folder_id {
+                        if bs.filter_folder.as_ref() == Some(&folder_id) {
+                            bs.panel = BrowserPanel::None;
+                            return;
+                        }
+                        bs.filter_folder = Some(folder_id);
+                    }
                 }
             }
         }
