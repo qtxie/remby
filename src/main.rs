@@ -657,15 +657,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let item_id = item.id.clone();
                                             let item_type = item.item_type.clone();
                                             let series_id = item.series_id.clone();
-                                            let series_name = item.series_name.clone().unwrap_or_else(|| item.name.clone());
                                             tokio::spawn(async move {
                                                 if item_type == "Series" {
-                                                    // For series, fetch all episodes
+                                                    // For series, show series info with seasons
                                                     let series_id = series_id.unwrap_or(item_id);
-                                                    match client.get_episodes(&series_id).await {
-                                                        Ok((episodes, total)) => { let _ = tx.send(BackgroundResult::EpisodesLoaded(series_name, episodes, total, series_id)); }
-                                                        Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Episodes".to_string())); }
-                                                    }
+                                                    let mut series_item = crate::emby::MediaItem::separator("");
+                                                    series_item.id = series_id;
+                                                    let result = build_series_state(&client, &series_item).await;
+                                                    let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
                                                 } else {
                                                     // For folders/seasons, use regular items
                                                     if let Ok(result) = client.get_items(&item_id, 0, 200).await {
