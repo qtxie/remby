@@ -36,6 +36,7 @@ pub struct AppState {
     pub mpv_child: Option<std::process::Child>,
     pub settings_state: SettingsState,
     pub config: RembyConfig,
+    pub library_browser_state: LibraryBrowserState,
 }
 
 pub(crate) struct StackEntry {
@@ -124,6 +125,69 @@ impl Default for SettingsState {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ItemSort {
+    Name,
+    Year,
+    Rating,
+    DateAdded,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SortOrder {
+    Asc,
+    Desc,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum BrowserPanel {
+    None,
+    Sort,
+    Filter,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum YearField {
+    Start,
+    End,
+}
+
+pub struct LibraryBrowserState {
+    pub library_id: String,
+    pub library_name: String,
+    pub items: Vec<MediaItem>,
+    pub total: usize,
+    pub sort_by: ItemSort,
+    pub sort_order: SortOrder,
+    pub filter_genre: Option<String>,
+    pub filter_years: Option<(u32, u32)>,
+    pub available_genres: Vec<String>,
+    pub panel: BrowserPanel,
+    pub panel_selected: usize,
+    pub filter_year_input: String,
+    pub filter_year_field: Option<YearField>,
+}
+
+impl Default for LibraryBrowserState {
+    fn default() -> Self {
+        Self {
+            library_id: String::new(),
+            library_name: String::new(),
+            items: Vec::new(),
+            total: 0,
+            sort_by: ItemSort::DateAdded,
+            sort_order: SortOrder::Desc,
+            filter_genre: None,
+            filter_years: None,
+            available_genres: Vec::new(),
+            panel: BrowserPanel::None,
+            panel_selected: 0,
+            filter_year_input: String::new(),
+            filter_year_field: None,
+        }
+    }
+}
+
 impl Default for SeriesState {
     fn default() -> Self {
         Self {
@@ -195,6 +259,7 @@ pub enum View {
     SeriesInfo,
     Playing,
     Settings,
+    LibraryBrowser,
 }
 
 impl AppState {
@@ -245,6 +310,7 @@ impl AppState {
             mpv_child: None,
             settings_state: SettingsState::default(),
             config,
+            library_browser_state: LibraryBrowserState::default(),
         })
     }
 
@@ -433,6 +499,7 @@ impl AppState {
             View::SeriesInfo => self.series_selected_item(),
             View::Playing => self.track_state.item.as_ref(),
             View::Settings => None,
+            View::LibraryBrowser => self.library_browser_state.items.get(self.selected),
         }
     }
 
@@ -681,6 +748,187 @@ impl AppState {
         self.navigate_to(View::Playing);
     }
 
+    pub fn open_library_browser(&mut self, library_id: String, library_name: String) {
+        self.library_browser_state = LibraryBrowserState {
+            library_id,
+            library_name,
+            ..Default::default()
+        };
+        self.navigate_to(View::LibraryBrowser);
+    }
+
+    pub fn library_browser_sort_label(&self) -> &str {
+        match self.library_browser_state.sort_by {
+            ItemSort::Name => "Name",
+            ItemSort::Year => "Year",
+            ItemSort::Rating => "Rating",
+            ItemSort::DateAdded => "Date Added",
+        }
+    }
+
+    pub fn library_browser_order_label(&self) -> &str {
+        match self.library_browser_state.sort_order {
+            SortOrder::Asc => "↑",
+            SortOrder::Desc => "↓",
+        }
+    }
+
+    pub fn library_browser_cycle_sort(&mut self) {
+        let bs = &mut self.library_browser_state;
+        bs.sort_by = match bs.sort_by {
+            ItemSort::Name => ItemSort::Year,
+            ItemSort::Year => ItemSort::Rating,
+            ItemSort::Rating => ItemSort::DateAdded,
+            ItemSort::DateAdded => ItemSort::Name,
+        };
+    }
+
+    pub fn library_browser_toggle_order(&mut self) {
+        let bs = &mut self.library_browser_state;
+        bs.sort_order = match bs.sort_order {
+            SortOrder::Asc => SortOrder::Desc,
+            SortOrder::Desc => SortOrder::Asc,
+        };
+    }
+
+    pub fn library_browser_open_sort_panel(&mut self) {
+        self.library_browser_state.panel = BrowserPanel::Sort;
+        self.library_browser_state.panel_selected = match self.library_browser_state.sort_by {
+            ItemSort::Name => 0,
+            ItemSort::Year => 1,
+            ItemSort::Rating => 2,
+            ItemSort::DateAdded => 3,
+        };
+    }
+
+    pub fn library_browser_open_filter_panel(&mut self) {
+        self.library_browser_state.panel = BrowserPanel::Filter;
+        self.library_browser_state.panel_selected = 0;
+        self.library_browser_state.filter_year_field = None;
+    }
+
+    pub fn library_browser_close_panel(&mut self) {
+        self.library_browser_state.panel = BrowserPanel::None;
+        self.library_browser_state.filter_year_field = None;
+        self.library_browser_state.filter_year_input.clear();
+    }
+
+    pub fn library_browser_select_sort(&mut self) {
+        let bs = &mut self.library_browser_state;
+        bs.sort_by = match bs.panel_selected {
+            0 => ItemSort::Name,
+            1 => ItemSort::Year,
+            2 => ItemSort::Rating,
+            3 => ItemSort::DateAdded,
+            _ => ItemSort::Name,
+        };
+        bs.panel = BrowserPanel::None;
+    }
+
+    pub fn library_browser_toggle_genre(&mut self) {
+        let bs = &mut self.library_browser_state;
+        if let Some(genre) = bs.available_genres.get(bs.panel_selected).cloned() {
+            if bs.filter_genre.as_ref() == Some(&genre) {
+                bs.filter_genre = None;
+            } else {
+                bs.filter_genre = Some(genre);
+            }
+        }
+    }
+
+    pub fn library_browser_panel_next(&mut self) {
+        let bs = &mut self.library_browser_state;
+        let len = match bs.panel {
+            BrowserPanel::Sort => 4,
+            BrowserPanel::Filter => {
+                if bs.filter_year_field.is_some() {
+                    2
+                } else {
+                    bs.available_genres.len() + 1
+                }
+            }
+            BrowserPanel::None => 0,
+        };
+        if len > 0 {
+            bs.panel_selected = (bs.panel_selected + 1) % len;
+        }
+    }
+
+    pub fn library_browser_panel_prev(&mut self) {
+        let bs = &mut self.library_browser_state;
+        let len = match bs.panel {
+            BrowserPanel::Sort => 4,
+            BrowserPanel::Filter => {
+                if bs.filter_year_field.is_some() {
+                    2
+                } else {
+                    bs.available_genres.len() + 1
+                }
+            }
+            BrowserPanel::None => 0,
+        };
+        if len > 0 {
+            bs.panel_selected = (bs.panel_selected + len - 1) % len;
+        }
+    }
+
+    pub fn library_browser_filter_select(&mut self) {
+        let bs = &mut self.library_browser_state;
+        let genre_count = bs.available_genres.len();
+
+        if bs.panel_selected < genre_count {
+            self.library_browser_toggle_genre();
+        } else {
+            bs.filter_year_field = Some(YearField::Start);
+            bs.filter_year_input = bs.filter_years
+                .map(|(s, _)| s.to_string())
+                .unwrap_or_default();
+        }
+    }
+
+    pub fn library_browser_year_input(&mut self, c: char) {
+        let bs = &mut self.library_browser_state;
+        if bs.filter_year_field.is_some() {
+            bs.filter_year_input.push(c);
+        }
+    }
+
+    pub fn library_browser_year_backspace(&mut self) {
+        let bs = &mut self.library_browser_state;
+        if bs.filter_year_field.is_some() {
+            bs.filter_year_input.pop();
+        }
+    }
+
+    pub fn library_browser_year_confirm(&mut self) {
+        let bs = &mut self.library_browser_state;
+        let year: u32 = bs.filter_year_input.parse().unwrap_or(0);
+
+        match bs.filter_year_field {
+            Some(YearField::Start) => {
+                let end = bs.filter_years.map(|(_, e)| e).unwrap_or(year);
+                bs.filter_years = Some((year, end));
+                bs.filter_year_field = Some(YearField::End);
+                bs.filter_year_input = end.to_string();
+            }
+            Some(YearField::End) => {
+                if let Some((start, _)) = bs.filter_years {
+                    bs.filter_years = Some((start, year));
+                }
+                bs.filter_year_field = None;
+                bs.filter_year_input.clear();
+                bs.panel = BrowserPanel::None;
+            }
+            None => {}
+        }
+    }
+
+    pub fn library_browser_clear_filters(&mut self) {
+        let bs = &mut self.library_browser_state;
+        bs.filter_genre = None;
+        bs.filter_years = None;
+    }
+
     fn current_list_len(&self) -> usize {
         match self.view {
             View::Home => self.home_items.len(),
@@ -706,6 +954,7 @@ impl AppState {
             View::SeriesInfo => self.series_current_len(),
             View::Playing => 0,
             View::Settings => self.settings_state.libraries.len(),
+            View::LibraryBrowser => self.library_browser_state.items.len(),
         }
     }
 }

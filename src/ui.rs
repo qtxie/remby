@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
-use crate::app::{AppState, SeriesSection, SettingsColumn, TrackSection, View};
+use crate::app::{AppState, BrowserPanel, ItemSort, SeriesSection, SettingsColumn, TrackSection, View};
 
 pub fn render(f: &mut Frame, state: &AppState) {
     let area = f.area();
@@ -28,6 +28,7 @@ pub fn render(f: &mut Frame, state: &AppState) {
         View::SeriesInfo => render_series_info(f, state, layout[1]),
         View::Playing => render_playing(f, state, layout[1]),
         View::Settings => render_settings(f, state, layout[1]),
+        View::LibraryBrowser => render_library_browser(f, state, layout[1]),
     }
 
     render_footer(f, state, layout[2]);
@@ -59,6 +60,27 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
             }
             View::Playing => "Playing".to_string(),
             View::Settings => "Settings".to_string(),
+            View::LibraryBrowser => {
+                let bs = &state.library_browser_state;
+                let count = if bs.total > 0 {
+                    format!("{} / {}", bs.items.len(), bs.total)
+                } else {
+                    bs.items.len().to_string()
+                };
+                let genre = bs.filter_genre.as_deref().unwrap_or("All");
+                let years = bs.filter_years
+                    .map(|(s, e)| format!("{}-{}", s, e))
+                    .unwrap_or_else(|| "All".to_string());
+                format!(
+                    "{} | Sort: {}{} | Genre: {} | Years: {} [{}]",
+                    bs.library_name,
+                    state.library_browser_sort_label(),
+                    state.library_browser_order_label(),
+                    genre,
+                    years,
+                    count
+                )
+            }
         }
     };
 
@@ -709,6 +731,13 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
             }
         }
         View::Settings => "↑↓: nav | ←/→: col | Space: toggle | Shift+↑↓: move | Enter: save | Esc: cancel",
+        View::LibraryBrowser => {
+            if state.library_browser_state.panel != BrowserPanel::None {
+                "j/k: Navigate | Enter: Select | Esc: Close"
+            } else {
+                "j/k: Navigate | Enter: Open | s: Sort | f: Filter | c: Clear filters | Esc: Back"
+            }
+        },
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"
@@ -822,4 +851,135 @@ fn render_track_section(
 
     f.render_widget(Clear, area);
     f.render_widget(list, area);
+}
+
+fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect) {
+    let bs = &state.library_browser_state;
+
+    let items: Vec<ListItem> = bs.items.iter().map(|item| {
+        let name = item.display_name();
+        let duration = item.duration_str().map(|d| format!(" ({})", d)).unwrap_or_default();
+        ListItem::new(Line::from(Span::raw(format!("{}{}", name, duration))))
+    }).collect();
+
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(format!(" {} ", bs.library_name)))
+        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .highlight_symbol("▸ ");
+
+    let mut state_list = ListState::default();
+    state_list.select(Some(state.selected));
+    f.render_stateful_widget(list, area, &mut state_list);
+
+    match bs.panel {
+        BrowserPanel::Sort => render_sort_panel(f, state, area),
+        BrowserPanel::Filter => render_filter_panel(f, state, area),
+        BrowserPanel::None => {}
+    }
+}
+
+fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
+    let bs = &state.library_browser_state;
+    let options = ["Name", "Year", "Rating", "Date Added"];
+
+    let items: Vec<ListItem> = options.iter().enumerate().map(|(i, opt)| {
+        let selected = i == bs.panel_selected;
+        let current = match bs.sort_by {
+            ItemSort::Name => 0,
+            ItemSort::Year => 1,
+            ItemSort::Rating => 2,
+            ItemSort::DateAdded => 3,
+        } == i;
+
+        let style = if selected {
+            Style::default().fg(Color::Black).bg(Color::Cyan)
+        } else if current {
+            Style::default().fg(Color::Cyan)
+        } else {
+            Style::default()
+        };
+
+        let marker = if current { "● " } else { "  " };
+        ListItem::new(Line::from(Span::styled(format!("{}{}", marker, opt), style)))
+    }).collect();
+
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" Sort By "));
+
+    let popup = centered_rect(30, 12, area);
+    f.render_widget(Clear, popup);
+    f.render_widget(list, popup);
+}
+
+fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
+    let bs = &state.library_browser_state;
+
+    let mut items: Vec<ListItem> = Vec::new();
+
+    for (i, genre) in bs.available_genres.iter().enumerate() {
+        let selected = i == bs.panel_selected;
+        let active = bs.filter_genre.as_ref() == Some(genre);
+
+        let style = if selected {
+            Style::default().fg(Color::Black).bg(Color::Cyan)
+        } else if active {
+            Style::default().fg(Color::Cyan)
+        } else {
+            Style::default()
+        };
+
+        let marker = if active { "● " } else { "  " };
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("{}{}", marker, genre),
+            style,
+        ))));
+    }
+
+    let year_idx = bs.available_genres.len();
+    let year_selected = bs.panel_selected == year_idx;
+    let year_active = bs.filter_years.is_some() || bs.filter_year_field.is_some();
+    let year_style = if year_selected {
+        Style::default().fg(Color::Black).bg(Color::Cyan)
+    } else if year_active {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+
+    let year_text = if let Some((s, e)) = bs.filter_years {
+        format!("  Years: {}-{}", s, e)
+    } else if bs.filter_year_field.is_some() {
+        format!("  Years: {}_", bs.filter_year_input)
+    } else {
+        "  Year range".to_string()
+    };
+    items.push(ListItem::new(Line::from(Span::styled(year_text, year_style))));
+
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" Filter "));
+
+    let height = (bs.available_genres.len() + 3).min(20) as u16;
+    let popup = centered_rect(40, height, area);
+    f.render_widget(Clear, popup);
+    f.render_widget(list, popup);
+}
+
+fn centered_rect(percent_x: u16, height: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(height),
+            Constraint::Min(1),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

@@ -510,6 +510,70 @@ impl EmbyClient {
         }
         url.to_string()
     }
+
+    pub async fn get_genres(&self, parent_id: &str) -> Result<Vec<String>> {
+        let url = self.api_url("/Genres");
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("UserId", self.user_id.as_str()),
+                ("ParentId", parent_id),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch genres")?;
+
+        let data: serde_json::Value = resp.json().await.context("Invalid genres response")?;
+        let items = data.get("Items")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let genres: Vec<String> = items.iter()
+            .filter_map(|item| item.get("Name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .collect();
+        Ok(genres)
+    }
+
+    pub async fn get_items_filtered(
+        &self,
+        parent_id: &str,
+        start: usize,
+        limit: usize,
+        sort_by: &str,
+        sort_order: &str,
+        genres: Option<&str>,
+        years: Option<&str>,
+    ) -> Result<PageResult> {
+        let url = self.api_url(&format!("/Users/{}/Items", self.user_id));
+        let mut query = vec![
+            ("ParentId", parent_id.to_string()),
+            ("Recursive", "true".to_string()),
+            ("Fields", "Overview,MediaSources,ChildCount".to_string()),
+            ("StartIndex", start.to_string()),
+            ("Limit", limit.to_string()),
+            ("SortBy", sort_by.to_string()),
+            ("SortOrder", sort_order.to_string()),
+        ];
+
+        if let Some(g) = genres {
+            query.push(("Genres", g.to_string()));
+        }
+        if let Some(y) = years {
+            query.push(("Years", y.to_string()));
+        }
+
+        let resp = self.authed_get(&url)
+            .query(&query)
+            .send()
+            .await
+            .context("Failed to fetch filtered items")?;
+
+        let data: ItemsResponse = resp.json().await.context("Invalid filtered items response")?;
+        Ok(PageResult {
+            items: data.items,
+            total: data.total,
+        })
+    }
 }
 
 impl MediaItem {

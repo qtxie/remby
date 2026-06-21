@@ -41,6 +41,8 @@ enum BackgroundResult {
     MoreItemsLoaded(Vec<crate::emby::MediaItem>, String),
     SearchLoaded(Vec<crate::emby::MediaItem>),
     ItemDetailLoaded(crate::emby::MediaItem),
+    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>),
+    MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
     Timeout(String),
 }
 
@@ -255,6 +257,23 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 BackgroundResult::Timeout(task) => {
                     state.loading = false;
                     state.status_msg = format!("{} timed out", task);
+                }
+                BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres) => {
+                    if state.library_browser_state.library_id == lib_id {
+                        state.library_browser_state.items = items;
+                        state.library_browser_state.total = total;
+                        state.library_browser_state.available_genres = genres;
+                    }
+                    state.loading = false;
+                    state.status_msg = format!("{} / {} items", state.library_browser_state.items.len(), total);
+                }
+                BackgroundResult::MoreLibraryBrowserLoaded(more_items, lib_id) => {
+                    if state.library_browser_state.library_id == lib_id {
+                        state.library_browser_state.items.extend(more_items);
+                        let total = state.library_browser_state.total;
+                        state.status_msg = format!("{} / {} items", state.library_browser_state.items.len(), total);
+                    }
+                    state.loading = false;
                 }
             }
         }
@@ -538,6 +557,220 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 _ => {}
                             }
                         }
+                        app::View::LibraryBrowser => {
+                            let has_panel = state.library_browser_state.panel != app::BrowserPanel::None;
+
+                            match key.code {
+                                KeyCode::Char('q') => break,
+                                KeyCode::Esc => {
+                                    if has_panel {
+                                        state.library_browser_close_panel();
+                                    } else {
+                                        state.go_back();
+                                    }
+                                }
+                                KeyCode::Char('s') if !has_panel => {
+                                    state.library_browser_open_sort_panel();
+                                }
+                                KeyCode::Char('f') if !has_panel => {
+                                    state.library_browser_open_filter_panel();
+                                }
+                                KeyCode::Char('c') if !has_panel => {
+                                    state.library_browser_clear_filters();
+                                    state.loading = true;
+                                    let tx = bg_tx.clone();
+                                    let client = state.client.clone();
+                                    let lib_id = state.library_browser_state.library_id.clone();
+                                    let sort_by = match state.library_browser_state.sort_by {
+                                        app::ItemSort::Name => "SortName",
+                                        app::ItemSort::Year => "ProductionYear",
+                                        app::ItemSort::Rating => "CommunityRating",
+                                        app::ItemSort::DateAdded => "DateCreated",
+                                    }.to_string();
+                                    let sort_order = match state.library_browser_state.sort_order {
+                                        app::SortOrder::Asc => "Ascending",
+                                        app::SortOrder::Desc => "Descending",
+                                    }.to_string();
+                                    tokio::spawn(async move {
+                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, None, None).await {
+                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![]));
+                                        }
+                                    });
+                                }
+                                KeyCode::Up | KeyCode::Char('k') => {
+                                    if has_panel {
+                                        state.library_browser_panel_prev();
+                                    } else {
+                                        state.select_prev();
+                                        let bs = &state.library_browser_state;
+                                        if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
+                                            state.loading = true;
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let lib_id = bs.library_id.clone();
+                                            let sort_by = match bs.sort_by {
+                                                app::ItemSort::Name => "SortName",
+                                                app::ItemSort::Year => "ProductionYear",
+                                                app::ItemSort::Rating => "CommunityRating",
+                                                app::ItemSort::DateAdded => "DateCreated",
+                                            }.to_string();
+                                            let sort_order = match bs.sort_order {
+                                                app::SortOrder::Asc => "Ascending",
+                                                app::SortOrder::Desc => "Descending",
+                                            }.to_string();
+                                            let genre = bs.filter_genre.clone();
+                                            let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+                                            let start = bs.items.len();
+                                            tokio::spawn(async move {
+                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                                KeyCode::Down | KeyCode::Char('j') => {
+                                    if has_panel {
+                                        state.library_browser_panel_next();
+                                    } else {
+                                        state.select_next();
+                                        let bs = &state.library_browser_state;
+                                        if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
+                                            state.loading = true;
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let lib_id = bs.library_id.clone();
+                                            let sort_by = match bs.sort_by {
+                                                app::ItemSort::Name => "SortName",
+                                                app::ItemSort::Year => "ProductionYear",
+                                                app::ItemSort::Rating => "CommunityRating",
+                                                app::ItemSort::DateAdded => "DateCreated",
+                                            }.to_string();
+                                            let sort_order = match bs.sort_order {
+                                                app::SortOrder::Asc => "Ascending",
+                                                app::SortOrder::Desc => "Descending",
+                                            }.to_string();
+                                            let genre = bs.filter_genre.clone();
+                                            let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+                                            let start = bs.items.len();
+                                            tokio::spawn(async move {
+                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                                KeyCode::Enter => {
+                                    if has_panel {
+                                        match state.library_browser_state.panel {
+                                            app::BrowserPanel::Sort => {
+                                                state.library_browser_select_sort();
+                                                state.loading = true;
+                                                let tx = bg_tx.clone();
+                                                let client = state.client.clone();
+                                                let lib_id = state.library_browser_state.library_id.clone();
+                                                let sort_by = match state.library_browser_state.sort_by {
+                                                    app::ItemSort::Name => "SortName",
+                                                    app::ItemSort::Year => "ProductionYear",
+                                                    app::ItemSort::Rating => "CommunityRating",
+                                                    app::ItemSort::DateAdded => "DateCreated",
+                                                }.to_string();
+                                                let sort_order = match state.library_browser_state.sort_order {
+                                                    app::SortOrder::Asc => "Ascending",
+                                                    app::SortOrder::Desc => "Descending",
+                                                }.to_string();
+                                                let genre = state.library_browser_state.filter_genre.clone();
+                                                let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+                                                tokio::spawn(async move {
+                                                    if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                        let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![]));
+                                                    }
+                                                });
+                                            }
+                                            app::BrowserPanel::Filter => {
+                                                if state.library_browser_state.filter_year_field.is_some() {
+                                                    state.library_browser_year_confirm();
+                                                } else {
+                                                    state.library_browser_filter_select();
+                                                }
+                                                if state.library_browser_state.panel == app::BrowserPanel::None {
+                                                    state.loading = true;
+                                                    let tx = bg_tx.clone();
+                                                    let client = state.client.clone();
+                                                    let lib_id = state.library_browser_state.library_id.clone();
+                                                    let sort_by = match state.library_browser_state.sort_by {
+                                                        app::ItemSort::Name => "SortName",
+                                                        app::ItemSort::Year => "ProductionYear",
+                                                        app::ItemSort::Rating => "CommunityRating",
+                                                        app::ItemSort::DateAdded => "DateCreated",
+                                                    }.to_string();
+                                                    let sort_order = match state.library_browser_state.sort_order {
+                                                        app::SortOrder::Asc => "Ascending",
+                                                        app::SortOrder::Desc => "Descending",
+                                                    }.to_string();
+                                                    let genre = state.library_browser_state.filter_genre.clone();
+                                                    let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+                                                    tokio::spawn(async move {
+                                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![]));
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                            app::BrowserPanel::None => {}
+                                        }
+                                    } else {
+                                        if let Some(item) = state.selected_item().cloned() {
+                                            if item.is_video() {
+                                                state.loading = true;
+                                                let tx = bg_tx.clone();
+                                                let client = state.client.clone();
+                                                let item_id = item.id.clone();
+                                                tokio::spawn(async move {
+                                                    let timeout = std::time::Duration::from_secs(60);
+                                                    match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
+                                                        Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
+                                                        _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
+                                                    }
+                                                });
+                                            } else if item.is_navigable() {
+                                                state.loading = true;
+                                                let tx = bg_tx.clone();
+                                                let client = state.client.clone();
+                                                let item_id = item.id.clone();
+                                                let item_type = item.item_type.clone();
+                                                let series_id = item.series_id.clone();
+                                                tokio::spawn(async move {
+                                                    if item_type == "Series" {
+                                                        let series_id = series_id.unwrap_or(item_id);
+                                                        let mut series_item = crate::emby::MediaItem::separator("");
+                                                        series_item.id = series_id;
+                                                        let result = build_series_state(&client, &series_item).await;
+                                                        let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
+                                                    } else {
+                                                        if let Ok(result) = client.get_items(&item_id, 0, 200).await {
+                                                            let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id, result.total));
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                KeyCode::Char(c) => {
+                                    if state.library_browser_state.filter_year_field.is_some() {
+                                        state.library_browser_year_input(c);
+                                    }
+                                }
+                                KeyCode::Backspace => {
+                                    if state.library_browser_state.filter_year_field.is_some() {
+                                        state.library_browser_year_backspace();
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
                         _ => {
                             match key.code {
                                 KeyCode::Char('q') if !state.searching => break,
@@ -674,13 +907,27 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             });
                                         }
                                     } else if let Some(lib) = state.selected_library().cloned() {
+                                        state.open_library_browser(lib.id.clone(), lib.name.clone());
                                         state.loading = true;
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
-                                        let folder_id = lib.id.clone();
+                                        let library_id = lib.id.clone();
+                                        let sort_by = "DateCreated".to_string();
+                                        let sort_order = "Descending".to_string();
                                         tokio::spawn(async move {
-                                            if let Ok(result) = client.get_items(&folder_id, 0, 50).await {
-                                                let _ = tx.send(BackgroundResult::FolderLoaded(result.items, folder_id, result.total));
+                                            let timeout = std::time::Duration::from_secs(120);
+                                            let result = tokio::time::timeout(timeout, async {
+                                                let items_result = client.get_items_filtered(&library_id, 0, 50, &sort_by, &sort_order, None, None).await;
+                                                let genres_result = client.get_genres(&library_id).await;
+                                                let items = items_result.unwrap_or_else(|_| crate::emby::PageResult { items: vec![], total: 0 });
+                                                let genres = genres_result.unwrap_or_default();
+                                                (items.items, library_id, items.total, genres)
+                                            }).await;
+                                            match result {
+                                                Ok((items, lib_id, total, genres)) => {
+                                                    let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres));
+                                                }
+                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
                                             }
                                         });
                                     }
