@@ -956,12 +956,19 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
     items.push(ListItem::new(Line::from(Span::styled(year_text, year_style))));
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Filter "));
+        .block(Block::default().borders(Borders::ALL).title(" Filter "))
+        .highlight_style(Style::default())
+        .highlight_symbol("");
 
-    let height = (bs.available_genres.len() + 3).min(20) as u16;
+    let total_items = bs.available_genres.len() + 1;
+    let max_height = 20usize;
+    let height = (total_items + 2).min(max_height) as u16; // +2 for borders
     let popup = centered_rect(40, height, area);
+
+    let mut state_list = ListState::default();
+    state_list.select(Some(bs.panel_selected));
     f.render_widget(Clear, popup);
-    f.render_widget(list, popup);
+    f.render_stateful_widget(list, popup, &mut state_list);
 }
 
 fn centered_rect(percent_x: u16, height: u16, r: Rect) -> Rect {
