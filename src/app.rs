@@ -961,48 +961,49 @@ impl AppState {
         match bs.filter_section {
             FilterSection::Genre => {
                 if bs.panel_selected < bs.available_genres.len() {
-                    let genre = bs.available_genres.get(bs.panel_selected).cloned();
-                    if let Some(genre) = genre {
+                    if let Some(genre) = bs.available_genres.get(bs.panel_selected).cloned() {
+                        // Toggle selection
                         if bs.filter_genre.as_ref() == Some(&genre) {
-                            // Already selected - apply and close
-                            bs.panel = BrowserPanel::None;
-                            return;
+                            bs.filter_genre = None;
+                        } else {
+                            bs.filter_genre = Some(genre);
                         }
-                        bs.filter_genre = Some(genre);
                     }
                 } else {
+                    // Move to next section
                     bs.filter_section = FilterSection::Tag;
                     bs.panel_selected = 0;
+                    return;
                 }
             }
             FilterSection::Tag => {
                 if bs.panel_selected < bs.available_tags.len() {
-                    let tag = bs.available_tags.get(bs.panel_selected).cloned();
-                    if let Some(tag) = tag {
+                    if let Some(tag) = bs.available_tags.get(bs.panel_selected).cloned() {
                         if bs.filter_tag.as_ref() == Some(&tag) {
-                            bs.panel = BrowserPanel::None;
-                            return;
+                            bs.filter_tag = None;
+                        } else {
+                            bs.filter_tag = Some(tag);
                         }
-                        bs.filter_tag = Some(tag);
                     }
                 } else {
                     bs.filter_section = FilterSection::Studio;
                     bs.panel_selected = 0;
+                    return;
                 }
             }
             FilterSection::Studio => {
                 if bs.panel_selected < bs.available_studios.len() {
-                    let studio = bs.available_studios.get(bs.panel_selected).cloned();
-                    if let Some(studio) = studio {
+                    if let Some(studio) = bs.available_studios.get(bs.panel_selected).cloned() {
                         if bs.filter_studio.as_ref() == Some(&studio) {
-                            bs.panel = BrowserPanel::None;
-                            return;
+                            bs.filter_studio = None;
+                        } else {
+                            bs.filter_studio = Some(studio);
                         }
-                        bs.filter_studio = Some(studio);
                     }
                 } else {
                     bs.filter_section = FilterSection::Year;
                     bs.panel_selected = 0;
+                    return;
                 }
             }
             FilterSection::Year => {
@@ -1011,20 +1012,22 @@ impl AppState {
                     .map(|(s, _)| s.to_string())
                     .unwrap_or_default();
                 bs.panel_selected = 0;
+                return;
             }
             FilterSection::Folder => {
                 if bs.panel_selected < bs.available_folders.len() {
-                    let folder_id = bs.available_folders.get(bs.panel_selected).map(|f| f.id.clone());
-                    if let Some(folder_id) = folder_id {
+                    if let Some(folder_id) = bs.available_folders.get(bs.panel_selected).map(|f| f.id.clone()) {
                         if bs.filter_folder.as_ref() == Some(&folder_id) {
-                            bs.panel = BrowserPanel::None;
-                            return;
+                            bs.filter_folder = None;
+                        } else {
+                            bs.filter_folder = Some(folder_id);
                         }
-                        bs.filter_folder = Some(folder_id);
                     }
                 }
             }
         }
+        // Apply and close panel after selection
+        bs.panel = BrowserPanel::None;
     }
 
     pub fn library_browser_toggle_tag(&mut self) {
