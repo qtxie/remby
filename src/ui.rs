@@ -113,10 +113,10 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
     if let Some(ref msg) = state.status_msg {
         let status = match msg {
             crate::app::Message::Loading(spinner, text) => Line::from(vec![
-                Span::styled(format!("{} ", spinner), Style::default().fg(Color::Yellow)),
-                Span::styled(text.as_str(), Style::default().fg(Color::Cyan)),
+                Span::styled(format!("{} ", spinner), Style::default().fg(Color::Cyan)),
+                Span::styled(text.as_str(), Style::default().fg(Color::White)),
             ]),
-            crate::app::Message::Info(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Cyan))),
+            crate::app::Message::Info(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::White))),
             crate::app::Message::Success(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Green))),
             crate::app::Message::Error(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Red))),
         };
