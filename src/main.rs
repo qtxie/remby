@@ -15,6 +15,8 @@ use std::io;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+const SPINNER: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
+
 #[derive(Parser)]
 #[command(name = "remby", about = "Lightweight Emby client with mpv playback")]
 struct Cli {
@@ -28,6 +30,20 @@ struct Cli {
     pass: Option<String>,
     #[arg(long, env = "MPV_PATH", default_value = "mpv")]
     mpv: String,
+}
+
+fn update_favorite_in_list(items: &mut [crate::emby::MediaItem], item_id: &str, is_favorite: bool) {
+    for item in items.iter_mut() {
+        if item.id == item_id {
+            if let Some(ref mut ud) = item.user_data {
+                ud.is_favorite = is_favorite;
+            } else {
+                let mut ud = crate::emby::UserData::default();
+                ud.is_favorite = is_favorite;
+                item.user_data = Some(ud);
+            }
+        }
+    }
 }
 
 enum BackgroundResult {
@@ -45,6 +61,7 @@ enum BackgroundResult {
     MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
     FavoritesLoaded(Vec<crate::emby::MediaItem>, usize),
     FavoriteToggled(String, bool),
+    Error(String),
     Timeout(String),
 }
 
@@ -60,8 +77,6 @@ async fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Splash screen with animation during connection
-    let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
-
     // Start connection in background
     let server = cli.server.clone();
     let user = cli.user.clone();
@@ -97,7 +112,7 @@ async fn main() -> Result<()> {
             f.render_widget(Clear, area);
             f.render_widget(Paragraph::new(logo_lines).alignment(Alignment::Center), vertical[1]);
 
-            let frame = spinner[i % spinner.len()];
+            let frame = SPINNER[i % SPINNER.len()];
             f.render_widget(
                 Paragraph::new(Span::styled(
                     format!("{} Connecting to server...", frame),
@@ -145,7 +160,6 @@ async fn main() -> Result<()> {
 }
 
 async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &mut app::AppState, mpv_path: &str) -> Result<()> {
-    let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
     let mut spin_idx: usize = 0;
     let (bg_tx, mut bg_rx) = mpsc::unbounded_channel::<BackgroundResult>();
 
@@ -260,6 +274,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                     state.status_msg = format!("{} timed out", task);
                 }
+                BackgroundResult::Error(msg) => {
+                    state.loading = false;
+                    state.status_msg = msg;
+                }
                 BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres, tags, studios, folders) => {
                     if state.library_browser_state.library_id == lib_id {
                         state.library_browser_state.items = items;
@@ -296,39 +314,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = format!("{} / {} favorites", state.favorites.len(), total);
                 }
                 BackgroundResult::FavoriteToggled(item_id, is_favorite) => {
-                    // Update favorite status in all relevant lists
-                    for item in state.home_items.iter_mut() {
-                        if item.id == item_id {
-                            if let Some(ref mut ud) = item.user_data {
-                                ud.is_favorite = is_favorite;
-                            } else {
-                                let mut ud = crate::emby::UserData::default();
-                                ud.is_favorite = is_favorite;
-                                item.user_data = Some(ud);
-                            }
-                        }
-                    }
-                    for item in state.items.iter_mut() {
-                        if item.id == item_id {
-                            if let Some(ref mut ud) = item.user_data {
-                                ud.is_favorite = is_favorite;
-                            } else {
-                                let mut ud = crate::emby::UserData::default();
-                                ud.is_favorite = is_favorite;
-                                item.user_data = Some(ud);
-                            }
-                        }
-                    }
-                    for item in state.library_browser_state.items.iter_mut() {
-                        if item.id == item_id {
-                            if let Some(ref mut ud) = item.user_data {
-                                ud.is_favorite = is_favorite;
-                            } else {
-                                let mut ud = crate::emby::UserData::default();
-                                ud.is_favorite = is_favorite;
-                                item.user_data = Some(ud);
-                            }
-                        }
+                    update_favorite_in_list(&mut state.home_items, &item_id, is_favorite);
+                    update_favorite_in_list(&mut state.items, &item_id, is_favorite);
+                    update_favorite_in_list(&mut state.library_browser_state.items, &item_id, is_favorite);
+                    if !is_favorite {
+                        state.favorites.retain(|item| item.id != item_id);
+                        state.total_favorites = state.total_favorites.saturating_sub(1);
                     }
                     state.loading = false;
                     state.status_msg = if is_favorite { "Added to favorites" } else { "Removed from favorites" }.to_string();
@@ -338,7 +329,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
 
         // Update spinner
         if state.loading {
-            state.status_msg = format!("{} Loading", spinner[spin_idx % spinner.len()]);
+            state.status_msg = format!("{} Loading", SPINNER[spin_idx % SPINNER.len()]);
             spin_idx += 1;
         } else {
             state.status_msg.clear();
@@ -503,8 +494,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let series_id = state.episodes_series_id.clone();
                                         let start = state.episodes.len();
                                         tokio::spawn(async move {
-                                            if let Ok(episodes) = client.get_episodes_page(&series_id, start, 50).await {
-                                                let _ = tx.send(BackgroundResult::MoreEpisodesLoaded(episodes));
+                                            match client.get_episodes_page(&series_id, start, 50).await {
+                                                Ok(episodes) => { let _ = tx.send(BackgroundResult::MoreEpisodesLoaded(episodes)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load episodes: {}", e))); }
                                             }
                                         });
                                     }
@@ -518,8 +510,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let series_id = state.episodes_series_id.clone();
                                         let start = state.episodes.len();
                                         tokio::spawn(async move {
-                                            if let Ok(episodes) = client.get_episodes_page(&series_id, start, 50).await {
-                                                let _ = tx.send(BackgroundResult::MoreEpisodesLoaded(episodes));
+                                            match client.get_episodes_page(&series_id, start, 50).await {
+                                                Ok(episodes) => { let _ = tx.send(BackgroundResult::MoreEpisodesLoaded(episodes)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load episodes: {}", e))); }
                                             }
                                         });
                                     }
@@ -544,8 +537,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
                                             tokio::spawn(async move {
-                                                if let Ok(detail) = client.get_item_detail(&item_id).await {
-                                                    let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail));
+                                                match client.get_item_detail(&item_id).await {
+                                                    Ok(detail) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
+                                                    Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load item: {}", e))); }
                                                 }
                                             });
                                         }
@@ -646,25 +640,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Char('c') if !has_panel => {
                                     state.library_browser_clear_filters();
-                                    state.loading = true;
-                                    let tx = bg_tx.clone();
-                                    let client = state.client.clone();
-                                    let lib_id = state.library_browser_state.library_id.clone();
-                                    let sort_by = match state.library_browser_state.sort_by {
-                                        app::ItemSort::Name => "SortName",
-                                        app::ItemSort::Year => "ProductionYear",
-                                        app::ItemSort::Rating => "CommunityRating",
-                                        app::ItemSort::DateAdded => "DateCreated",
-                                    }.to_string();
-                                    let sort_order = match state.library_browser_state.sort_order {
-                                        app::SortOrder::Asc => "Ascending",
-                                        app::SortOrder::Desc => "Descending",
-                                    }.to_string();
-                                    tokio::spawn(async move {
-                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, None, None, None, None).await {
-                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
-                                        }
-                                    });
+                                    reload_library_items(state, &bg_tx, 0);
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
                                     if has_panel {
@@ -673,32 +649,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.select_prev();
                                         let bs = &state.library_browser_state;
                                         if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
-                                            state.loading = true;
-                                            let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let lib_id = bs.library_id.clone();
-                                            let parent_id = bs.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
-                                            let sort_by = match bs.sort_by {
-                                                app::ItemSort::Name => "SortName",
-                                                app::ItemSort::Year => "ProductionYear",
-                                                app::ItemSort::Rating => "CommunityRating",
-                                                app::ItemSort::DateAdded => "DateCreated",
-                                            }.to_string();
-                                            let sort_order = match bs.sort_order {
-                                                app::SortOrder::Asc => "Ascending",
-                                                app::SortOrder::Desc => "Descending",
-                                            }.to_string();
-                                            let genre = bs.filter_genre.clone();
-                                            let tag = bs.filter_tag.clone();
-                                            let studio = bs.filter_studio.clone();
-                                            let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
-                                            let lib_id2 = lib_id.clone();
-                                            tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&parent_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id2));
-                                                }
-                                            });
+                                            reload_library_items(state, &bg_tx, start);
                                         }
                                     }
                                 }
@@ -709,32 +661,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.select_next();
                                         let bs = &state.library_browser_state;
                                         if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
-                                            state.loading = true;
-                                            let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let lib_id = bs.library_id.clone();
-                                            let parent_id = bs.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
-                                            let sort_by = match bs.sort_by {
-                                                app::ItemSort::Name => "SortName",
-                                                app::ItemSort::Year => "ProductionYear",
-                                                app::ItemSort::Rating => "CommunityRating",
-                                                app::ItemSort::DateAdded => "DateCreated",
-                                            }.to_string();
-                                            let sort_order = match bs.sort_order {
-                                                app::SortOrder::Asc => "Ascending",
-                                                app::SortOrder::Desc => "Descending",
-                                            }.to_string();
-                                            let genre = bs.filter_genre.clone();
-                                            let tag = bs.filter_tag.clone();
-                                            let studio = bs.filter_studio.clone();
-                                            let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
-                                            let lib_id2 = lib_id.clone();
-                                            tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&parent_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id2));
-                                                }
-                                            });
+                                            reload_library_items(state, &bg_tx, start);
                                         }
                                     }
                                 }
@@ -756,32 +684,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.page_down();
                                         let bs = &state.library_browser_state;
                                         if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
-                                            state.loading = true;
-                                            let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let lib_id = bs.library_id.clone();
-                                            let parent_id = bs.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
-                                            let sort_by = match bs.sort_by {
-                                                app::ItemSort::Name => "SortName",
-                                                app::ItemSort::Year => "ProductionYear",
-                                                app::ItemSort::Rating => "CommunityRating",
-                                                app::ItemSort::DateAdded => "DateCreated",
-                                            }.to_string();
-                                            let sort_order = match bs.sort_order {
-                                                app::SortOrder::Asc => "Ascending",
-                                                app::SortOrder::Desc => "Descending",
-                                            }.to_string();
-                                            let genre = bs.filter_genre.clone();
-                                            let tag = bs.filter_tag.clone();
-                                            let studio = bs.filter_studio.clone();
-                                            let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
-                                            let lib_id2 = lib_id.clone();
-                                            tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&parent_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id2));
-                                                }
-                                            });
+                                            reload_library_items(state, &bg_tx, start);
                                         }
                                     }
                                 }
@@ -790,30 +694,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         match state.library_browser_state.panel {
                                             app::BrowserPanel::Sort => {
                                                 state.library_browser_select_sort();
-                                                state.loading = true;
-                                                let tx = bg_tx.clone();
-                                                let client = state.client.clone();
-                                                let lib_id = state.library_browser_state.library_id.clone();
-                                                let parent_id = state.library_browser_state.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
-                                                let sort_by = match state.library_browser_state.sort_by {
-                                                    app::ItemSort::Name => "SortName",
-                                                    app::ItemSort::Year => "ProductionYear",
-                                                    app::ItemSort::Rating => "CommunityRating",
-                                                    app::ItemSort::DateAdded => "DateCreated",
-                                                }.to_string();
-                                                let sort_order = match state.library_browser_state.sort_order {
-                                                    app::SortOrder::Asc => "Ascending",
-                                                    app::SortOrder::Desc => "Descending",
-                                                }.to_string();
-                                                let genre = state.library_browser_state.filter_genre.clone();
-                                                let tag = state.library_browser_state.filter_tag.clone();
-                                                let studio = state.library_browser_state.filter_studio.clone();
-                                                let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
-                                                tokio::spawn(async move {
-                                                    if let Ok(result) = client.get_items_filtered(&parent_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                        let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
-                                                    }
-                                                });
+                                                reload_library_items(state, &bg_tx, 0);
                                             }
                                             app::BrowserPanel::Filter => {
                                                 if state.library_browser_state.filter_year_field.is_some() {
@@ -823,31 +704,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 }
                                                 // Apply filters when panel closes
                                                 if state.library_browser_state.panel == app::BrowserPanel::None {
-                                                    state.loading = true;
-                                                    let tx = bg_tx.clone();
-                                                    let client = state.client.clone();
-                                                    let lib_id = state.library_browser_state.library_id.clone();
-                                                    let sort_by = match state.library_browser_state.sort_by {
-                                                        app::ItemSort::Name => "SortName",
-                                                        app::ItemSort::Year => "ProductionYear",
-                                                        app::ItemSort::Rating => "CommunityRating",
-                                                        app::ItemSort::DateAdded => "DateCreated",
-                                                    }.to_string();
-                                                    let sort_order = match state.library_browser_state.sort_order {
-                                                        app::SortOrder::Asc => "Ascending",
-                                                        app::SortOrder::Desc => "Descending",
-                                                    }.to_string();
-                                                    let genre = state.library_browser_state.filter_genre.clone();
-                                                    let tag = state.library_browser_state.filter_tag.clone();
-                                                    let studio = state.library_browser_state.filter_studio.clone();
-                                                    let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
-                                                    let folder = state.library_browser_state.filter_folder.clone();
-                                                    let parent_id = folder.unwrap_or_else(|| lib_id.clone());
-                                                    tokio::spawn(async move {
-                                                        if let Ok(result) = client.get_items_filtered(&parent_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
-                                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
-                                                        }
-                                                    });
+                                                    reload_library_items(state, &bg_tx, 0);
                                                 }
                                             }
                                             app::BrowserPanel::None => {}
@@ -881,8 +738,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                         let result = build_series_state(&client, &series_item).await;
                                                         let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
                                                     } else {
-                                                        if let Ok(result) = client.get_items(&item_id, 0, 200).await {
-                                                            let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id, result.total));
+                                                        match client.get_items(&item_id, 0, 200).await {
+                                                            Ok(result) => { let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id, result.total)); }
+                                                            Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load folder: {}", e))); }
                                                         }
                                                     }
                                                 });
@@ -921,8 +779,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     tokio::spawn(async move {
-                                        if let Ok(results) = client.search(&query).await {
-                                            let _ = tx.send(BackgroundResult::SearchLoaded(results));
+                                        match client.search(&query).await {
+                                            Ok(results) => { let _ = tx.send(BackgroundResult::SearchLoaded(results)); }
+                                            Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Search failed: {}", e))); }
                                         }
                                     });
                                 }
@@ -935,8 +794,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let folder_id = state.current_folder_id.clone();
                                         let start = state.items.len();
                                         tokio::spawn(async move {
-                                            if let Ok(result) = client.get_items(&folder_id, start, 50).await {
-                                                let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id));
+                                            match client.get_items(&folder_id, start, 50).await {
+                                                Ok(result) => { let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load items: {}", e))); }
                                             }
                                         });
                                     }
@@ -950,8 +810,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let folder_id = state.current_folder_id.clone();
                                         let start = state.items.len();
                                         tokio::spawn(async move {
-                                            if let Ok(result) = client.get_items(&folder_id, start, 50).await {
-                                                let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id));
+                                            match client.get_items(&folder_id, start, 50).await {
+                                                Ok(result) => { let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load items: {}", e))); }
                                             }
                                         });
                                     }
@@ -968,8 +829,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let folder_id = state.current_folder_id.clone();
                                         let start = state.items.len();
                                         tokio::spawn(async move {
-                                            if let Ok(result) = client.get_items(&folder_id, start, 50).await {
-                                                let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id));
+                                            match client.get_items(&folder_id, start, 50).await {
+                                                Ok(result) => { let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load items: {}", e))); }
                                             }
                                         });
                                     }
@@ -1068,8 +930,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                     let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
                                                 } else {
                                                     // For folders/seasons, use regular items
-                                                    if let Ok(result) = client.get_items(&item_id, 0, 200).await {
-                                                        let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id, result.total));
+                                                    match client.get_items(&item_id, 0, 200).await {
+                                                        Ok(result) => { let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id, result.total)); }
+                                                        Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load folder: {}", e))); }
                                                     }
                                                 }
                                             });
@@ -1118,8 +981,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     tokio::spawn(async move {
-                                        if let Ok(result) = client.get_favorites(0, 50).await {
-                                            let _ = tx.send(BackgroundResult::FavoritesLoaded(result.items, result.total));
+                                        match client.get_favorites(0, 50).await {
+                                            Ok(result) => { let _ = tx.send(BackgroundResult::FavoritesLoaded(result.items, result.total)); }
+                                            Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load favorites: {}", e))); }
                                         }
                                     });
                                 }
@@ -1156,6 +1020,33 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         }
     }
     Ok(())
+}
+
+fn reload_library_items(state: &mut app::AppState, bg_tx: &mpsc::UnboundedSender<BackgroundResult>, start: usize) {
+    let bs = &state.library_browser_state;
+    let lib_id = bs.library_id.clone();
+    let parent_id = bs.filter_folder.clone().unwrap_or_else(|| lib_id.clone());
+    let sort_by = state.library_browser_sort_by_str().to_string();
+    let sort_order = state.library_browser_sort_order_str().to_string();
+    let genre = bs.filter_genre.clone();
+    let tag = bs.filter_tag.clone();
+    let studio = bs.filter_studio.clone();
+    let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+    state.loading = true;
+    let tx = bg_tx.clone();
+    let client = state.client.clone();
+    tokio::spawn(async move {
+        match client.get_items_filtered(&parent_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+            Ok(result) => {
+                if start > 0 {
+                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
+                } else {
+                    let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
+                }
+            }
+            Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load items: {}", e))); }
+        }
+    });
 }
 
 async fn build_series_state(client: &crate::emby::EmbyClient, item: &crate::emby::MediaItem) -> app::SeriesState {

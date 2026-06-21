@@ -808,24 +808,6 @@ impl AppState {
         }
     }
 
-    pub fn library_browser_cycle_sort(&mut self) {
-        let bs = &mut self.library_browser_state;
-        bs.sort_by = match bs.sort_by {
-            ItemSort::Name => ItemSort::Year,
-            ItemSort::Year => ItemSort::Rating,
-            ItemSort::Rating => ItemSort::DateAdded,
-            ItemSort::DateAdded => ItemSort::Name,
-        };
-    }
-
-    pub fn library_browser_toggle_order(&mut self) {
-        let bs = &mut self.library_browser_state;
-        bs.sort_order = match bs.sort_order {
-            SortOrder::Asc => SortOrder::Desc,
-            SortOrder::Desc => SortOrder::Asc,
-        };
-    }
-
     pub fn library_browser_open_sort_panel(&mut self) {
         self.library_browser_state.panel = BrowserPanel::Sort;
         self.library_browser_state.panel_selected = match self.library_browser_state.sort_by {
@@ -876,12 +858,6 @@ impl AppState {
         self.library_browser_state.filter_year_input.clear();
     }
 
-    pub fn library_browser_filter_apply(&mut self) {
-        self.library_browser_state.panel = BrowserPanel::None;
-        self.library_browser_state.filter_year_field = None;
-        self.library_browser_state.filter_year_input.clear();
-    }
-
     pub fn library_browser_select_sort(&mut self) {
         let bs = &mut self.library_browser_state;
         bs.sort_by = match bs.panel_selected {
@@ -892,17 +868,6 @@ impl AppState {
             _ => ItemSort::Name,
         };
         bs.panel = BrowserPanel::None;
-    }
-
-    pub fn library_browser_toggle_genre(&mut self) {
-        let bs = &mut self.library_browser_state;
-        if let Some(genre) = bs.available_genres.get(bs.panel_selected).cloned() {
-            if bs.filter_genre.as_ref() == Some(&genre) {
-                bs.filter_genre = None;
-            } else {
-                bs.filter_genre = Some(genre);
-            }
-        }
     }
 
     pub fn library_browser_panel_next(&mut self) {
@@ -1028,40 +993,6 @@ impl AppState {
         bs.panel = BrowserPanel::None;
     }
 
-    pub fn library_browser_toggle_tag(&mut self) {
-        let bs = &mut self.library_browser_state;
-        if let Some(tag) = bs.available_tags.get(bs.panel_selected).cloned() {
-            if bs.filter_tag.as_ref() == Some(&tag) {
-                bs.filter_tag = None;
-            } else {
-                bs.filter_tag = Some(tag);
-            }
-        }
-    }
-
-    pub fn library_browser_toggle_studio(&mut self) {
-        let bs = &mut self.library_browser_state;
-        if let Some(studio) = bs.available_studios.get(bs.panel_selected).cloned() {
-            if bs.filter_studio.as_ref() == Some(&studio) {
-                bs.filter_studio = None;
-            } else {
-                bs.filter_studio = Some(studio);
-            }
-        }
-    }
-
-    pub fn library_browser_toggle_folder(&mut self) {
-        let bs = &mut self.library_browser_state;
-        if let Some(folder) = bs.available_folders.get(bs.panel_selected) {
-            let folder_id = folder.id.clone();
-            if bs.filter_folder.as_ref() == Some(&folder_id) {
-                bs.filter_folder = None;
-            } else {
-                bs.filter_folder = Some(folder_id);
-            }
-        }
-    }
-
     pub fn library_browser_year_input(&mut self, c: char) {
         let bs = &mut self.library_browser_state;
         if bs.filter_year_field.is_some() {
@@ -1108,15 +1039,24 @@ impl AppState {
         bs.filter_folder = None;
     }
 
-    pub fn open_favorites(&mut self) {
-        self.navigate_to(View::Favorites);
+    pub fn library_browser_sort_by_str(&self) -> &str {
+        match self.library_browser_state.sort_by {
+            ItemSort::Name => "SortName",
+            ItemSort::Year => "ProductionYear",
+            ItemSort::Rating => "CommunityRating",
+            ItemSort::DateAdded => "DateCreated",
+        }
     }
 
-    pub fn is_item_favorite(&self) -> bool {
-        self.selected_item()
-            .and_then(|item| item.user_data.as_ref())
-            .map(|ud| ud.is_favorite)
-            .unwrap_or(false)
+    pub fn library_browser_sort_order_str(&self) -> &str {
+        match self.library_browser_state.sort_order {
+            SortOrder::Asc => "Ascending",
+            SortOrder::Desc => "Descending",
+        }
+    }
+
+    pub fn open_favorites(&mut self) {
+        self.navigate_to(View::Favorites);
     }
 
     fn current_list_len(&self) -> usize {
@@ -1147,5 +1087,11 @@ impl AppState {
             View::LibraryBrowser => self.library_browser_state.items.len(),
             View::Favorites => self.favorites.len(),
         }
+    }
+}
+
+impl Drop for AppState {
+    fn drop(&mut self) {
+        self.kill_mpv();
     }
 }

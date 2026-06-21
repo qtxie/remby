@@ -24,7 +24,7 @@ fn auth_header(token: &str) -> String {
     )
 }
 
-fn base_headers(token: &str, _user_id: &str) -> Vec<(&'static str, String)> {
+fn base_headers(token: &str) -> Vec<(&'static str, String)> {
     vec![
         ("X-Emby-Authorization", auth_header(token)),
         ("X-Emby-Token", token.to_string()),
@@ -197,7 +197,6 @@ pub struct PageResult {
 
 #[derive(Deserialize, Clone)]
 pub struct Library {
-    #[allow(dead_code)]
     pub id: String,
     pub name: String,
     #[serde(rename = "CollectionType")]
@@ -262,7 +261,7 @@ impl EmbyClient {
 
     fn authed_get(&self, url: &str) -> reqwest::RequestBuilder {
         let mut req = self.http.get(url);
-        for (k, v) in base_headers(&self.token, &self.user_id) {
+        for (k, v) in base_headers(&self.token) {
             req = req.header(k, v);
         }
         req
@@ -270,7 +269,7 @@ impl EmbyClient {
 
     fn authed_post(&self, url: &str) -> reqwest::RequestBuilder {
         let mut req = self.http.post(url);
-        for (k, v) in base_headers(&self.token, &self.user_id) {
+        for (k, v) in base_headers(&self.token) {
             req = req.header(k, v);
         }
         req
@@ -278,7 +277,7 @@ impl EmbyClient {
 
     fn authed_delete(&self, url: &str) -> reqwest::RequestBuilder {
         let mut req = self.http.delete(url);
-        for (k, v) in base_headers(&self.token, &self.user_id) {
+        for (k, v) in base_headers(&self.token) {
             req = req.header(k, v);
         }
         req

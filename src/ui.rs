@@ -478,6 +478,25 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
     }
 }
 
+fn render_track_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
+    let track_info = vec![
+        Line::from(vec![
+            Span::styled("  Video:  ", Style::default().fg(Color::DarkGray)),
+            Span::raw(&ps.video_track),
+        ]),
+        Line::from(vec![
+            Span::styled("  Audio:  ", Style::default().fg(Color::DarkGray)),
+            Span::raw(&ps.audio_track),
+        ]),
+        Line::from(vec![
+            Span::styled("  Sub:    ", Style::default().fg(Color::DarkGray)),
+            Span::raw(&ps.subtitle_track),
+        ]),
+    ];
+    f.render_widget(Clear, area);
+    f.render_widget(Paragraph::new(track_info), area);
+}
+
 fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     let ps = &state.playing_state;
     let has_resume = ps.resume_position.is_some() && !ps.playing;
@@ -540,23 +559,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     }
 
     // Track info
-    let track_info = vec![
-        Line::from(vec![
-            Span::styled("  Video:  ", Style::default().fg(Color::DarkGray)),
-            Span::raw(&ps.video_track),
-        ]),
-        Line::from(vec![
-            Span::styled("  Audio:  ", Style::default().fg(Color::DarkGray)),
-            Span::raw(&ps.audio_track),
-        ]),
-        Line::from(vec![
-            Span::styled("  Sub:    ", Style::default().fg(Color::DarkGray)),
-            Span::raw(&ps.subtitle_track),
-        ]),
-    ];
-    let tracks = Paragraph::new(track_info);
-    f.render_widget(Clear, layout[2]);
-    f.render_widget(tracks, layout[2]);
+    render_track_info(f, ps, layout[2]);
 
     // Resume choice
     if has_resume {
@@ -602,25 +605,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         f.render_widget(Clear, layout[5]);
         f.render_widget(options_widget, layout[5]);
     } else if ps.playing {
-        // Track info when playing
-        let track_info = vec![
-            Line::from(vec![
-                Span::styled("  Video:  ", Style::default().fg(Color::DarkGray)),
-                Span::raw(&ps.video_track),
-            ]),
-            Line::from(vec![
-                Span::styled("  Audio:  ", Style::default().fg(Color::DarkGray)),
-                Span::raw(&ps.audio_track),
-            ]),
-            Line::from(vec![
-                Span::styled("  Sub:    ", Style::default().fg(Color::DarkGray)),
-                Span::raw(&ps.subtitle_track),
-            ]),
-        ];
-        let tracks = Paragraph::new(track_info);
-        let url_idx = 5;
-        f.render_widget(Clear, layout[url_idx]);
-        f.render_widget(tracks, layout[url_idx]);
+        render_track_info(f, ps, layout[5]);
     }
 
     // URL (truncated)
