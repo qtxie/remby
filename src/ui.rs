@@ -929,11 +929,11 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
 
     // Section header
     let section_title = match bs.filter_section {
-        FilterSection::Genre => "Genre",
-        FilterSection::Tag => "Tag",
-        FilterSection::Studio => "Studio",
-        FilterSection::Year => "Year",
-        FilterSection::Folder => "Folder",
+        FilterSection::Genre => format!("Genre ({})", bs.available_genres.len()),
+        FilterSection::Tag => format!("Tag ({})", bs.available_tags.len()),
+        FilterSection::Studio => format!("Studio ({})", bs.available_studios.len()),
+        FilterSection::Year => "Year".to_string(),
+        FilterSection::Folder => format!("Folder ({})", bs.available_folders.len()),
     };
     items.push(ListItem::new(Line::from(Span::styled(
         format!("── {} ──", section_title),
@@ -942,7 +942,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
 
     match bs.filter_section {
         FilterSection::Genre => {
-            for (i, (genre, count)) in bs.available_genres.iter().enumerate() {
+            for (i, (genre, _count)) in bs.available_genres.iter().enumerate() {
                 let selected = i == bs.panel_selected;
                 let active = bs.filter_genre.as_ref() == Some(genre);
 
@@ -956,7 +956,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
 
                 let marker = if active { "● " } else { "  " };
                 items.push(ListItem::new(Line::from(Span::styled(
-                    format!("{}{} ({})", marker, genre, count),
+                    format!("{}{}", marker, genre),
                     style,
                 ))));
             }
@@ -972,7 +972,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
             }
         }
         FilterSection::Tag => {
-            for (i, (tag, count)) in bs.available_tags.iter().enumerate() {
+            for (i, (tag, _count)) in bs.available_tags.iter().enumerate() {
                 let selected = i == bs.panel_selected;
                 let active = bs.filter_tag.as_ref() == Some(tag);
 
@@ -986,7 +986,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
 
                 let marker = if active { "● " } else { "  " };
                 items.push(ListItem::new(Line::from(Span::styled(
-                    format!("{}{} ({})", marker, tag, count),
+                    format!("{}{}", marker, tag),
                     style,
                 ))));
             }
@@ -1001,7 +1001,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
             }
         }
         FilterSection::Studio => {
-            for (i, (studio, count)) in bs.available_studios.iter().enumerate() {
+            for (i, (studio, _count)) in bs.available_studios.iter().enumerate() {
                 let selected = i == bs.panel_selected;
                 let active = bs.filter_studio.as_ref() == Some(studio);
 
@@ -1015,7 +1015,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
 
                 let marker = if active { "● " } else { "  " };
                 items.push(ListItem::new(Line::from(Span::styled(
-                    format!("{}{} ({})", marker, studio, count),
+                    format!("{}{}", marker, studio),
                     style,
                 ))));
             }
