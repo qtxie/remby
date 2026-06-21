@@ -444,6 +444,18 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         });
                                     }
                                 }
+                                KeyCode::Char('e') => {
+                                    // Show series info for current series
+                                    let series_id = state.episodes_series_id.clone();
+                                    let tx = bg_tx.clone();
+                                    let client = state.client.clone();
+                                    tokio::spawn(async move {
+                                        let mut item = crate::emby::MediaItem::separator("");
+                                        item.id = series_id;
+                                        let result = build_series_state(&client, &item).await;
+                                        let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
+                                    });
+                                }
                                 KeyCode::Enter => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         if item.is_video() {
