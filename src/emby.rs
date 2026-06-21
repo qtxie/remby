@@ -333,7 +333,7 @@ impl EmbyClient {
             .query(&[
                 ("ParentId", parent_id),
                 ("Recursive", "false"),
-                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
+                ("Fields", "MediaSources,ChildCount,UserData"),
                 ("StartIndex", &start.to_string()),
                 ("Limit", &limit.to_string()),
             ])
@@ -355,7 +355,7 @@ impl EmbyClient {
             .query(&[
                 ("Limit", limit_str.as_str()),
                 ("Recursive", "true"),
-                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
+                ("Fields", "MediaSources,UserData"),
                 ("IncludeItemTypes", "Movie,Episode"),
             ])
             .send()
@@ -376,7 +376,7 @@ impl EmbyClient {
                 ("SortBy", "DateCreated"),
                 ("SortOrder", "Descending"),
                 ("Limit", limit_str.as_str()),
-                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
+                ("Fields", "MediaSources,UserData"),
             ])
             .send()
             .await
@@ -419,7 +419,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
+                ("Fields", "MediaSources,ChildCount,UserData"),
                 ("Recursive", "true"),
                 ("Limit", "100"),
             ])
@@ -435,7 +435,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
+                ("Fields", "MediaSources,ChildCount,UserData"),
                 ("Recursive", "false"),
                 ("StartIndex", &start.to_string()),
                 ("Limit", &limit.to_string()),
@@ -452,7 +452,7 @@ impl EmbyClient {
         let resp = self.authed_get(&url)
             .query(&[
                 ("UserId", self.user_id.as_str()),
-                ("Fields", "Overview,ChildCount,UserData"),
+                ("Fields", "ChildCount,UserData"),
             ])
             .send()
             .await
@@ -467,7 +467,7 @@ impl EmbyClient {
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("SeasonId", season_id),
-                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
+                ("Fields", "MediaSources,ChildCount,UserData"),
                 ("Limit", "1000"),
             ])
             .send()
@@ -483,7 +483,7 @@ impl EmbyClient {
             .query(&[
                 ("UserId", self.user_id.as_str()),
                 ("Limit", "12"),
-                ("Fields", "Overview,ChildCount,UserData"),
+                ("Fields", "ChildCount,UserData"),
             ])
             .send()
             .await
@@ -509,6 +509,50 @@ impl EmbyClient {
         let items: Vec<MediaItem> = serde_json::from_str(&body)
             .unwrap_or_default();
         Ok(items)
+    }
+
+    pub async fn get_resume_items_page(&self, start: usize, limit: usize) -> Result<PageResult> {
+        let url = self.api_url(&format!("/Users/{}/Items/Resume", self.user_id));
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("Limit", limit.to_string()),
+                ("StartIndex", start.to_string()),
+                ("Recursive", "true".to_string()),
+                ("Fields", "MediaSources,UserData".to_string()),
+                ("IncludeItemTypes", "Movie,Episode".to_string()),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch resume items")?;
+
+        let data: ItemsResponse = resp.json().await.context("Invalid resume response")?;
+        Ok(PageResult {
+            items: data.items,
+            total: data.total,
+        })
+    }
+
+    pub async fn get_latest_items_page(&self, start: usize, limit: usize) -> Result<PageResult> {
+        let url = self.api_url(&format!("/Users/{}/Items", self.user_id));
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("Recursive", "true".to_string()),
+                ("IncludeItemTypes", "Movie,Episode".to_string()),
+                ("SortBy", "DateCreated".to_string()),
+                ("SortOrder", "Descending".to_string()),
+                ("Limit", limit.to_string()),
+                ("StartIndex", start.to_string()),
+                ("Fields", "MediaSources,UserData".to_string()),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch latest items")?;
+
+        let data: ItemsResponse = resp.json().await.context("Invalid latest response")?;
+        Ok(PageResult {
+            items: data.items,
+            total: data.total,
+        })
     }
 
     pub fn stream_url_for_source(&self, item: &MediaItem, source: &MediaSource) -> String {
@@ -635,7 +679,7 @@ impl EmbyClient {
             .query(&[
                 ("Recursive", "true"),
                 ("Filters", "IsFavorite"),
-                ("Fields", "Overview,MediaSources,ChildCount,UserData"),
+                ("Fields", "MediaSources,ChildCount,UserData"),
                 ("StartIndex", &start.to_string()),
                 ("Limit", &limit.to_string()),
                 ("SortBy", "SortName"),
@@ -668,7 +712,7 @@ impl EmbyClient {
         let mut query = vec![
             ("ParentId", parent_id.to_string()),
             ("Recursive", "true".to_string()),
-            ("Fields", "Overview,MediaSources,ChildCount,UserData".to_string()),
+            ("Fields", "MediaSources,ChildCount,UserData".to_string()),
             ("StartIndex", start.to_string()),
             ("Limit", limit.to_string()),
             ("SortBy", sort_by.to_string()),

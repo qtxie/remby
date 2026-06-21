@@ -300,6 +300,8 @@ pub enum View {
     Settings,
     LibraryBrowser,
     Favorites,
+    ContinueWatching,
+    LatestItems,
 }
 
 impl AppState {
@@ -517,7 +519,7 @@ impl AppState {
 
     pub fn selected_item(&self) -> Option<&MediaItem> {
         match self.view {
-            View::Home => self.home_items.get(self.selected),
+            View::Home | View::ContinueWatching | View::LatestItems => self.home_items.get(self.selected),
             View::Libraries => {
                 // Combined list: libraries + section headers + latest items
                 let mut idx = self.selected;
@@ -588,6 +590,13 @@ impl AppState {
             && !self.loading
             && self.total_items > self.items.len()
             && self.selected + 1 >= self.items.len()
+    }
+
+    pub fn should_load_more_home_items(&self) -> bool {
+        matches!(self.view, View::ContinueWatching | View::LatestItems)
+            && !self.loading
+            && self.total_items > self.home_items.len()
+            && self.selected + 1 >= self.home_items.len()
     }
 
     pub async fn show_libraries(&mut self) {
@@ -1080,9 +1089,17 @@ impl AppState {
         self.navigate_to(View::Favorites);
     }
 
+    pub fn open_continue_watching(&mut self) {
+        self.navigate_to(View::ContinueWatching);
+    }
+
+    pub fn open_latest_items(&mut self) {
+        self.navigate_to(View::LatestItems);
+    }
+
     fn current_list_len(&self) -> usize {
         match self.view {
-            View::Home => self.home_items.len(),
+            View::Home | View::ContinueWatching | View::LatestItems => self.home_items.len(),
             View::Libraries => {
                 // Libraries + latest items (header is not selectable)
                 let mut count = self.libraries.len();

@@ -47,6 +47,8 @@ fn update_favorite_in_list(items: &mut [crate::emby::MediaItem], item_id: &str, 
 }
 
 enum BackgroundResult {
+    HomeSectionLoaded(Vec<crate::emby::MediaItem>, usize, String),
+    MoreHomeItemsLoaded(Vec<crate::emby::MediaItem>),
     HomeLoaded(Vec<crate::emby::MediaItem>),
     LibrariesLoaded(Vec<crate::emby::Library>, Vec<(String, Vec<crate::emby::MediaItem>)>),
     SettingsLoaded(Vec<crate::emby::Library>),
@@ -209,6 +211,18 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.home_items = items;
                     state.loading = false;
                     state.status_msg = None;
+                }
+                BackgroundResult::HomeSectionLoaded(items, total, label) => {
+                    let count = items.len();
+                    state.home_items = items;
+                    state.total_items = total;
+                    state.loading = false;
+                    state.status_msg = Some(app::Message::info(format!("{}: {} items", label, count)));
+                }
+                BackgroundResult::MoreHomeItemsLoaded(more_items) => {
+                    state.home_items.extend(more_items);
+                    state.loading = false;
+                    state.status_msg = Some(app::Message::info(format!("{} items", state.home_items.len())));
                 }
                 BackgroundResult::LibrariesLoaded(libs, latest) => {
                     state.libraries = libs;
@@ -848,6 +862,24 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load items: {}", e))); }
                                             }
                                         });
+                                    } else if state.should_load_more_home_items() {
+                                        state.loading = true;
+                                        state.loading_msg = "Loading more...".to_string();
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let start = state.home_items.len();
+                                        let is_continue = state.view == app::View::ContinueWatching;
+                                        tokio::spawn(async move {
+                                            let result = if is_continue {
+                                                client.get_resume_items_page(start, 50).await
+                                            } else {
+                                                client.get_latest_items_page(start, 50).await
+                                            };
+                                            match result {
+                                                Ok(r) => { let _ = tx.send(BackgroundResult::MoreHomeItemsLoaded(r.items)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load: {}", e))); }
+                                            }
+                                        });
                                     }
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
@@ -863,6 +895,24 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             match client.get_items(&folder_id, start, 50).await {
                                                 Ok(result) => { let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id)); }
                                                 Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load items: {}", e))); }
+                                            }
+                                        });
+                                    } else if state.should_load_more_home_items() {
+                                        state.loading = true;
+                                        state.loading_msg = "Loading more...".to_string();
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let start = state.home_items.len();
+                                        let is_continue = state.view == app::View::ContinueWatching;
+                                        tokio::spawn(async move {
+                                            let result = if is_continue {
+                                                client.get_resume_items_page(start, 50).await
+                                            } else {
+                                                client.get_latest_items_page(start, 50).await
+                                            };
+                                            match result {
+                                                Ok(r) => { let _ = tx.send(BackgroundResult::MoreHomeItemsLoaded(r.items)); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load: {}", e))); }
                                             }
                                         });
                                     }
@@ -952,6 +1002,41 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Enter => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         if item.is_separator() {
+                                            let section = if item.name.contains("Continue Watching") {
+                                                "continue_watching"
+                                            } else if item.name.contains("Latest") {
+                                                "latest"
+                                            } else {
+                                                continue;
+                                            };
+                                            let label = if section == "continue_watching" {
+                                                "Continue Watching".to_string()
+                                            } else {
+                                                "Latest".to_string()
+                                            };
+                                            if section == "continue_watching" {
+                                                state.open_continue_watching();
+                                            } else {
+                                                state.open_latest_items();
+                                            }
+                                            state.loading = true;
+                                            state.loading_msg = format!("Loading {}...", label);
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let section = section.to_string();
+                                            tokio::spawn(async move {
+                                                let timeout = std::time::Duration::from_secs(60);
+                                                let result = if section == "continue_watching" {
+                                                    tokio::time::timeout(timeout, client.get_resume_items_page(0, 50)).await
+                                                } else {
+                                                    tokio::time::timeout(timeout, client.get_latest_items_page(0, 50)).await
+                                                };
+                                                match result {
+                                                    Ok(Ok(r)) => { let _ = tx.send(BackgroundResult::HomeSectionLoaded(r.items, r.total, label)); }
+                                                    Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load: {}", e))); }
+                                                    Err(_) => { let _ = tx.send(BackgroundResult::Timeout(label)); }
+                                                }
+                                            });
                                             continue;
                                         }
                                         if item.is_video() {

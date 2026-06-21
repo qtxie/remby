@@ -30,6 +30,7 @@ pub fn render(f: &mut Frame, state: &AppState) {
         View::Playing => render_playing(f, state, layout[1]),
         View::Settings => render_settings(f, state, layout[1]),
         View::LibraryBrowser => render_library_browser(f, state, layout[1]),
+        View::ContinueWatching | View::LatestItems => render_home(f, state, layout[1]),
     }
 
     render_footer(f, state, layout[2]);
@@ -41,6 +42,18 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
     } else {
         match state.view {
             View::Home => "Remby".to_string(),
+            View::ContinueWatching | View::LatestItems => {
+                let label = match state.view {
+                    View::ContinueWatching => "Continue Watching",
+                    _ => "Latest",
+                };
+                let count = if state.total_items > 0 {
+                    format!("{} / {}", state.home_items.len(), state.total_items)
+                } else {
+                    state.home_items.len().to_string()
+                };
+                format!("{} [{count}]", label)
+            }
             View::Libraries => "Remby - Libraries".to_string(),
             View::Items => {
                 let count = if state.total_items > 0 {
@@ -690,7 +703,8 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
-        View::Home => "↑↓: navigate | Enter: play | l: libraries | /: search | q: quit",
+        View::Home => "↑↓: navigate | Enter: play/open | l: libraries | /: search | q: quit",
+        View::ContinueWatching | View::LatestItems => "↑↓: navigate | Enter: play | ←/BS: back",
         View::Libraries => "↑↓: select | Enter: open | ←/BS: back",
         View::Items => "↑↓: navigate | Enter: open/play | ←/BS: back | /: search",
         View::SearchResults => "↑↓: navigate | Enter: play | ←/BS: back",
