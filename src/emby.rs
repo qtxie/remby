@@ -404,6 +404,7 @@ impl EmbyClient {
                 ("UserId", self.user_id.as_str()),
                 ("Fields", "Overview,MediaSources,ChildCount"),
                 ("Recursive", "true"),
+                ("Limit", "200"),
             ])
             .send()
             .await
