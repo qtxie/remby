@@ -210,12 +210,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::EpisodesLoaded(name, episodes, total, series_id) => {
+                    state.navigate_to(app::View::Episodes);
                     state.series_name = name;
                     state.episodes = episodes;
                     state.total_episodes = total;
                     state.episodes_series_id = series_id;
                     state.status_msg = format!("{} / {} episodes", state.episodes.len(), total);
-                    state.navigate_to(app::View::Episodes);
                     state.loading = false;
                 }
                 BackgroundResult::MoreEpisodesLoaded(more_episodes) => {
@@ -224,10 +224,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::FolderLoaded(items, folder_id, total) => {
+                    state.navigate_to(app::View::Items);
                     state.items = items;
                     state.current_folder_id = folder_id;
                     state.total_items = total;
-                    state.navigate_to(app::View::Items);
                     state.loading = false;
                 }
                 BackgroundResult::MoreItemsLoaded(more_items, _folder_id) => {
