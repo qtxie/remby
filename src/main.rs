@@ -661,6 +661,49 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                     }
                                 }
+                                KeyCode::PageUp => {
+                                    if has_panel {
+                                        for _ in 0..10 {
+                                            state.library_browser_panel_prev();
+                                        }
+                                    } else {
+                                        state.page_up();
+                                    }
+                                }
+                                KeyCode::PageDown => {
+                                    if has_panel {
+                                        for _ in 0..10 {
+                                            state.library_browser_panel_next();
+                                        }
+                                    } else {
+                                        state.page_down();
+                                        let bs = &state.library_browser_state;
+                                        if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
+                                            state.loading = true;
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let lib_id = bs.library_id.clone();
+                                            let sort_by = match bs.sort_by {
+                                                app::ItemSort::Name => "SortName",
+                                                app::ItemSort::Year => "ProductionYear",
+                                                app::ItemSort::Rating => "CommunityRating",
+                                                app::ItemSort::DateAdded => "DateCreated",
+                                            }.to_string();
+                                            let sort_order = match bs.sort_order {
+                                                app::SortOrder::Asc => "Ascending",
+                                                app::SortOrder::Desc => "Descending",
+                                            }.to_string();
+                                            let genre = bs.filter_genre.clone();
+                                            let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
+                                            let start = bs.items.len();
+                                            tokio::spawn(async move {
+                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                    let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
                                 KeyCode::Enter => {
                                     if has_panel {
                                         match state.library_browser_state.panel {
@@ -811,6 +854,24 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
                                     state.select_next();
+                                    if state.should_load_more_items() {
+                                        state.loading = true;
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let folder_id = state.current_folder_id.clone();
+                                        let start = state.items.len();
+                                        tokio::spawn(async move {
+                                            if let Ok(result) = client.get_items(&folder_id, start, 50).await {
+                                                let _ = tx.send(BackgroundResult::MoreItemsLoaded(result.items, folder_id));
+                                            }
+                                        });
+                                    }
+                                }
+                                KeyCode::PageUp => {
+                                    state.page_up();
+                                }
+                                KeyCode::PageDown => {
+                                    state.page_down();
                                     if state.should_load_more_items() {
                                         state.loading = true;
                                         let tx = bg_tx.clone();

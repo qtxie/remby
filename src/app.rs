@@ -458,6 +458,20 @@ impl AppState {
         }
     }
 
+    pub fn page_down(&mut self) {
+        let len = self.current_list_len();
+        if len > 0 {
+            self.selected = (self.selected + 20).min(len - 1);
+        }
+    }
+
+    pub fn page_up(&mut self) {
+        let len = self.current_list_len();
+        if len > 0 {
+            self.selected = self.selected.saturating_sub(20);
+        }
+    }
+
     pub fn selected_item(&self) -> Option<&MediaItem> {
         match self.view {
             View::Home => self.home_items.get(self.selected),
