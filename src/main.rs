@@ -336,11 +336,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
 
         // Update spinner
         if state.loading {
-            state.status_msg = Some(app::Message::info(format!(
-                "{} {}",
-                SPINNER[spin_idx % SPINNER.len()],
-                state.loading_msg
-            )));
+            state.status_msg = Some(app::Message::Loading(
+                SPINNER[spin_idx % SPINNER.len()].to_string(),
+                state.loading_msg.clone(),
+            ));
             spin_idx += 1;
         }
         terminal.draw(|f| ui::render(f, state))?;

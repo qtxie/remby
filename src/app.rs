@@ -10,6 +10,7 @@ pub enum Message {
     Info(String),
     Success(String),
     Error(String),
+    Loading(String, String),
 }
 
 impl Message {

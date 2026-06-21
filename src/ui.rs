@@ -111,15 +111,15 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(block, area);
 
     if let Some(ref msg) = state.status_msg {
-        let (text, color) = match msg {
-            crate::app::Message::Info(s) => (s.as_str(), Color::Cyan),
-            crate::app::Message::Success(s) => (s.as_str(), Color::Green),
-            crate::app::Message::Error(s) => (s.as_str(), Color::Red),
+        let status = match msg {
+            crate::app::Message::Loading(spinner, text) => Line::from(vec![
+                Span::styled(format!("{} ", spinner), Style::default().fg(Color::Yellow)),
+                Span::styled(text.as_str(), Style::default().fg(Color::Cyan)),
+            ]),
+            crate::app::Message::Info(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Cyan))),
+            crate::app::Message::Success(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Green))),
+            crate::app::Message::Error(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Red))),
         };
-        let status = Line::from(Span::styled(
-            text,
-            Style::default().fg(color),
-        ));
         f.render_widget(Paragraph::new(status), Rect {
             x: inner.x + 1,
             y: inner.y,
