@@ -262,10 +262,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     if state.library_browser_state.library_id == lib_id {
                         state.library_browser_state.items = items;
                         state.library_browser_state.total = total;
-                        state.library_browser_state.available_genres = genres;
-                        state.library_browser_state.available_tags = tags;
-                        state.library_browser_state.available_studios = studios;
-                        state.library_browser_state.available_folders = folders;
+                        // Only update filter options if they are provided (non-empty)
+                        if !genres.is_empty() {
+                            state.library_browser_state.available_genres = genres;
+                        }
+                        if !tags.is_empty() {
+                            state.library_browser_state.available_tags = tags;
+                        }
+                        if !studios.is_empty() {
+                            state.library_browser_state.available_studios = studios;
+                        }
+                        if !folders.is_empty() {
+                            state.library_browser_state.available_folders = folders;
+                        }
                     }
                     state.loading = false;
                     state.status_msg = format!("{} / {} items", state.library_browser_state.items.len(), total);
