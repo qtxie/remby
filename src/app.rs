@@ -152,6 +152,15 @@ pub enum YearField {
     End,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum FilterSection {
+    Genre,
+    Tag,
+    Studio,
+    Year,
+    Folder,
+}
+
 pub struct LibraryBrowserState {
     pub library_id: String,
     pub library_name: String,
@@ -159,9 +168,16 @@ pub struct LibraryBrowserState {
     pub total: usize,
     pub sort_by: ItemSort,
     pub sort_order: SortOrder,
+    pub filter_section: FilterSection,
     pub filter_genre: Option<String>,
+    pub filter_tag: Option<String>,
+    pub filter_studio: Option<String>,
     pub filter_years: Option<(u32, u32)>,
+    pub filter_folder: Option<String>,
     pub available_genres: Vec<String>,
+    pub available_tags: Vec<String>,
+    pub available_studios: Vec<String>,
+    pub available_folders: Vec<MediaItem>,
     pub panel: BrowserPanel,
     pub panel_selected: usize,
     pub filter_year_input: String,
@@ -177,9 +193,16 @@ impl Default for LibraryBrowserState {
             total: 0,
             sort_by: ItemSort::DateAdded,
             sort_order: SortOrder::Desc,
+            filter_section: FilterSection::Genre,
             filter_genre: None,
+            filter_tag: None,
+            filter_studio: None,
             filter_years: None,
+            filter_folder: None,
             available_genres: Vec::new(),
+            available_tags: Vec::new(),
+            available_studios: Vec::new(),
+            available_folders: Vec::new(),
             panel: BrowserPanel::None,
             panel_selected: 0,
             filter_year_input: String::new(),
@@ -858,7 +881,13 @@ impl AppState {
                 if bs.filter_year_field.is_some() {
                     2
                 } else {
-                    bs.available_genres.len() + 1
+                    match bs.filter_section {
+                        FilterSection::Genre => bs.available_genres.len() + 1,
+                        FilterSection::Tag => bs.available_tags.len() + 1,
+                        FilterSection::Studio => bs.available_studios.len() + 1,
+                        FilterSection::Year => 1,
+                        FilterSection::Folder => bs.available_folders.len(),
+                    }
                 }
             }
             BrowserPanel::None => 0,
@@ -876,7 +905,13 @@ impl AppState {
                 if bs.filter_year_field.is_some() {
                     2
                 } else {
-                    bs.available_genres.len() + 1
+                    match bs.filter_section {
+                        FilterSection::Genre => bs.available_genres.len() + 1,
+                        FilterSection::Tag => bs.available_tags.len() + 1,
+                        FilterSection::Studio => bs.available_studios.len() + 1,
+                        FilterSection::Year => 1,
+                        FilterSection::Folder => bs.available_folders.len(),
+                    }
                 }
             }
             BrowserPanel::None => 0,
@@ -888,16 +923,78 @@ impl AppState {
 
     pub fn library_browser_filter_select(&mut self) {
         let bs = &mut self.library_browser_state;
-        let genre_count = bs.available_genres.len();
 
-        if bs.panel_selected < genre_count {
-            self.library_browser_toggle_genre();
-        } else {
-            bs.filter_year_field = Some(YearField::Start);
-            bs.filter_year_input = bs.filter_years
-                .map(|(s, _)| s.to_string())
-                .unwrap_or_default();
-            bs.panel_selected = 0;
+        match bs.filter_section {
+            FilterSection::Genre => {
+                if bs.panel_selected < bs.available_genres.len() {
+                    self.library_browser_toggle_genre();
+                } else {
+                    bs.filter_section = FilterSection::Tag;
+                    bs.panel_selected = 0;
+                }
+            }
+            FilterSection::Tag => {
+                if bs.panel_selected < bs.available_tags.len() {
+                    self.library_browser_toggle_tag();
+                } else {
+                    bs.filter_section = FilterSection::Studio;
+                    bs.panel_selected = 0;
+                }
+            }
+            FilterSection::Studio => {
+                if bs.panel_selected < bs.available_studios.len() {
+                    self.library_browser_toggle_studio();
+                } else {
+                    bs.filter_section = FilterSection::Year;
+                    bs.panel_selected = 0;
+                }
+            }
+            FilterSection::Year => {
+                bs.filter_year_field = Some(YearField::Start);
+                bs.filter_year_input = bs.filter_years
+                    .map(|(s, _)| s.to_string())
+                    .unwrap_or_default();
+                bs.panel_selected = 0;
+            }
+            FilterSection::Folder => {
+                if bs.panel_selected < bs.available_folders.len() {
+                    self.library_browser_toggle_folder();
+                }
+            }
+        }
+    }
+
+    pub fn library_browser_toggle_tag(&mut self) {
+        let bs = &mut self.library_browser_state;
+        if let Some(tag) = bs.available_tags.get(bs.panel_selected).cloned() {
+            if bs.filter_tag.as_ref() == Some(&tag) {
+                bs.filter_tag = None;
+            } else {
+                bs.filter_tag = Some(tag);
+            }
+        }
+    }
+
+    pub fn library_browser_toggle_studio(&mut self) {
+        let bs = &mut self.library_browser_state;
+        if let Some(studio) = bs.available_studios.get(bs.panel_selected).cloned() {
+            if bs.filter_studio.as_ref() == Some(&studio) {
+                bs.filter_studio = None;
+            } else {
+                bs.filter_studio = Some(studio);
+            }
+        }
+    }
+
+    pub fn library_browser_toggle_folder(&mut self) {
+        let bs = &mut self.library_browser_state;
+        if let Some(folder) = bs.available_folders.get(bs.panel_selected) {
+            let folder_id = folder.id.clone();
+            if bs.filter_folder.as_ref() == Some(&folder_id) {
+                bs.filter_folder = None;
+            } else {
+                bs.filter_folder = Some(folder_id);
+            }
         }
     }
 
@@ -941,7 +1038,10 @@ impl AppState {
     pub fn library_browser_clear_filters(&mut self) {
         let bs = &mut self.library_browser_state;
         bs.filter_genre = None;
+        bs.filter_tag = None;
+        bs.filter_studio = None;
         bs.filter_years = None;
+        bs.filter_folder = None;
     }
 
     fn current_list_len(&self) -> usize {

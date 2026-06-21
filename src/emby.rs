@@ -534,6 +534,68 @@ impl EmbyClient {
         Ok(genres)
     }
 
+    pub async fn get_tags(&self, parent_id: &str) -> Result<Vec<String>> {
+        let url = self.api_url("/Tags");
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("UserId", self.user_id.as_str()),
+                ("ParentId", parent_id),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch tags")?;
+
+        let data: serde_json::Value = resp.json().await.context("Invalid tags response")?;
+        let items = data.get("Items")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let tags: Vec<String> = items.iter()
+            .filter_map(|item| item.get("Name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .collect();
+        Ok(tags)
+    }
+
+    pub async fn get_studios(&self, parent_id: &str) -> Result<Vec<String>> {
+        let url = self.api_url("/Studios");
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("UserId", self.user_id.as_str()),
+                ("ParentId", parent_id),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch studios")?;
+
+        let data: serde_json::Value = resp.json().await.context("Invalid studios response")?;
+        let items = data.get("Items")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let studios: Vec<String> = items.iter()
+            .filter_map(|item| item.get("Name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .collect();
+        Ok(studios)
+    }
+
+    pub async fn get_folders(&self, parent_id: &str) -> Result<Vec<MediaItem>> {
+        let url = self.api_url(&format!("/Users/{}/Items", self.user_id));
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("ParentId", parent_id),
+                ("Recursive", "false"),
+                ("IncludeItemTypes", "Folder,CollectionFolder"),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch folders")?;
+
+        let data: ItemsResponse = resp.json().await.context("Invalid folders response")?;
+        Ok(data.items)
+    }
+
     pub async fn get_items_filtered(
         &self,
         parent_id: &str,
@@ -542,6 +604,8 @@ impl EmbyClient {
         sort_by: &str,
         sort_order: &str,
         genres: Option<&str>,
+        tags: Option<&str>,
+        studios: Option<&str>,
         years: Option<&str>,
     ) -> Result<PageResult> {
         let url = self.api_url(&format!("/Users/{}/Items", self.user_id));
@@ -557,6 +621,12 @@ impl EmbyClient {
 
         if let Some(g) = genres {
             query.push(("Genres", g.to_string()));
+        }
+        if let Some(t) = tags {
+            query.push(("Tags", t.to_string()));
+        }
+        if let Some(s) = studios {
+            query.push(("Studios", s.to_string()));
         }
         if let Some(y) = years {
             query.push(("Years", y.to_string()));

@@ -41,7 +41,7 @@ enum BackgroundResult {
     MoreItemsLoaded(Vec<crate::emby::MediaItem>, String),
     SearchLoaded(Vec<crate::emby::MediaItem>),
     ItemDetailLoaded(crate::emby::MediaItem),
-    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>),
+    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<crate::emby::MediaItem>),
     MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
     Timeout(String),
 }
@@ -258,11 +258,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                     state.status_msg = format!("{} timed out", task);
                 }
-                BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres) => {
+                BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres, tags, studios, folders) => {
                     if state.library_browser_state.library_id == lib_id {
                         state.library_browser_state.items = items;
                         state.library_browser_state.total = total;
                         state.library_browser_state.available_genres = genres;
+                        state.library_browser_state.available_tags = tags;
+                        state.library_browser_state.available_studios = studios;
+                        state.library_browser_state.available_folders = folders;
                     }
                     state.loading = false;
                     state.status_msg = format!("{} / {} items", state.library_browser_state.items.len(), total);
@@ -592,8 +595,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         app::SortOrder::Desc => "Descending",
                                     }.to_string();
                                     tokio::spawn(async move {
-                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, None, None).await {
-                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![]));
+                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, None, None, None, None).await {
+                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
                                         }
                                     });
                                 }
@@ -619,10 +622,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 app::SortOrder::Desc => "Descending",
                                             }.to_string();
                                             let genre = bs.filter_genre.clone();
+                                            let tag = bs.filter_tag.clone();
+                                            let studio = bs.filter_studio.clone();
                                             let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
                                             tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
                                                     let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
                                                 }
                                             });
@@ -651,10 +656,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 app::SortOrder::Desc => "Descending",
                                             }.to_string();
                                             let genre = bs.filter_genre.clone();
+                                            let tag = bs.filter_tag.clone();
+                                            let studio = bs.filter_studio.clone();
                                             let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
                                             tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
                                                     let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
                                                 }
                                             });
@@ -694,10 +701,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 app::SortOrder::Desc => "Descending",
                                             }.to_string();
                                             let genre = bs.filter_genre.clone();
+                                            let tag = bs.filter_tag.clone();
+                                            let studio = bs.filter_studio.clone();
                                             let years = bs.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                             let start = bs.items.len();
                                             tokio::spawn(async move {
-                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
+                                                if let Ok(result) = client.get_items_filtered(&lib_id, start, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
                                                     let _ = tx.send(BackgroundResult::MoreLibraryBrowserLoaded(result.items, lib_id));
                                                 }
                                             });
@@ -724,10 +733,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                     app::SortOrder::Desc => "Descending",
                                                 }.to_string();
                                                 let genre = state.library_browser_state.filter_genre.clone();
+                                                let tag = state.library_browser_state.filter_tag.clone();
+                                                let studio = state.library_browser_state.filter_studio.clone();
                                                 let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                                 tokio::spawn(async move {
-                                                    if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
-                                                        let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![]));
+                                                    if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                        let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
                                                     }
                                                 });
                                             }
@@ -753,10 +764,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                         app::SortOrder::Desc => "Descending",
                                                     }.to_string();
                                                     let genre = state.library_browser_state.filter_genre.clone();
+                                                    let tag = state.library_browser_state.filter_tag.clone();
+                                                    let studio = state.library_browser_state.filter_studio.clone();
                                                     let years = state.library_browser_state.filter_years.map(|(s, e)| format!("{}-{}", s, e));
                                                     tokio::spawn(async move {
-                                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), years.as_deref()).await {
-                                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![]));
+                                                        if let Ok(result) = client.get_items_filtered(&lib_id, 0, 50, &sort_by, &sort_order, genre.as_deref(), tag.as_deref(), studio.as_deref(), years.as_deref()).await {
+                                                            let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(result.items, lib_id, result.total, vec![], vec![], vec![], vec![]));
                                                         }
                                                     });
                                                 }
@@ -978,15 +991,23 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         tokio::spawn(async move {
                                             let timeout = std::time::Duration::from_secs(120);
                                             let result = tokio::time::timeout(timeout, async {
-                                                let items_result = client.get_items_filtered(&library_id, 0, 50, &sort_by, &sort_order, None, None).await;
-                                                let genres_result = client.get_genres(&library_id).await;
+                                                let (items_result, genres_result, tags_result, studios_result, folders_result) = tokio::join!(
+                                                    client.get_items_filtered(&library_id, 0, 50, &sort_by, &sort_order, None, None, None, None),
+                                                    client.get_genres(&library_id),
+                                                    client.get_tags(&library_id),
+                                                    client.get_studios(&library_id),
+                                                    client.get_folders(&library_id),
+                                                );
                                                 let items = items_result.unwrap_or_else(|_| crate::emby::PageResult { items: vec![], total: 0 });
                                                 let genres = genres_result.unwrap_or_default();
-                                                (items.items, library_id, items.total, genres)
+                                                let tags = tags_result.unwrap_or_default();
+                                                let studios = studios_result.unwrap_or_default();
+                                                let folders = folders_result.unwrap_or_default();
+                                                (items.items, library_id, items.total, genres, tags, studios, folders)
                                             }).await;
                                             match result {
-                                                Ok((items, lib_id, total, genres)) => {
-                                                    let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres));
+                                                Ok((items, lib_id, total, genres, tags, studios, folders)) => {
+                                                    let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres, tags, studios, folders));
                                                 }
                                                 Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
                                             }

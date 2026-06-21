@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
-use crate::app::{AppState, BrowserPanel, ItemSort, SeriesSection, SettingsColumn, TrackSection, View};
+use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, TrackSection, View};
 
 pub fn render(f: &mut Frame, state: &AppState) {
     let area = f.area();
@@ -68,16 +68,25 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
                     bs.items.len().to_string()
                 };
                 let genre = bs.filter_genre.as_deref().unwrap_or("All");
+                let tag = bs.filter_tag.as_deref().unwrap_or("All");
+                let studio = bs.filter_studio.as_deref().unwrap_or("All");
                 let years = bs.filter_years
                     .map(|(s, e)| format!("{}-{}", s, e))
                     .unwrap_or_else(|| "All".to_string());
+                let folder = bs.filter_folder.as_deref().unwrap_or("All");
+                let mut filters = Vec::new();
+                if genre != "All" { filters.push(format!("G:{}", genre)); }
+                if tag != "All" { filters.push(format!("T:{}", tag)); }
+                if studio != "All" { filters.push(format!("S:{}", studio)); }
+                if years != "All" { filters.push(format!("Y:{}", years)); }
+                if folder != "All" { filters.push(format!("F:{}", folder)); }
+                let filter_str = if filters.is_empty() { "All".to_string() } else { filters.join(",") };
                 format!(
-                    "{} | Sort: {}{} | Genre: {} | Years: {} [{}]",
+                    "{} | Sort: {}{} | Filter: {} [{}]",
                     bs.library_name,
                     state.library_browser_sort_label(),
                     state.library_browser_order_label(),
-                    genre,
-                    years,
+                    filter_str,
                     count
                 )
             }
@@ -916,57 +925,161 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
 
     let mut items: Vec<ListItem> = Vec::new();
 
-    for (i, genre) in bs.available_genres.iter().enumerate() {
-        let selected = i == bs.panel_selected;
-        let active = bs.filter_genre.as_ref() == Some(genre);
+    // Section header
+    let section_title = match bs.filter_section {
+        FilterSection::Genre => "Genre",
+        FilterSection::Tag => "Tag",
+        FilterSection::Studio => "Studio",
+        FilterSection::Year => "Year",
+        FilterSection::Folder => "Folder",
+    };
+    items.push(ListItem::new(Line::from(Span::styled(
+        format!("── {} ──", section_title),
+        Style::default().fg(Color::DarkGray),
+    ))));
 
-        let style = if selected {
-            Style::default().fg(Color::Black).bg(Color::Cyan)
-        } else if active {
-            Style::default().fg(Color::Cyan)
-        } else {
-            Style::default()
-        };
+    match bs.filter_section {
+        FilterSection::Genre => {
+            for (i, genre) in bs.available_genres.iter().enumerate() {
+                let selected = i == bs.panel_selected;
+                let active = bs.filter_genre.as_ref() == Some(genre);
 
-        let marker = if active { "● " } else { "  " };
-        items.push(ListItem::new(Line::from(Span::styled(
-            format!("{}{}", marker, genre),
-            style,
-        ))));
+                let style = if selected {
+                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                } else if active {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                };
+
+                let marker = if active { "● " } else { "  " };
+                items.push(ListItem::new(Line::from(Span::styled(
+                    format!("{}{}", marker, genre),
+                    style,
+                ))));
+            }
+            // Next section option
+            let next_selected = bs.panel_selected == bs.available_genres.len();
+            if next_selected {
+                items.push(ListItem::new(Line::from(Span::styled(
+                    "  → Tag",
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))));
+            } else {
+                items.push(ListItem::new(Line::from(Span::raw("  → Tag"))));
+            }
+        }
+        FilterSection::Tag => {
+            for (i, tag) in bs.available_tags.iter().enumerate() {
+                let selected = i == bs.panel_selected;
+                let active = bs.filter_tag.as_ref() == Some(tag);
+
+                let style = if selected {
+                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                } else if active {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                };
+
+                let marker = if active { "● " } else { "  " };
+                items.push(ListItem::new(Line::from(Span::styled(
+                    format!("{}{}", marker, tag),
+                    style,
+                ))));
+            }
+            let next_selected = bs.panel_selected == bs.available_tags.len();
+            if next_selected {
+                items.push(ListItem::new(Line::from(Span::styled(
+                    "  → Studio",
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))));
+            } else {
+                items.push(ListItem::new(Line::from(Span::raw("  → Studio"))));
+            }
+        }
+        FilterSection::Studio => {
+            for (i, studio) in bs.available_studios.iter().enumerate() {
+                let selected = i == bs.panel_selected;
+                let active = bs.filter_studio.as_ref() == Some(studio);
+
+                let style = if selected {
+                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                } else if active {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                };
+
+                let marker = if active { "● " } else { "  " };
+                items.push(ListItem::new(Line::from(Span::styled(
+                    format!("{}{}", marker, studio),
+                    style,
+                ))));
+            }
+            let next_selected = bs.panel_selected == bs.available_studios.len();
+            if next_selected {
+                items.push(ListItem::new(Line::from(Span::styled(
+                    "  → Year",
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                ))));
+            } else {
+                items.push(ListItem::new(Line::from(Span::raw("  → Year"))));
+            }
+        }
+        FilterSection::Year => {
+            let year_active = bs.filter_years.is_some() || bs.filter_year_field.is_some();
+            let year_style = if bs.panel_selected == 0 {
+                Style::default().fg(Color::Black).bg(Color::Cyan)
+            } else if year_active {
+                Style::default().fg(Color::Cyan)
+            } else {
+                Style::default()
+            };
+
+            let year_text = if let Some((s, e)) = bs.filter_years {
+                format!("  Years: {}-{}", s, e)
+            } else if bs.filter_year_field.is_some() {
+                format!("  Years: {}_", bs.filter_year_input)
+            } else {
+                "  Year range".to_string()
+            };
+            items.push(ListItem::new(Line::from(Span::styled(year_text, year_style))));
+        }
+        FilterSection::Folder => {
+            for (i, folder) in bs.available_folders.iter().enumerate() {
+                let selected = i == bs.panel_selected;
+                let active = bs.filter_folder.as_ref() == Some(&folder.id);
+
+                let style = if selected {
+                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                } else if active {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                };
+
+                let marker = if active { "● " } else { "  " };
+                items.push(ListItem::new(Line::from(Span::styled(
+                    format!("{}{}", marker, folder.name),
+                    style,
+                ))));
+            }
+        }
     }
 
-    let year_idx = bs.available_genres.len();
-    let year_selected = bs.panel_selected == year_idx;
-    let year_active = bs.filter_years.is_some() || bs.filter_year_field.is_some();
-    let year_style = if year_selected {
-        Style::default().fg(Color::Black).bg(Color::Cyan)
-    } else if year_active {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default()
-    };
-
-    let year_text = if let Some((s, e)) = bs.filter_years {
-        format!("  Years: {}-{}", s, e)
-    } else if bs.filter_year_field.is_some() {
-        format!("  Years: {}_", bs.filter_year_input)
-    } else {
-        "  Year range".to_string()
-    };
-    items.push(ListItem::new(Line::from(Span::styled(year_text, year_style))));
-
-    let list = List::new(items)
+    let list = List::new(items.clone())
         .block(Block::default().borders(Borders::ALL).title(" Filter "))
         .highlight_style(Style::default())
         .highlight_symbol("");
 
-    let total_items = bs.available_genres.len() + 1;
+    let total_items = items.len();
     let max_height = 20usize;
-    let height = (total_items + 2).min(max_height) as u16; // +2 for borders
+    let height = (total_items + 2).min(max_height) as u16;
     let popup = centered_rect(40, height, area);
 
     let mut state_list = ListState::default();
-    state_list.select(Some(bs.panel_selected));
+    state_list.select(Some(bs.panel_selected + 1)); // +1 for section header
     f.render_widget(Clear, popup);
     f.render_stateful_widget(list, popup, &mut state_list);
 }
