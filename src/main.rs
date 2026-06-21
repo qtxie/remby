@@ -208,6 +208,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 BackgroundResult::HomeLoaded(items) => {
                     state.home_items = items;
                     state.loading = false;
+                    state.status_msg = None;
                 }
                 BackgroundResult::LibrariesLoaded(libs, latest) => {
                     state.libraries = libs;
@@ -221,11 +222,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.libraries = libs;
                     state.open_settings();
                     state.loading = false;
+                    state.status_msg = None;
                 }
                 BackgroundResult::SeriesInfoLoaded(ss) => {
                     state.navigate_to(app::View::SeriesInfo);
                     state.series_state = ss;
                     state.loading = false;
+                    state.status_msg = None;
                 }
                 BackgroundResult::EpisodesLoaded(name, episodes, total, series_id) => {
                     state.navigate_to(app::View::Episodes);
@@ -247,6 +250,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.current_folder_id = folder_id;
                     state.total_items = total;
                     state.loading = false;
+                    state.status_msg = None;
                 }
                 BackgroundResult::MoreItemsLoaded(more_items, _folder_id) => {
                     state.items.extend(more_items);
@@ -257,9 +261,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.search_results = results;
                     state.navigate_to(app::View::SearchResults);
                     state.loading = false;
+                    state.status_msg = None;
                 }
                 BackgroundResult::ItemDetailLoaded(detail) => {
                     state.loading = false;
+                    state.status_msg = None;
                     if detail.media_sources.len() > 1 {
                         state.open_source_select(&detail, detail.media_sources.clone());
                     } else if let Some(source) = detail.media_sources.first() {
@@ -688,7 +694,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     } else {
                                         state.select_prev();
                                         let bs = &state.library_browser_state;
-                                        if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
+                                        if !state.loading && bs.total > bs.items.len() && state.selected + 1 >= bs.items.len() {
                                             let start = bs.items.len();
                                             reload_library_items(state, &bg_tx, start);
                                         }
@@ -700,7 +706,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     } else {
                                         state.select_next();
                                         let bs = &state.library_browser_state;
-                                        if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
+                                        if !state.loading && bs.total > bs.items.len() && state.selected + 1 >= bs.items.len() {
                                             let start = bs.items.len();
                                             reload_library_items(state, &bg_tx, start);
                                         }
@@ -723,7 +729,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     } else {
                                         state.page_down();
                                         let bs = &state.library_browser_state;
-                                        if !state.loading && bs.total > bs.items.len() && state.selected + 5 >= bs.items.len() * 2 / 3 {
+                                        if !state.loading && bs.total > bs.items.len() && state.selected + 1 >= bs.items.len() {
                                             let start = bs.items.len();
                                             reload_library_items(state, &bg_tx, start);
                                         }

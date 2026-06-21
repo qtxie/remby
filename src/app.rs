@@ -579,14 +579,14 @@ impl AppState {
         self.view == View::Episodes
             && !self.loading
             && self.total_episodes > self.episodes.len()
-            && self.selected >= self.episodes.len()
+            && self.selected + 1 >= self.episodes.len()
     }
 
     pub fn should_load_more_items(&self) -> bool {
         self.view == View::Items
             && !self.loading
             && self.total_items > self.items.len()
-            && self.selected >= self.items.len()
+            && self.selected + 1 >= self.items.len()
     }
 
     pub async fn show_libraries(&mut self) {
