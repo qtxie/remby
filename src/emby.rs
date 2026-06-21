@@ -268,6 +268,22 @@ impl EmbyClient {
         req
     }
 
+    fn authed_post(&self, url: &str) -> reqwest::RequestBuilder {
+        let mut req = self.http.post(url);
+        for (k, v) in base_headers(&self.token, &self.user_id) {
+            req = req.header(k, v);
+        }
+        req
+    }
+
+    fn authed_delete(&self, url: &str) -> reqwest::RequestBuilder {
+        let mut req = self.http.delete(url);
+        for (k, v) in base_headers(&self.token, &self.user_id) {
+            req = req.header(k, v);
+        }
+        req
+    }
+
     #[allow(dead_code)]
     pub async fn get_libraries(&self) -> Result<Vec<Library>> {
         let url = self.api_url("/Library/VirtualFolders");
@@ -601,21 +617,16 @@ impl EmbyClient {
     pub async fn toggle_favorite(&self, item_id: &str, is_favorite: bool) -> Result<()> {
         let url = self.api_url(&format!("/Users/{}/Items/{}/Favorite", self.user_id, item_id));
         let resp = if is_favorite {
-            // POST to add favorite
-            let mut req = self.http.post(&url);
-            for (k, v) in base_headers(&self.token, &self.user_id) {
-                req = req.header(k, v);
-            }
-            req.send().await
+            self.authed_post(&url).send().await
         } else {
-            // DELETE to remove favorite
-            let mut req = self.http.delete(&url);
-            for (k, v) in base_headers(&self.token, &self.user_id) {
-                req = req.header(k, v);
-            }
-            req.send().await
+            self.authed_delete(&url).send().await
         };
-        resp.context("Failed to toggle favorite")?;
+        let resp = resp.context("Failed to toggle favorite")?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Favorite API error {}: {}", status, body);
+        }
         Ok(())
     }
 
