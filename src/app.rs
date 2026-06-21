@@ -348,16 +348,14 @@ impl AppState {
     }
 
     pub fn navigate_to(&mut self, view: View) {
-        if self.view != view {
-            self.stack.push(StackEntry {
-                items: self.items.clone(),
-                folder_id: self.current_folder_id.clone(),
-                view: self.view.clone(),
-                selected: self.selected,
-            });
-            if self.stack.len() > 50 {
-                self.stack.remove(0);
-            }
+        self.stack.push(StackEntry {
+            items: self.items.clone(),
+            folder_id: self.current_folder_id.clone(),
+            view: self.view.clone(),
+            selected: self.selected,
+        });
+        if self.stack.len() > 50 {
+            self.stack.remove(0);
         }
         self.view = view;
         self.selected = 0;
