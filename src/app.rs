@@ -897,6 +897,7 @@ impl AppState {
             bs.filter_year_input = bs.filter_years
                 .map(|(s, _)| s.to_string())
                 .unwrap_or_default();
+            bs.panel_selected = 0;
         }
     }
 
