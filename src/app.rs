@@ -60,6 +60,8 @@ pub(crate) struct StackEntry {
     pub folder_id: String,
     pub view: View,
     pub selected: usize,
+    pub home_items: Vec<MediaItem>,
+    pub total_items: usize,
 }
 
 pub struct SourceState {
@@ -464,6 +466,8 @@ impl AppState {
             folder_id: self.current_folder_id.clone(),
             view: self.view.clone(),
             selected: self.selected,
+            home_items: self.home_items.clone(),
+            total_items: self.total_items,
         });
         if self.stack.len() > 50 {
             self.stack.remove(0);
@@ -483,6 +487,8 @@ impl AppState {
             self.current_folder_id = prev.folder_id;
             self.view = prev.view;
             self.selected = prev.selected;
+            self.home_items = prev.home_items;
+            self.total_items = prev.total_items;
         } else {
             self.view = View::Home;
             self.selected = 0;

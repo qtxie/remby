@@ -220,9 +220,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = Some(app::Message::info(format!("{}: {} items", label, count)));
                 }
                 BackgroundResult::MoreHomeItemsLoaded(more_items) => {
-                    state.home_items.extend(more_items);
-                    state.loading = false;
-                    state.status_msg = Some(app::Message::info(format!("{} items", state.home_items.len())));
+                    if more_items.is_empty() {
+                        state.loading = false;
+                    } else {
+                        state.home_items.extend(more_items);
+                        state.loading = false;
+                        state.status_msg = Some(app::Message::info(format!("{} items", state.home_items.len())));
+                    }
                 }
                 BackgroundResult::LibrariesLoaded(libs, latest) => {
                     state.libraries = libs;
@@ -254,8 +258,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                 }
                 BackgroundResult::MoreEpisodesLoaded(more_episodes) => {
-                    state.episodes.extend(more_episodes);
-                    state.status_msg = Some(app::Message::info(format!("{} / {} episodes", state.episodes.len(), state.total_episodes)));
+                    if !more_episodes.is_empty() {
+                        state.episodes.extend(more_episodes);
+                        state.status_msg = Some(app::Message::info(format!("{} / {} episodes", state.episodes.len(), state.total_episodes)));
+                    }
                     state.loading = false;
                 }
                 BackgroundResult::FolderLoaded(items, folder_id, total) => {
@@ -267,8 +273,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = None;
                 }
                 BackgroundResult::MoreItemsLoaded(more_items, _folder_id) => {
-                    state.items.extend(more_items);
-                    state.status_msg = Some(app::Message::info(format!("{} / {} items", state.items.len(), state.total_items)));
+                    if !more_items.is_empty() {
+                        state.items.extend(more_items);
+                        state.status_msg = Some(app::Message::info(format!("{} / {} items", state.items.len(), state.total_items)));
+                    }
                     state.loading = false;
                 }
                 BackgroundResult::SearchLoaded(results) => {
@@ -321,7 +329,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = Some(app::Message::info(format!("{} / {} items", state.library_browser_state.items.len(), total)));
                 }
                 BackgroundResult::MoreLibraryBrowserLoaded(more_items, lib_id) => {
-                    if state.library_browser_state.library_id == lib_id {
+                    if state.library_browser_state.library_id == lib_id && !more_items.is_empty() {
                         state.library_browser_state.items.extend(more_items);
                         let total = state.library_browser_state.total;
                         state.status_msg = Some(app::Message::info(format!("{} / {} items", state.library_browser_state.items.len(), total)));
