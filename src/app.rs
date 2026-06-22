@@ -867,8 +867,20 @@ impl AppState {
 
     pub fn kill_mpv(&mut self) {
         if let Some(mut child) = self.mpv_child.take() {
-            let _ = child.kill();
+            // Kill entire process tree on Windows (mpv spawns child processes)
+            #[cfg(target_os = "windows")]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/T", "/F", "/PID", &child.id().to_string()])
+                    .output();
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
         }
+        self.mpv_rx = None;
     }
 
     pub fn open_settings(&mut self) {
