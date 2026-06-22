@@ -1373,8 +1373,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if state.searching { continue; }
                                     if matches!(state.view, app::View::Home | app::View::Items | app::View::SearchResults | app::View::Favorites | app::View::LibraryBrowser) {
                                         if let Some(item) = state.selected_item().cloned() {
-                                            if item.item_type == "Series" {
-                                                let series_id = item.id.clone();
+                                            let series_id = if item.item_type == "Series" {
+                                                Some(item.id.clone())
+                                            } else if item.item_type == "Episode" {
+                                                item.series_id.clone()
+                                            } else {
+                                                None
+                                            };
+                                            if let Some(series_id) = series_id {
                                                 let is_following = state.config.following_series.contains(&series_id);
                                                 if is_following {
                                                     state.config.following_series.retain(|id| id != &series_id);
