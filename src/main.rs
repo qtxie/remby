@@ -1279,7 +1279,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     };
                                     state.start_search(context);
                                 }
-                                KeyCode::Char('Z') => {
+                                KeyCode::Char('Z') | KeyCode::Char('F') => {
                                     if state.searching { continue; }
                                     state.open_favorites();
                                     state.loading = true;
@@ -1302,39 +1302,6 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
 
                                         // Add following-only series (not in favorites)
-                                        for series_id in &following {
-                                            if !fav_ids.contains(series_id) {
-                                                if let Ok(item) = client.get_item_detail(series_id).await {
-                                                    all_items.push(item);
-                                                }
-                                            }
-                                        }
-
-                                        let _ = tx.send(BackgroundResult::FavoritesLoaded(all_items, total));
-                                    });
-                                }
-                                KeyCode::Char('F') => {
-                                    if state.searching { continue; }
-                                    state.open_favorites();
-                                    state.loading = true;
-                                    state.loading_msg = "Loading favorites...".to_string();
-                                    let tx = bg_tx.clone();
-                                    let client = state.client.clone();
-                                    let following = state.config.following_series.clone();
-                                    tokio::spawn(async move {
-                                        let fav_result = client.get_favorites(0, 200).await;
-                                        let mut fav_ids = std::collections::HashSet::new();
-                                        let mut all_items = Vec::new();
-                                        let mut total = 0;
-
-                                        if let Ok(result) = fav_result {
-                                            total = result.total;
-                                            for item in &result.items {
-                                                fav_ids.insert(item.id.clone());
-                                            }
-                                            all_items.extend(result.items);
-                                        }
-
                                         for series_id in &following {
                                             if !fav_ids.contains(series_id) {
                                                 if let Ok(item) = client.get_item_detail(series_id).await {
