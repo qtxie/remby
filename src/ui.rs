@@ -666,7 +666,16 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
 
         let end = state.mpv_output.len().saturating_sub(scroll);
         let start = end.saturating_sub(visible_height);
-        let visible: Vec<Line> = state.mpv_output[start..end].iter().map(|l| Line::from(Span::raw(l.as_str()))).collect();
+        let visible: Vec<Line> = state.mpv_output[start..end].iter().map(|l| {
+            let style = if l.contains("error") || l.contains("Error") || l.contains("ERROR") {
+                Style::default().fg(Color::Red)
+            } else if l.contains("warn") || l.contains("Warn") || l.contains("WARN") {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default()
+            };
+            Line::from(Span::styled(l.as_str(), style))
+        }).collect();
 
         let title = format!(" mpv output ({} lines) ", output_len);
         let block = Block::default()
