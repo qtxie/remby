@@ -740,11 +740,11 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
-        View::Home => "↑↓: navigate | Enter: play/open | l: libraries | /: search | F: favorites | Ctrl+F: refresh | q: quit",
+        View::Home => "↑↓: navigate | Enter: play/open | l: libraries | /: search | f: follow | F: favorites | Ctrl+F: refresh | q: quit",
         View::ContinueWatching | View::LatestItems => "↑↓: navigate | Enter: play | /: search | ←/BS: back",
         View::Libraries => "↑↓: select | Enter: open | ←/BS: back",
-        View::Items => "↑↓: navigate | Enter: open/play | ←/BS: back | /: search",
-        View::SearchResults => "↑↓: navigate | Enter: play | ←/BS: back",
+        View::Items => "↑↓: navigate | Enter: open/play | f: follow | ←/BS: back | /: search",
+        View::SearchResults => "↑↓: navigate | Enter: play | f: follow | ←/BS: back",
         View::TrackSelect => "←/→: section | ↑/↓: select track | Enter: play | Esc: back",
         View::SourceSelect => "↑↓: select source | Enter: confirm | Esc: back",
         View::Episodes => "↑↓: navigate | Enter: play | e: episodes | ←/BS: back",
@@ -768,7 +768,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
                 "j/k: Navigate | Enter: Open | Ctrl+s: Sort | Ctrl+f: Filter | /: search | z: Favorite | Z: View favorites | Esc: Back"
             }
         },
-        View::Favorites => "↑↓: navigate | Enter: open/play | z: unfavorite | m: mark watched | ←/BS: back",
+        View::Favorites => "↑↓: navigate | Enter: open/play | f: follow | z: unfavorite | m: mark watched | ←/BS: back",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"

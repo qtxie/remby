@@ -1369,6 +1369,27 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                     }
                                 }
+                                KeyCode::Char('f') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                    if state.searching { continue; }
+                                    if matches!(state.view, app::View::Home | app::View::Items | app::View::SearchResults | app::View::Favorites | app::View::LibraryBrowser) {
+                                        if let Some(item) = state.selected_item().cloned() {
+                                            if item.item_type == "Series" {
+                                                let series_id = item.id.clone();
+                                                let is_following = state.config.following_series.contains(&series_id);
+                                                if is_following {
+                                                    state.config.following_series.retain(|id| id != &series_id);
+                                                    state.status_msg = Some(app::Message::info("Removed from following"));
+                                                } else {
+                                                    state.config.following_series.push(series_id);
+                                                    state.status_msg = Some(app::Message::info("Added to following"));
+                                                }
+                                                if let Err(e) = crate::config::save_config(&state.config) {
+                                                    state.status_msg = Some(app::Message::error(format!("Save error: {e}")));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                     if state.searching { continue; }
                                     state.loading = true;
