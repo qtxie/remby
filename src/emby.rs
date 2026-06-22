@@ -406,21 +406,45 @@ impl EmbyClient {
 
     pub async fn search_in_library(&self, query: &str, parent_id: &str) -> Result<Vec<MediaItem>> {
         let url = self.api_url(&format!("/Users/{}/Items", self.user_id));
-        let resp = self.authed_get(&url)
-            .query(&[
-                ("SearchTerm", query),
-                ("ParentId", parent_id),
-                ("Recursive", "true"),
-                ("IncludeItemTypes", "Movie,Series,Episode"),
-                ("Fields", "MediaSources,ChildCount,UserData"),
-                ("Limit", "50"),
-            ])
-            .send()
-            .await
-            .context("Search request failed")?;
 
-        let data: ItemsResponse = resp.json().await.context("Invalid search response")?;
-        Ok(data.items)
+        let (term_result, prefix_result) = tokio::join!(
+            self.authed_get(&url)
+                .query(&[
+                    ("SearchTerm", query.to_string()),
+                    ("ParentId", parent_id.to_string()),
+                    ("Recursive", "true".to_string()),
+                    ("Fields", "MediaSources,ChildCount,UserData".to_string()),
+                    ("Limit", "50".to_string()),
+                ])
+                .send(),
+            self.authed_get(&url)
+                .query(&[
+                    ("NameStartsWith", query.to_string()),
+                    ("ParentId", parent_id.to_string()),
+                    ("Recursive", "true".to_string()),
+                    ("Fields", "MediaSources,ChildCount,UserData".to_string()),
+                    ("Limit", "50".to_string()),
+                ])
+                .send(),
+        );
+
+        let mut seen = std::collections::HashSet::new();
+        let mut items = Vec::new();
+
+        for resp in [term_result, prefix_result] {
+            if let Ok(r) = resp {
+                if let Ok(data) = r.json::<ItemsResponse>().await {
+                    for item in data.items {
+                        if seen.insert(item.id.clone()) {
+                            items.push(item);
+                        }
+                    }
+                }
+            }
+        }
+
+        items.truncate(50);
+        Ok(items)
     }
 
     pub async fn get_item_detail(&self, item_id: &str) -> Result<MediaItem> {
@@ -799,9 +823,10 @@ impl MediaItem {
     }
 
     pub fn is_video(&self) -> bool {
-        self.item_type == "Episode" || self.item_type == "Movie"
-            || self.item_type == "Video"
-            || self.media_type.as_deref() == Some("Video")
+        !self.is_navigable() && !self.is_separator()
+            && (self.item_type == "Episode" || self.item_type == "Movie"
+                || self.item_type == "Video"
+                || self.media_type.as_deref() == Some("Video"))
     }
 
     pub fn resume_position_ticks(&self) -> Option<i64> {
