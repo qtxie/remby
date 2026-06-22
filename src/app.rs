@@ -59,6 +59,8 @@ pub struct AppState {
     pub mpv_rx: Option<std::sync::mpsc::Receiver<String>>,
     pub mpv_output: Vec<String>,
     pub mpv_output_scroll: usize,
+    pub play_session_id: String,
+    pub playback_started_at: Option<std::time::Instant>,
     pub settings_state: SettingsState,
     pub config: RembyConfig,
     pub library_browser_state: LibraryBrowserState,
@@ -104,6 +106,9 @@ pub enum SeriesSection {
 
 pub struct PlayingState {
     pub item_name: String,
+    pub item_id: String,
+    pub media_source_id: String,
+    pub runtime_ticks: Option<i64>,
     pub video_track: String,
     pub audio_track: String,
     pub subtitle_track: String,
@@ -145,6 +150,9 @@ impl Default for PlayingState {
     fn default() -> Self {
         Self {
             item_name: String::new(),
+            item_id: String::new(),
+            media_source_id: String::new(),
+            runtime_ticks: None,
             video_track: String::new(),
             audio_track: String::new(),
             subtitle_track: String::new(),
@@ -478,6 +486,8 @@ impl AppState {
             mpv_rx: None,
             mpv_output: Vec::new(),
             mpv_output_scroll: 0,
+            play_session_id: String::new(),
+            playback_started_at: None,
             settings_state: SettingsState::default(),
             config,
             library_browser_state: LibraryBrowserState::default(),
@@ -998,9 +1008,12 @@ impl AppState {
         }
     }
 
-    pub fn open_playing(&mut self, item_name: &str, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>) {
+    pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>) {
         self.playing_state = PlayingState {
             item_name: item_name.to_string(),
+            item_id: item_id.to_string(),
+            media_source_id: media_source_id.to_string(),
+            runtime_ticks,
             url: url.to_string(),
             video_track: video.to_string(),
             audio_track: audio.to_string(),
@@ -1009,6 +1022,7 @@ impl AppState {
             option_selected: 0,
             playing: false,
         };
+        self.play_session_id = uuid::Uuid::new_v4().to_string().replace('-', "");
         self.navigate_to(View::Playing);
     }
 

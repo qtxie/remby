@@ -845,6 +845,51 @@ impl EmbyClient {
             total: data.total,
         })
     }
+
+    pub async fn report_playback_start(&self, item_id: &str, media_source_id: &str, play_session_id: &str) -> Result<()> {
+        let url = self.api_url("/Sessions/Playing");
+        let body = json!({
+            "ItemId": item_id,
+            "MediaSourceId": media_source_id,
+            "PlaySessionId": play_session_id,
+        });
+        let resp = self.authed_post(&url).json(&body).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("report_playback_start failed: {}", resp.status());
+        }
+        Ok(())
+    }
+
+    pub async fn report_playback_stopped(&self, item_id: &str, media_source_id: &str, play_session_id: &str, position_ticks: i64) -> Result<()> {
+        let url = self.api_url("/Sessions/Playing/Stopped");
+        let body = json!({
+            "ItemId": item_id,
+            "MediaSourceId": media_source_id,
+            "PlaySessionId": play_session_id,
+            "PositionTicks": position_ticks,
+        });
+        let resp = self.authed_post(&url).json(&body).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("report_playback_stopped failed: {}", resp.status());
+        }
+        Ok(())
+    }
+
+    pub async fn report_playback_progress(&self, item_id: &str, media_source_id: &str, play_session_id: &str, position_ticks: i64, is_paused: bool) -> Result<()> {
+        let url = self.api_url("/Sessions/Playing/Progress");
+        let body = json!({
+            "ItemId": item_id,
+            "MediaSourceId": media_source_id,
+            "PlaySessionId": play_session_id,
+            "PositionTicks": position_ticks,
+            "IsPaused": is_paused,
+        });
+        let resp = self.authed_post(&url).json(&body).send().await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("report_playback_progress failed: {}", resp.status());
+        }
+        Ok(())
+    }
 }
 
 impl MediaItem {

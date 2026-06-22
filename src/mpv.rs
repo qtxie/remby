@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
@@ -7,15 +6,14 @@ use std::sync::mpsc;
 pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, subtitle: Option<i32>, start_secs: Option<f64>) -> Result<(Child, mpsc::Receiver<String>)> {
     let mut cmd = Command::new(mpv_path);
     cmd.arg(url);
-    cmd.arg("-v");
     cmd.arg("--term-osd-bar=no");
-    cmd.stdout(Stdio::null());
+    cmd.arg("--term-status-msg=no");
+    cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
     if let Some(secs) = start_secs {
         cmd.arg(format!("--start={:.3}", secs));
     }
-
     if let Some(vid) = video {
         cmd.arg(format!("--vid={}", vid + 1));
     }
@@ -31,8 +29,25 @@ pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, s
 
     let (tx, rx) = mpsc::channel();
 
+    if let Some(stdout) = child.stdout.take() {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let cleaned = strip_ansi(&line);
+                    if !cleaned.trim().is_empty() {
+                        if tx.send(cleaned).is_err() { break; }
+                    }
+                }
+            }
+        });
+    }
+
     if let Some(stderr) = child.stderr.take() {
         std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {

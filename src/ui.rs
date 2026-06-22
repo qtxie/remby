@@ -602,6 +602,14 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     // Track info
     render_track_info(f, ps, top[2]);
 
+    // URL
+    let url_text = Paragraph::new(Span::styled(
+        &ps.url,
+        Style::default().fg(Color::DarkGray),
+    )).wrap(Wrap { trim: false });
+    f.render_widget(Clear, top[3]);
+    f.render_widget(url_text, top[3]);
+
     // Resume choice
     if has_resume {
         let ticks = ps.resume_position.unwrap();
@@ -645,8 +653,6 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let options_widget = Paragraph::new(options);
         f.render_widget(Clear, top[5]);
         f.render_widget(options_widget, top[5]);
-    } else if ps.playing {
-        render_track_info(f, ps, top[3]);
     }
 
     // Bottom half: mpv output panel
@@ -654,22 +660,12 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     if !state.mpv_output.is_empty() {
         let output_len = state.mpv_output.len();
         let visible_height = output_area.height as usize;
-        let total_lines = output_len + 1;
-        let max_scroll = total_lines.saturating_sub(visible_height);
+        let max_scroll = output_len.saturating_sub(visible_height);
         let scroll = state.mpv_output_scroll.min(max_scroll);
 
-        let mut lines: Vec<Line> = Vec::new();
-        lines.push(Line::from(Span::styled(
-            &ps.url,
-            Style::default().fg(Color::DarkGray),
-        )));
-        for line in &state.mpv_output {
-            lines.push(Line::from(Span::raw(line.as_str())));
-        }
-
-        let end = lines.len().saturating_sub(scroll);
+        let end = state.mpv_output.len().saturating_sub(scroll);
         let start = end.saturating_sub(visible_height);
-        let visible: Vec<Line> = lines[start..end].to_vec();
+        let visible: Vec<Line> = state.mpv_output[start..end].iter().map(|l| Line::from(Span::raw(l.as_str()))).collect();
 
         let title = format!(" mpv output ({} lines) ", output_len);
         let block = Block::default()
@@ -680,13 +676,12 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         f.render_widget(Clear, output_area);
         f.render_widget(paragraph, output_area);
     } else {
-        let url_text = Paragraph::new(Span::styled(
-            &ps.url,
-            Style::default().fg(Color::DarkGray),
-        )).wrap(Wrap { trim: false })
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)).title(" mpv output "));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray))
+            .title(" mpv output ");
         f.render_widget(Clear, output_area);
-        f.render_widget(url_text, output_area);
+        f.render_widget(block, output_area);
     }
 }
 

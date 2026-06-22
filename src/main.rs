@@ -520,15 +520,40 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         // Check if mpv exited
         if let Some(ref mut child) = state.mpv_child {
             if let Ok(Some(_)) = child.try_wait() {
+                // Calculate watched position
+                let position_ticks = if let (Some(started), Some(runtime)) = (state.playback_started_at, state.playing_state.runtime_ticks) {
+                    let elapsed_secs = started.elapsed().as_secs() as i64;
+                    let elapsed_ticks = elapsed_secs * 10_000_000;
+                    // If resume was used, add the resume offset
+                    let resume_offset = if state.playing_state.option_selected == 0 {
+                        state.playing_state.resume_position.unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    let pos = resume_offset + elapsed_ticks;
+                    pos.min(runtime)
+                } else {
+                    0
+                };
+                // Report playback stopped to Emby
+                let item_id = state.playing_state.item_id.clone();
+                let source_id = state.playing_state.media_source_id.clone();
+                let session_id = state.play_session_id.clone();
+                let client = state.client.clone();
+                tokio::spawn(async move {
+                    let _ = client.report_playback_stopped(&item_id, &source_id, &session_id, position_ticks).await;
+                });
                 state.mpv_child = None;
                 state.mpv_rx = None;
                 state.playing_state.playing = false;
+                state.playback_started_at = None;
                 state.status_msg = Some(app::Message::info("mpv closed".to_string()));
             }
         }
 
         // Drain mpv output
-        if let Some(ref rx) = state.mpv_rx {
+        if state.mpv_rx.is_some() {
+            let rx = state.mpv_rx.as_ref().unwrap();
             while let Ok(line) = rx.try_recv() {
                 state.mpv_output.push(line);
                 if state.mpv_output.len() > 200 {
@@ -657,7 +682,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 .map(|t| ui::track_label(t))
                                                 .unwrap_or_else(|| "Off".to_string());
                                             let resume_ticks = item.resume_position_ticks();
-                                            state.open_playing(&item.display_name(), &url, &video_label, &audio_label, &sub_label, resume_ticks);
+                                            let item_id = item.id.clone();
+                                            let source_id = source.id.clone();
+                                            let runtime = item.runtime_ticks;
+                                            state.open_playing(&item.display_name(), &item_id, &source_id, runtime, &url, &video_label, &audio_label, &sub_label, resume_ticks);
                                         }
                                     }
                                 }
@@ -669,7 +697,25 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => {
+                                    // Report playback stopped before killing
+                                    if state.playing_state.playing {
+                                        let position_ticks = if let (Some(started), Some(runtime)) = (state.playback_started_at, state.playing_state.runtime_ticks) {
+                                            let elapsed = started.elapsed().as_secs() as i64 * 10_000_000;
+                                            let offset = if state.playing_state.option_selected == 0 {
+                                                state.playing_state.resume_position.unwrap_or(0)
+                                            } else { 0 };
+                                            (offset + elapsed).min(runtime)
+                                        } else { 0 };
+                                        let item_id = state.playing_state.item_id.clone();
+                                        let source_id = state.playing_state.media_source_id.clone();
+                                        let session_id = state.play_session_id.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            let _ = client.report_playback_stopped(&item_id, &source_id, &session_id, position_ticks).await;
+                                        });
+                                    }
                                     state.kill_mpv();
+                                    state.playback_started_at = None;
                                     state.go_back();
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
@@ -704,6 +750,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let start = ps.resume_position;
                                         state.open_mpv_prompt(&url, "", "", "", start);
                                     } else {
+                                        state.status_msg = Some(app::Message::Loading("⣾".to_string(), "Launching mpv...".to_string()));
                                         let ps = &state.playing_state;
                                         let start_secs = if ps.resume_position.is_some() && ps.option_selected == 0 {
                                             ps.resume_position.map(|t| t as f64 / 10_000_000.0)
@@ -716,6 +763,17 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             state.mpv_output.clear();
                                             state.mpv_output_scroll = 0;
                                             state.playing_state.playing = true;
+                                            state.playback_started_at = Some(std::time::Instant::now());
+                                            // Report playback start to Emby
+                                            let item_id = state.playing_state.item_id.clone();
+                                            let source_id = state.playing_state.media_source_id.clone();
+                                            let session_id = state.play_session_id.clone();
+                                            let client = state.client.clone();
+                                            tokio::spawn(async move {
+                                                let _ = client.report_playback_start(&item_id, &source_id, &session_id).await;
+                                            });
+                                        } else {
+                                            state.status_msg = Some(app::Message::error("mpv::play failed".to_string()));
                                         }
                                     }
                                 }
