@@ -534,9 +534,43 @@ impl AppState {
         }
     }
 
+    fn following_items_count(&self) -> usize {
+        let mut count = 0;
+        for (_series_name, episodes) in &self.following_updates {
+            if !episodes.is_empty() {
+                count += 1; // separator
+                count += episodes.len().min(5);
+            }
+        }
+        count
+    }
+
     pub fn selected_item(&self) -> Option<&MediaItem> {
         match self.view {
-            View::Home | View::ContinueWatching | View::LatestItems => self.home_items.get(self.selected),
+            View::Home => {
+                let offset = self.following_items_count();
+                if self.selected < offset {
+                    // In following updates section - need to map back
+                    let mut idx = self.selected;
+                    for (_name, episodes) in &self.following_updates {
+                        if !episodes.is_empty() {
+                            if idx == 0 {
+                                return None; // separator, not selectable
+                            }
+                            idx -= 1;
+                            let take = episodes.len().min(5);
+                            if idx < take {
+                                return episodes.get(idx);
+                            }
+                            idx -= take;
+                        }
+                    }
+                    None
+                } else {
+                    self.home_items.get(self.selected - offset)
+                }
+            }
+            View::ContinueWatching | View::LatestItems => self.home_items.get(self.selected),
             View::Libraries => {
                 // Combined list: libraries + section headers + latest items
                 let mut idx = self.selected;
@@ -1117,7 +1151,8 @@ impl AppState {
 
     fn current_list_len(&self) -> usize {
         match self.view {
-            View::Home | View::ContinueWatching | View::LatestItems => self.home_items.len(),
+            View::Home => self.following_items_count() + self.home_items.len(),
+            View::ContinueWatching | View::LatestItems => self.home_items.len(),
             View::Libraries => {
                 // Libraries + latest items (header is not selectable)
                 let mut count = self.libraries.len();
