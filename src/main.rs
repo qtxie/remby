@@ -355,15 +355,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = None;
                     if detail.media_sources.len() > 1 {
                         state.open_source_select(&detail, detail.media_sources.clone());
-                    } else if let Some(source) = detail.media_sources.first() {
-                        let has_tracks = source.media_streams.iter().any(|s| s.stream_type == "Video" || s.stream_type == "Audio");
-                        if has_tracks {
-                            state.open_track_select(&detail, source);
-                        } else {
-                            let url = state.client.stream_url_for_source(&detail, source);
-                            let resume = detail.resume_position_ticks();
-                            state.open_playing(&detail.display_name(), &detail.id, &source.id, detail.runtime_ticks, &url, "", "", "", resume);
-                        }
+                    } else if let Some(source) = detail.media_sources.first().cloned() {
+                        state.open_track_select_or_playing(&detail, &source);
                     } else {
                         let url = state.client.stream_url_for_source(&detail, &Default::default());
                         if state.config.mpv_path == "mpv" {
@@ -632,14 +625,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Enter => {
                                     if let Some(item) = state.source_state.item.clone() {
                                         if let Some(source) = state.selected_source().cloned() {
-                                            let has_tracks = source.media_streams.iter().any(|s| s.stream_type == "Video" || s.stream_type == "Audio");
-                                            if has_tracks {
-                                                state.open_track_select(&item, &source);
-                                            } else {
-                                                let url = state.client.stream_url_for_source(&item, &source);
-                                                let resume = item.resume_position_ticks();
-                                                state.open_playing(&item.display_name(), &item.id, &source.id, item.runtime_ticks, &url, "", "", "", resume);
-                                            }
+                                            state.open_track_select_or_playing(&item, &source);
                                         }
                                     }
                                 }
