@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Lang {
@@ -6,14 +6,21 @@ pub enum Lang {
     Zh,
 }
 
-static LANG: OnceLock<Lang> = OnceLock::new();
+static LANG: AtomicU8 = AtomicU8::new(0);
 
 pub fn init(lang_str: &str) {
     let lang = match lang_str {
         "zh" | "zh-CN" | "chinese" => Lang::Zh,
         _ => Lang::En,
     };
-    let _ = LANG.set(lang);
+    LANG.store(lang as u8, Ordering::Relaxed);
+}
+
+fn current_lang() -> Lang {
+    match LANG.load(Ordering::Relaxed) {
+        1 => Lang::Zh,
+        _ => Lang::En,
+    }
 }
 
 pub fn detect_system_lang() -> &'static str {
@@ -40,10 +47,6 @@ pub fn detect_system_lang() -> &'static str {
         }
     }
     "en"
-}
-
-fn current_lang() -> Lang {
-    *LANG.get().unwrap_or(&Lang::En)
 }
 
 pub fn t(key: &str) -> &'static str {
