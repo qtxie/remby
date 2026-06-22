@@ -1365,7 +1365,11 @@ impl AppState {
     }
 
     pub fn open_wizard(&mut self) {
-        self.wizard_state = WizardState::default();
+        let mpv = crate::mpv::find_mpv().unwrap_or_else(|| "mpv".to_string());
+        self.wizard_state = WizardState {
+            mpv_path: mpv,
+            ..Default::default()
+        };
         self.view = View::Wizard;
     }
 

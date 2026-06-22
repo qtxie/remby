@@ -234,6 +234,14 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Auto-detect mpv path if not configured
+    if state.config.mpv_path == "mpv" {
+        if let Some(detected) = mpv::find_mpv() {
+            state.config.mpv_path = detected;
+            let _ = crate::config::save_config(&state.config);
+        }
+    }
+
     if state.server.is_empty() {
         let accounts_cfg = crate::config::load_accounts();
         let has_config = std::path::Path::new(&dirs::config_dir().unwrap_or_default().join("remby").join("config.json")).exists();
