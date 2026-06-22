@@ -63,6 +63,7 @@ enum BackgroundResult {
     LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<crate::emby::MediaItem>),
     MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
     FavoritesLoaded(Vec<crate::emby::MediaItem>, usize),
+    SeriesMarkedWatched(String, usize),
     FavoriteToggled(String, bool, String),
     Error(String),
     Timeout(String),
@@ -366,6 +367,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.total_favorites = total;
                     state.loading = false;
                     state.status_msg = Some(app::Message::info(format!("{} / {} favorites", state.favorites.len(), total)));
+                }
+                BackgroundResult::SeriesMarkedWatched(series_id, count) => {
+                    state.config.following_series.retain(|id| id != &series_id);
+                    let _ = crate::config::save_config(&state.config);
+                    state.favorites.retain(|item| item.id != series_id);
+                    state.loading = false;
+                    state.status_msg = Some(app::Message::success(format!("Marked {} episodes as watched, removed from following", count)));
                 }
                 BackgroundResult::FavoriteToggled(item_id, is_favorite, item_type) => {
                     update_favorite_in_list(&mut state.home_items, &item_id, is_favorite);
@@ -1339,6 +1347,26 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let result = build_series_state(&client, &item).await;
                                             let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
                                         });
+                                    }
+                                }
+                                KeyCode::Char('m') => {
+                                    if state.searching { continue; }
+                                    if state.view == app::View::Favorites {
+                                        if let Some(item) = state.selected_item().cloned() {
+                                            if item.item_type == "Series" {
+                                                state.loading = true;
+                                                state.loading_msg = format!("Marking {} as watched...", item.name);
+                                                let tx = bg_tx.clone();
+                                                let client = state.client.clone();
+                                                let series_id = item.id.clone();
+                                                tokio::spawn(async move {
+                                                    match client.mark_series_watched(&series_id).await {
+                                                        Ok(count) => { let _ = tx.send(BackgroundResult::SeriesMarkedWatched(series_id, count)); }
+                                                        Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
+                                                    }
+                                                });
+                                            }
+                                        }
                                     }
                                 }
                                 _ => {}

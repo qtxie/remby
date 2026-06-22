@@ -768,7 +768,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
                 "j/k: Navigate | Enter: Open | Ctrl+s: Sort | Ctrl+f: Filter | /: search | z: Favorite | Z: View favorites | Esc: Back"
             }
         },
-        View::Favorites => "↑↓: navigate | Enter: open/play | z: unfavorite | ←/BS: back",
+        View::Favorites => "↑↓: navigate | Enter: open/play | z: unfavorite | m: mark watched | ←/BS: back",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"

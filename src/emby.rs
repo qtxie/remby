@@ -550,6 +550,19 @@ impl EmbyClient {
         Ok(item.name)
     }
 
+    pub async fn mark_series_watched(&self, series_id: &str) -> Result<usize> {
+        let episodes = self.get_unwatched_episodes(series_id).await.unwrap_or_default();
+        let count = episodes.len();
+        for ep in &episodes {
+            let url = self.api_url(&format!("/Users/{}/PlayedItems/{}", self.user_id, ep.id));
+            let _ = self.authed_post(&url)
+                .json(&json!({}))
+                .send()
+                .await;
+        }
+        Ok(count)
+    }
+
     pub async fn get_similar(&self, item_id: &str) -> Result<Vec<MediaItem>> {
         let url = self.api_url(&format!("/Items/{}/Similar", item_id));
         let resp = self.authed_get(&url)
