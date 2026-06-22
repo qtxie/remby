@@ -383,11 +383,20 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         state.favorites.retain(|item| item.id != item_id);
                         state.total_favorites = state.total_favorites.saturating_sub(1);
                     }
-                    if item_type == "Series" {
-                        if is_favorite && !state.config.following_series.contains(&item_id) {
-                            state.toggle_follow(&item_id);
-                        } else if !is_favorite && state.config.following_series.contains(&item_id) {
-                            state.toggle_follow(&item_id);
+                    // Auto follow/unfollow Series when favoriting Series or Episode
+                    let series_id = if item_type == "Series" {
+                        Some(item_id.clone())
+                    } else if item_type == "Episode" {
+                        state.favorites.iter().find(|i| i.id == item_id).and_then(|i| i.series_id.clone())
+                            .or_else(|| state.items.iter().find(|i| i.id == item_id).and_then(|i| i.series_id.clone()))
+                    } else {
+                        None
+                    };
+                    if let Some(sid) = series_id {
+                        if is_favorite && !state.config.following_series.contains(&sid) {
+                            state.toggle_follow(&sid);
+                        } else if !is_favorite && state.config.following_series.contains(&sid) {
+                            state.toggle_follow(&sid);
                         }
                     }
                     state.loading = false;
