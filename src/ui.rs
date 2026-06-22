@@ -538,31 +538,35 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     let ps = &state.playing_state;
     let has_resume = ps.resume_position.is_some() && !ps.playing;
 
-    let layout = if has_resume {
+    let halves = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    let top = if has_resume {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1),
-                Constraint::Length(3),
+                Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(2),
                 Constraint::Min(1),
             ])
-            .split(area)
+            .split(halves[0])
     } else {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1),
-                Constraint::Length(3),
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Min(1),
             ])
-            .split(area)
+            .split(halves[0])
     };
 
     // Title
@@ -570,8 +574,8 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         &ps.item_name,
         Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
     )).alignment(Alignment::Center);
-    f.render_widget(Clear, layout[0]);
-    f.render_widget(title, layout[0]);
+    f.render_widget(Clear, top[0]);
+    f.render_widget(title, top[0]);
 
     // Playing indicator or resume prompt
     if ps.playing {
@@ -584,19 +588,19 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             format!("{} Playing in mpv...", spinner[idx]),
             Style::default().fg(Color::Cyan),
         )).alignment(Alignment::Center);
-        f.render_widget(Clear, layout[1]);
-        f.render_widget(playing_text, layout[1]);
+        f.render_widget(Clear, top[1]);
+        f.render_widget(playing_text, top[1]);
     } else {
         let prompt = Paragraph::new(Span::styled(
             "Choose playback option:",
             Style::default().fg(Color::Yellow),
         )).alignment(Alignment::Center);
-        f.render_widget(Clear, layout[1]);
-        f.render_widget(prompt, layout[1]);
+        f.render_widget(Clear, top[1]);
+        f.render_widget(prompt, top[1]);
     }
 
     // Track info
-    render_track_info(f, ps, layout[2]);
+    render_track_info(f, ps, top[2]);
 
     // Resume choice
     if has_resume {
@@ -639,28 +643,26 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             ]),
         ];
         let options_widget = Paragraph::new(options);
-        f.render_widget(Clear, layout[5]);
-        f.render_widget(options_widget, layout[5]);
+        f.render_widget(Clear, top[5]);
+        f.render_widget(options_widget, top[5]);
     } else if ps.playing {
-        render_track_info(f, ps, layout[3]);
+        render_track_info(f, ps, top[3]);
     }
 
-    // Bottom area: mpv output or URL
-    let bottom_idx = if has_resume { 6 } else { 5 };
+    // Bottom half: mpv output panel
+    let output_area = halves[1];
     if !state.mpv_output.is_empty() {
         let output_len = state.mpv_output.len();
-        let visible_height = layout[bottom_idx].height as usize;
-        let total_lines = output_len + 1; // +1 for URL line
+        let visible_height = output_area.height as usize;
+        let total_lines = output_len + 1;
         let max_scroll = total_lines.saturating_sub(visible_height);
         let scroll = state.mpv_output_scroll.min(max_scroll);
 
         let mut lines: Vec<Line> = Vec::new();
-        // URL line
         lines.push(Line::from(Span::styled(
             &ps.url,
             Style::default().fg(Color::DarkGray),
         )));
-        // Output lines
         for line in &state.mpv_output {
             lines.push(Line::from(Span::raw(line.as_str())));
         }
@@ -669,21 +671,22 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let end = (start + visible_height).min(lines.len());
         let visible: Vec<Line> = lines[start..end].to_vec();
 
-        let title = format!(" mpv output ({}) ", output_len);
+        let title = format!(" mpv output ({} lines) ", output_len);
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::DarkGray))
             .title(Span::styled(title, Style::default().fg(Color::DarkGray)));
         let paragraph = Paragraph::new(visible).block(block);
-        f.render_widget(Clear, layout[bottom_idx]);
-        f.render_widget(paragraph, layout[bottom_idx]);
+        f.render_widget(Clear, output_area);
+        f.render_widget(paragraph, output_area);
     } else {
         let url_text = Paragraph::new(Span::styled(
             &ps.url,
             Style::default().fg(Color::DarkGray),
-        )).wrap(Wrap { trim: false });
-        f.render_widget(Clear, layout[bottom_idx]);
-        f.render_widget(url_text, layout[bottom_idx]);
+        )).wrap(Wrap { trim: false })
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)).title(" mpv output "));
+        f.render_widget(Clear, output_area);
+        f.render_widget(url_text, output_area);
     }
 }
 
