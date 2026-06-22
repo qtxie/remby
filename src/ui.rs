@@ -321,8 +321,13 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
             let is_following = state.view == View::Favorites
                 && item.item_type == "Series"
                 && state.config.following_series.contains(&item.id);
-            let star = if is_favorite { "★ " } else { "  " };
-            let follow_mark = if is_following && !is_favorite { "▶ " } else { "" };
+            let (star, follow_mark) = if is_favorite {
+                ("★ ", "")
+            } else if is_following {
+                ("", "▶ ")
+            } else {
+                ("", "")
+            };
             let name = item.display_name();
             let duration = item.duration_str().unwrap_or_default();
             let dur = if !duration.is_empty() {
