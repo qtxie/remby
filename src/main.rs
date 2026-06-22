@@ -63,7 +63,7 @@ enum BackgroundResult {
     LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<crate::emby::MediaItem>),
     MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
     FavoritesLoaded(Vec<crate::emby::MediaItem>, usize),
-    FavoriteToggled(String, bool),
+    FavoriteToggled(String, bool, String),
     Error(String),
     Timeout(String),
 }
@@ -367,13 +367,22 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                     state.status_msg = Some(app::Message::info(format!("{} / {} favorites", state.favorites.len(), total)));
                 }
-                BackgroundResult::FavoriteToggled(item_id, is_favorite) => {
+                BackgroundResult::FavoriteToggled(item_id, is_favorite, item_type) => {
                     update_favorite_in_list(&mut state.home_items, &item_id, is_favorite);
                     update_favorite_in_list(&mut state.items, &item_id, is_favorite);
                     update_favorite_in_list(&mut state.library_browser_state.items, &item_id, is_favorite);
                     if !is_favorite {
                         state.favorites.retain(|item| item.id != item_id);
                         state.total_favorites = state.total_favorites.saturating_sub(1);
+                        if item_type == "Series" {
+                            state.config.following_series.retain(|id| id != &item_id);
+                            let _ = crate::config::save_config(&state.config);
+                        }
+                    } else if item_type == "Series" {
+                        if !state.config.following_series.contains(&item_id) {
+                            state.config.following_series.push(item_id);
+                            let _ = crate::config::save_config(&state.config);
+                        }
                     }
                     state.loading = false;
                     state.status_msg = Some(app::Message::success(if is_favorite { "Added to favorites" } else { "Removed from favorites" }));
@@ -747,6 +756,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
                                         let new_favorite = !is_favorite;
                                         let item_id = item.id.clone();
+                                        let item_type = item.item_type.clone();
                                         state.loading = true;
                                         state.loading_msg = "Updating favorite...".to_string();
                                         let tx = bg_tx.clone();
@@ -754,7 +764,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         tokio::spawn(async move {
                                             let timeout = std::time::Duration::from_secs(30);
                                             match tokio::time::timeout(timeout, client.toggle_favorite(&item_id, new_favorite)).await {
-                                                Ok(Ok(_)) => { let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite)); }
+                                                Ok(Ok(_)) => { let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite, item_type)); }
                                                 Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Favorite failed: {}", e))); }
                                                 Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Favorite".to_string())); }
                                             }
@@ -1050,6 +1060,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
                                         let new_favorite = !is_favorite;
                                         let item_id = item.id.clone();
+                                        let item_type = item.item_type.clone();
                                         state.loading = true;
                                         state.loading_msg = "Updating favorite...".to_string();
                                         let tx = bg_tx.clone();
@@ -1057,7 +1068,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         tokio::spawn(async move {
                                             let timeout = std::time::Duration::from_secs(10);
                                             match tokio::time::timeout(timeout, client.toggle_favorite(&item_id, new_favorite)).await {
-                                                Ok(Ok(_)) => { let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite)); }
+                                                Ok(Ok(_)) => { let _ = tx.send(BackgroundResult::FavoriteToggled(item_id, new_favorite, item_type)); }
                                                 Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Timeout(format!("Favorite: {}", e))); }
                                                 Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Favorite: timeout".to_string())); }
                                             }
