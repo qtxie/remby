@@ -102,6 +102,7 @@ enum BackgroundResult {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    crate::emby::init_device_id();
 
     // Splash screen
     enable_raw_mode()?;

@@ -9,20 +9,19 @@ const CLIENT_NAME: &str = "Emby";
 const CLIENT_VERSION: &str = "4.8.0.80";
 const DEVICE_NAME: &str = "remby";
 
-fn device_id() -> &'static str {
-    static ID: OnceLock<String> = OnceLock::new();
-    ID.get_or_init(|| {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+static DEVICE_ID: OnceLock<String> = OnceLock::new();
 
-        let hostname = hostname::get().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
-        let username = std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default();
+pub fn init_device_id() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
-        let mut hasher = DefaultHasher::new();
-        hostname.hash(&mut hasher);
-        username.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
-    })
+    let hostname = hostname::get().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
+    let username = std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default();
+
+    let mut hasher = DefaultHasher::new();
+    hostname.hash(&mut hasher);
+    username.hash(&mut hasher);
+    let _ = DEVICE_ID.set(format!("{:x}", hasher.finish()));
 }
 
 #[derive(Debug, Clone)]
@@ -36,7 +35,7 @@ pub struct EmbyClient {
 fn auth_header(token: &str) -> String {
     format!(
         "MediaBrowser Client=\"{}\", Device=\"{}\", DeviceId=\"{}\", Version=\"{}\", Token=\"{}\"",
-        CLIENT_NAME, DEVICE_NAME, device_id(), CLIENT_VERSION, token
+        CLIENT_NAME, DEVICE_NAME, DEVICE_ID.get().unwrap(), CLIENT_VERSION, token
     )
 }
 
@@ -46,7 +45,7 @@ fn base_headers(token: &str) -> Vec<(&'static str, String)> {
         ("X-Emby-Token", token.to_string()),
         ("X-Emby-Client", CLIENT_NAME.to_string()),
         ("X-Emby-DeviceName", DEVICE_NAME.to_string()),
-        ("X-Emby-DeviceId", device_id().to_string()),
+        ("X-Emby-DeviceId", DEVICE_ID.get().unwrap().clone()),
         ("X-Emby-Version", CLIENT_VERSION.to_string()),
     ]
 }
@@ -240,11 +239,11 @@ impl EmbyClient {
             .post(&url)
             .header("X-Emby-Authorization", format!(
                 "MediaBrowser Client=\"{}\", Device=\"{}\", DeviceId=\"{}\", Version=\"{}\"",
-                CLIENT_NAME, DEVICE_NAME, device_id(), CLIENT_VERSION
+                CLIENT_NAME, DEVICE_NAME, DEVICE_ID.get().unwrap(), CLIENT_VERSION
             ))
             .header("X-Emby-Client", CLIENT_NAME)
             .header("X-Emby-DeviceName", DEVICE_NAME)
-            .header("X-Emby-DeviceId", device_id().to_string())
+            .header("X-Emby-DeviceId", DEVICE_ID.get().unwrap().clone())
             .header("X-Emby-Version", CLIENT_VERSION)
             .json(&body)
             .send()
@@ -666,7 +665,7 @@ impl EmbyClient {
         let mut url = base.join(&path).unwrap();
         {
             let mut q = url.query_pairs_mut();
-            q.append_pair("DeviceId", &device_id());
+            q.append_pair("DeviceId", DEVICE_ID.get().unwrap());
             q.append_pair("MediaSourceId", media_source_id);
             q.append_pair("PlaySessionId", &play_session_id);
             q.append_pair("api_key", &self.token);
