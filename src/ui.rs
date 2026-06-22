@@ -602,14 +602,6 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     // Track info
     render_track_info(f, ps, top[2]);
 
-    // URL
-    let url_text = Paragraph::new(Span::styled(
-        &ps.url,
-        Style::default().fg(Color::DarkGray),
-    )).wrap(Wrap { trim: false });
-    f.render_widget(Clear, top[3]);
-    f.render_widget(url_text, top[3]);
-
     // Resume choice
     if has_resume {
         let ticks = ps.resume_position.unwrap();
@@ -654,6 +646,15 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         f.render_widget(Clear, top[5]);
         f.render_widget(options_widget, top[5]);
     }
+
+    // URL at bottom of top half
+    let url_idx = if has_resume { 6 } else { 3 };
+    let url_text = Paragraph::new(Span::styled(
+        &ps.url,
+        Style::default().fg(Color::DarkGray),
+    )).wrap(Wrap { trim: false });
+    f.render_widget(Clear, top[url_idx]);
+    f.render_widget(url_text, top[url_idx]);
 
     // Bottom half: mpv output panel
     let output_area = halves[1];
