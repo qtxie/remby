@@ -514,6 +514,15 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
             }
         }
 
+        // Check if mpv exited
+        if let Some(ref mut child) = state.mpv_child {
+            if let Ok(Some(_)) = child.try_wait() {
+                state.mpv_child = None;
+                state.playing_state.playing = false;
+                state.status_msg = Some(app::Message::info("mpv closed".to_string()));
+            }
+        }
+
         // Update spinner
         if state.loading {
             state.status_msg = Some(app::Message::Loading(
