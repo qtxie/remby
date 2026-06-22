@@ -343,7 +343,11 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!("{title} ({})", items_source.len())),
+                .title(if state.view == View::Favorites {
+                    title.to_string()
+                } else {
+                    format!("{title} ({})", items_source.len())
+                }),
         )
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
