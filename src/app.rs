@@ -63,6 +63,8 @@ pub struct AppState {
     pub total_favorites: usize,
     pub following_updates: Vec<(String, Vec<MediaItem>)>,
     pub account_manager_state: AccountManagerState,
+    pub wizard_state: WizardState,
+    pub mpv_prompt_state: MpvPromptState,
 }
 
 pub(crate) struct StackEntry {
@@ -120,6 +122,14 @@ pub struct SettingsState {
     pub libraries: Vec<SettingsLibrary>,
     pub selected: usize,
     pub column: SettingsColumn,
+    pub section: SettingsSection,
+    pub mpv_path: String,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum SettingsSection {
+    Libraries,
+    MpvPath,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -149,6 +159,8 @@ impl Default for SettingsState {
             libraries: Vec::new(),
             selected: 0,
             column: SettingsColumn::Enabled,
+            section: SettingsSection::Libraries,
+            mpv_path: String::new(),
         }
     }
 }
@@ -167,6 +179,11 @@ pub enum AccountInputField {
     Server,
     Username,
     Password,
+}
+
+pub enum WizardAction {
+    None,
+    FinishWizard,
 }
 
 pub struct AccountManagerState {
@@ -195,6 +212,52 @@ impl Default for AccountManagerState {
             input_label: String::new(),
             input_field: AccountInputField::Label,
             status_msg: None,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum WizardField {
+    Server,
+    Username,
+    Password,
+    MpvPath,
+}
+
+pub struct WizardState {
+    pub step: WizardField,
+    pub server: String,
+    pub username: String,
+    pub password: String,
+    pub mpv_path: String,
+    pub status_msg: Option<String>,
+}
+
+impl Default for WizardState {
+    fn default() -> Self {
+        Self {
+            step: WizardField::Server,
+            server: String::new(),
+            username: String::new(),
+            password: String::new(),
+            mpv_path: "mpv".to_string(),
+            status_msg: None,
+        }
+    }
+}
+
+pub struct MpvPromptState {
+    pub mpv_path: String,
+    pub url: String,
+    pub resume_position: Option<i64>,
+}
+
+impl Default for MpvPromptState {
+    fn default() -> Self {
+        Self {
+            mpv_path: "mpv".to_string(),
+            url: String::new(),
+            resume_position: None,
         }
     }
 }
@@ -361,6 +424,8 @@ pub enum View {
     ContinueWatching,
     LatestItems,
     AccountManager,
+    Wizard,
+    MpvPrompt,
 }
 
 impl AppState {
@@ -414,6 +479,8 @@ impl AppState {
             total_favorites: 0,
             following_updates: Vec::new(),
             account_manager_state: AccountManagerState::default(),
+            wizard_state: WizardState::default(),
+            mpv_prompt_state: MpvPromptState::default(),
         })
     }
 
@@ -644,6 +711,8 @@ impl AppState {
             View::Playing => self.track_state.item.as_ref(),
             View::Settings => None,
             View::AccountManager => None,
+            View::Wizard => None,
+            View::MpvPrompt => None,
             View::LibraryBrowser => self.library_browser_state.items.get(self.selected),
             View::Favorites => self.favorites.get(self.selected),
         }
@@ -797,6 +866,7 @@ impl AppState {
     }
 
     pub fn open_settings(&mut self) {
+        let mpv = self.config.mpv_path.clone();
         self.settings_state = SettingsState {
             libraries: self.libraries.iter().map(|lib| {
                 SettingsLibrary {
@@ -808,6 +878,8 @@ impl AppState {
             }).collect(),
             selected: 0,
             column: SettingsColumn::Enabled,
+            section: SettingsSection::Libraries,
+            mpv_path: mpv,
         };
         self.navigate_to(View::Settings);
     }
@@ -869,6 +941,8 @@ impl AppState {
             .collect();
         self.config.enabled_libraries = enabled;
         self.config.latest_libraries = latest;
+        let mpv = self.settings_state.mpv_path.trim().to_string();
+        self.config.mpv_path = if mpv.is_empty() { "mpv".to_string() } else { mpv };
         if let Err(e) = crate::config::save_config(&self.config) {
             self.status_msg = Some(Message::error(format!("Save error: {e}")));
         } else {
@@ -884,6 +958,26 @@ impl AppState {
 
     pub fn settings_cancel(&mut self) {
         self.go_back();
+    }
+
+    pub fn settings_switch_section(&mut self) {
+        self.settings_state.section = match self.settings_state.section {
+            SettingsSection::Libraries => SettingsSection::MpvPath,
+            SettingsSection::MpvPath => SettingsSection::Libraries,
+        };
+        self.settings_state.selected = 0;
+    }
+
+    pub fn settings_mpv_input(&mut self, c: char) {
+        if self.settings_state.section == SettingsSection::MpvPath {
+            self.settings_state.mpv_path.push(c);
+        }
+    }
+
+    pub fn settings_mpv_backspace(&mut self) {
+        if self.settings_state.section == SettingsSection::MpvPath {
+            self.settings_state.mpv_path.pop();
+        }
     }
 
     pub fn open_playing(&mut self, item_name: &str, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>) {
@@ -1270,6 +1364,81 @@ impl AppState {
         };
     }
 
+    pub fn open_wizard(&mut self) {
+        self.wizard_state = WizardState::default();
+        self.view = View::Wizard;
+    }
+
+    pub fn wizard_input(&mut self, c: char) {
+        match self.wizard_state.step {
+            WizardField::Server => self.wizard_state.server.push(c),
+            WizardField::Username => self.wizard_state.username.push(c),
+            WizardField::Password => self.wizard_state.password.push(c),
+            WizardField::MpvPath => self.wizard_state.mpv_path.push(c),
+        }
+    }
+
+    pub fn wizard_backspace(&mut self) {
+        match self.wizard_state.step {
+            WizardField::Server => { self.wizard_state.server.pop(); }
+            WizardField::Username => { self.wizard_state.username.pop(); }
+            WizardField::Password => { self.wizard_state.password.pop(); }
+            WizardField::MpvPath => { self.wizard_state.mpv_path.pop(); }
+        }
+    }
+
+    pub fn wizard_next(&mut self) -> WizardAction {
+        match self.wizard_state.step {
+            WizardField::Server => {
+                if self.wizard_state.server.trim().is_empty() {
+                    self.wizard_state.status_msg = Some("Server URL is required".to_string());
+                    return WizardAction::None;
+                }
+                self.wizard_state.step = WizardField::Username;
+                self.wizard_state.status_msg = None;
+                WizardAction::None
+            }
+            WizardField::Username => {
+                if self.wizard_state.username.trim().is_empty() {
+                    self.wizard_state.status_msg = Some("Username is required".to_string());
+                    return WizardAction::None;
+                }
+                self.wizard_state.step = WizardField::Password;
+                self.wizard_state.status_msg = None;
+                WizardAction::None
+            }
+            WizardField::Password => {
+                if self.wizard_state.password.is_empty() {
+                    self.wizard_state.status_msg = Some("Password is required".to_string());
+                    return WizardAction::None;
+                }
+                self.wizard_state.step = WizardField::MpvPath;
+                self.wizard_state.status_msg = None;
+                WizardAction::None
+            }
+            WizardField::MpvPath => {
+                WizardAction::FinishWizard
+            }
+        }
+    }
+
+    pub fn open_mpv_prompt(&mut self, url: &str, _video: &str, _audio: &str, _subtitle: &str, resume: Option<i64>) {
+        self.mpv_prompt_state = MpvPromptState {
+            mpv_path: self.config.mpv_path.clone(),
+            url: url.to_string(),
+            resume_position: resume,
+        };
+        self.view = View::MpvPrompt;
+    }
+
+    pub fn mpv_prompt_input(&mut self, c: char) {
+        self.mpv_prompt_state.mpv_path.push(c);
+    }
+
+    pub fn mpv_prompt_backspace(&mut self) {
+        self.mpv_prompt_state.mpv_path.pop();
+    }
+
     fn current_list_len(&self) -> usize {
         match self.view {
             View::Home => self.following_items_count() + self.home_items.len(),
@@ -1306,6 +1475,8 @@ impl AppState {
                     AccountManagerAction::Delete(_) => 2,
                 }
             }
+            View::Wizard => 0,
+            View::MpvPrompt => 0,
         }
     }
 }

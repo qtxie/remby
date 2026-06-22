@@ -1,7 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
-use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SortOrder, TrackSection, View};
+use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
 
 pub fn render(f: &mut Frame, state: &AppState) {
     let area = f.area();
@@ -32,6 +32,8 @@ pub fn render(f: &mut Frame, state: &AppState) {
         View::LibraryBrowser => render_library_browser(f, state, layout[1]),
         View::ContinueWatching | View::LatestItems => render_home(f, state, layout[1]),
         View::AccountManager => render_account_manager(f, state, layout[1]),
+        View::Wizard => render_wizard(f, state, layout[1]),
+        View::MpvPrompt => render_mpv_prompt(f, state, layout[1]),
     }
 
     render_footer(f, state, layout[2]);
@@ -67,6 +69,8 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
             View::SearchResults => format!("Search: {}", state.search_query),
             View::Favorites => format!("Favorites ({})", state.favorites.len()),
             View::AccountManager => "Account Manager".to_string(),
+            View::Wizard => "Setup Wizard".to_string(),
+            View::MpvPrompt => "Configure MPV Path".to_string(),
             View::TrackSelect => "Select Tracks".to_string(),
             View::SourceSelect => "Select Source".to_string(),
             View::Episodes => format!("{} - Episodes", state.series_name),
@@ -654,12 +658,20 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
 fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
     let ss = &state.settings_state;
 
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    // Libraries section
     let header_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
-    let name_col = 24; // Fixed width for name column
+    let name_col = 24;
 
     let mut items: Vec<ListItem> = Vec::new();
 
-    // Column headers - use same layout as rows
     let enabled_header = if ss.column == SettingsColumn::Enabled { ">Enabled" } else { " Enabled" };
     let latest_header = if ss.column == SettingsColumn::Latest { ">Latest" } else { " Latest" };
     let header_name = format!("{:<width$}", " Library", width = name_col);
@@ -677,7 +689,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
     ])));
 
     for (i, lib) in ss.libraries.iter().enumerate() {
-        let selected = i == ss.selected;
+        let selected = i == ss.selected && ss.section == SettingsSection::Libraries;
         let name_style = if selected {
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
         } else {
@@ -703,7 +715,6 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
             Style::default().fg(Color::DarkGray)
         };
 
-        // Build name with marker, pad to fixed width
         let marker = if selected { ">" } else { " " };
         let name_with_marker = format!("{}{}", marker, lib.name);
         let display_width: usize = name_with_marker.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
@@ -721,11 +732,12 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         ])));
     }
 
+    let lib_border = if ss.section == SettingsSection::Libraries { Color::Cyan } else { Color::DarkGray };
     let list = List::new(items)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
+                .border_style(Style::default().fg(lib_border))
                 .title(Span::styled(
                     " Settings - Library Preferences ",
                     Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
@@ -734,7 +746,21 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         );
 
     f.render_widget(Clear, area);
-    f.render_widget(list, area);
+    f.render_widget(list, layout[0]);
+
+    // MPV path section
+    let mpv_active = ss.section == SettingsSection::MpvPath;
+    let mpv_border = if mpv_active { Color::Cyan } else { Color::DarkGray };
+    let cursor = if mpv_active { "█" } else { "" };
+    let mpv_text = format!("  MPV Path: {}{}", ss.mpv_path, cursor);
+    let mpv_style = if mpv_active {
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+    let mpv_block = Paragraph::new(Span::styled(mpv_text, mpv_style))
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(mpv_border)).title(" MPV "));
+    f.render_widget(mpv_block, layout[1]);
 }
 
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
@@ -757,7 +783,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
                 "Enter: play"
             }
         }
-        View::Settings => "←/→: col | Space: toggle | Shift+↑↓: move | Enter: save",
+        View::Settings => "Tab: section | ←/→: col | Space: toggle | Shift+↑↓: move | Enter: save",
         View::LibraryBrowser => {
             if state.library_browser_state.panel == BrowserPanel::Filter {
                 "←/→: Section | Enter: Apply"
@@ -769,6 +795,8 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
         },
         View::Favorites => "f: follow | z: unfavorite | m: mark watched",
         View::AccountManager => "a: add | e: edit | d: delete | Enter: switch | Esc: back",
+        View::Wizard => "Tab: next field | Enter: continue | Esc: quit",
+        View::MpvPrompt => "Enter: save & play | Esc: cancel",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"
@@ -1280,4 +1308,92 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
             popup,
         );
     }
+}
+
+fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
+    let ws = &state.wizard_state;
+    let fields = [
+        ("Server URL", &ws.server, WizardField::Server),
+        ("Username", &ws.username, WizardField::Username),
+        ("Password", &ws.password, WizardField::Password),
+        ("MPV Path", &ws.mpv_path, WizardField::MpvPath),
+    ];
+    let mut items: Vec<ListItem> = Vec::new();
+    items.push(ListItem::new(Line::from(Span::styled(
+        "  Welcome to remby! Please configure your connection.",
+        Style::default().fg(Color::Yellow),
+    ))));
+    items.push(ListItem::new(Line::from(Span::raw(""))));
+    for (label, value, field) in fields.iter() {
+        let active = ws.step == *field;
+        let marker = if active { "▸ " } else { "  " };
+        let field_style = if active {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        let display_value = if *field == WizardField::Password {
+            "*".repeat(value.len())
+        } else {
+            value.to_string()
+        };
+        let cursor = if active { "█" } else { "" };
+        let hint = if *field == WizardField::MpvPath {
+            "  (Tab to skip)"
+        } else {
+            ""
+        };
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(format!("{}{:<14}", marker, label), field_style),
+            Span::raw(": "),
+            Span::raw(format!("{}{}", display_value, cursor)),
+            Span::styled(hint.to_string(), Style::default().fg(Color::DarkGray)),
+        ])));
+    }
+    if let Some(ref msg) = ws.status_msg {
+        items.push(ListItem::new(Line::from(Span::styled(
+            format!("  {}", msg),
+            Style::default().fg(Color::Red),
+        ))));
+    }
+    items.push(ListItem::new(Line::from(Span::raw(""))));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "  Enter: next | Tab: skip MPV | Esc: quit",
+        Style::default().fg(Color::DarkGray),
+    ))));
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" Setup Wizard "))
+        .highlight_style(Style::default())
+        .highlight_symbol("");
+    let popup = centered_rect(60, 14, area);
+    f.render_widget(Clear, popup);
+    f.render_widget(list, popup);
+}
+
+fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect) {
+    let ms = &state.mpv_prompt_state;
+    let items: Vec<ListItem> = vec![
+        ListItem::new(Line::from(Span::styled(
+            "  MPV path not configured. Please enter the path to mpv:",
+            Style::default().fg(Color::Yellow),
+        ))),
+        ListItem::new(Line::from(Span::raw(""))),
+        ListItem::new(Line::from(vec![
+            Span::styled("  MPV Path: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::raw(&ms.mpv_path),
+            Span::raw("\u{2588}"),
+        ])),
+        ListItem::new(Line::from(Span::raw(""))),
+        ListItem::new(Line::from(Span::styled(
+            "  Enter: save & play | Esc: cancel",
+            Style::default().fg(Color::DarkGray),
+        ))),
+    ];
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" MPV Path "))
+        .highlight_style(Style::default())
+        .highlight_symbol("");
+    let popup = centered_rect(50, 8, area);
+    f.render_widget(Clear, popup);
+    f.render_widget(list, popup);
 }

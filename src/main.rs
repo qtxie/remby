@@ -76,8 +76,8 @@ struct Cli {
     user: Option<String>,
     #[arg(short = 'p', long, env = "EMBY_PASS", hide_env_values = true)]
     pass: Option<String>,
-    #[arg(long, env = "MPV_PATH", default_value = "mpv")]
-    mpv: String,
+    #[arg(long, env = "MPV_PATH")]
+    mpv: Option<String>,
 }
 
 fn update_favorite_in_list(items: &mut [crate::emby::MediaItem], item_id: &str, is_favorite: bool) {
@@ -204,11 +204,48 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     });
 
-    if state.server.is_empty() {
-        state.open_account_manager();
+    // Auto-save CLI args if login succeeded
+    let cli_used = cli.server.is_some() && cli.user.is_some() && cli.pass.is_some();
+    if cli_used && !state.server.is_empty() {
+        let mut accounts_cfg = crate::config::load_accounts();
+        let server = cli.server.clone().unwrap();
+        let username = cli.user.clone().unwrap();
+        let existing = accounts_cfg.accounts.iter().position(|a| a.server == server && a.username == username);
+        let account_id = if let Some(idx) = existing {
+            let id = accounts_cfg.accounts[idx].id.clone();
+            accounts_cfg.accounts[idx].password_enc = crate::crypto::encrypt(&cli.pass.unwrap());
+            id
+        } else {
+            let id = uuid::Uuid::new_v4().to_string();
+            accounts_cfg.accounts.push(crate::config::Account {
+                id: id.clone(),
+                label: format!("{}@{}", username, server),
+                server,
+                username,
+                password_enc: crate::crypto::encrypt(&cli.pass.unwrap()),
+            });
+            id
+        };
+        accounts_cfg.last_account_id = Some(account_id);
+        let _ = crate::config::save_accounts(&accounts_cfg);
+        if let Some(ref mpv_path) = cli.mpv {
+            state.config.mpv_path = mpv_path.clone();
+            let _ = crate::config::save_config(&state.config);
+        }
     }
 
-    let result = run_app(&mut terminal, &mut state, &cli.mpv).await;
+    if state.server.is_empty() {
+        let accounts_cfg = crate::config::load_accounts();
+        let has_config = std::path::Path::new(&dirs::config_dir().unwrap_or_default().join("remby").join("config.json")).exists();
+        let has_accounts = !accounts_cfg.accounts.is_empty();
+        if !has_config && !has_accounts {
+            state.open_wizard();
+        } else {
+            state.open_account_manager();
+        }
+    }
+
+    let result = run_app(&mut terminal, &mut state).await;
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -220,7 +257,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &mut app::AppState, mpv_path: &str) -> Result<()> {
+async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &mut app::AppState) -> Result<()> {
     let mut spin_idx: usize = 0;
     let (bg_tx, mut bg_rx) = mpsc::unbounded_channel::<BackgroundResult>();
 
@@ -336,7 +373,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         state.open_track_select(&detail, source);
                     } else {
                         let url = state.client.stream_url_for_source(&detail, &Default::default());
-                        if let Ok(child) = mpv::play(&url, mpv_path, None, None, None, None) {
+                        if state.config.mpv_path == "mpv" {
+                            state.open_mpv_prompt(&url, "", "", "", None);
+                        } else if let Ok(child) = mpv::play(&url, &state.config.mpv_path, None, None, None, None) {
                             state.mpv_child = Some(child);
                         }
                     }
@@ -349,11 +388,26 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                     state.status_msg = Some(app::Message::error(msg));
                 }
-                BackgroundResult::AccountLoginSuccess(account, client, account_id) => {
+                BackgroundResult::AccountLoginSuccess(account, client, _account_id) => {
                     state.client = client;
                     state.server = account.server.clone();
                     state.config = crate::config::load_config();
                     let mut accounts_cfg = crate::config::load_accounts();
+                    let existing = accounts_cfg.accounts.iter().position(|a| a.server == account.server && a.username == account.username);
+                    let account_id = if let Some(idx) = existing {
+                        accounts_cfg.accounts[idx].password_enc = account.password_enc.clone();
+                        accounts_cfg.accounts[idx].id.clone()
+                    } else {
+                        let id = if account.id.is_empty() { uuid::Uuid::new_v4().to_string() } else { account.id.clone() };
+                        accounts_cfg.accounts.push(crate::config::Account {
+                            id: id.clone(),
+                            label: account.label.clone(),
+                            server: account.server.clone(),
+                            username: account.username.clone(),
+                            password_enc: account.password_enc.clone(),
+                        });
+                        id
+                    };
                     accounts_cfg.last_account_id = Some(account_id);
                     let _ = crate::config::save_accounts(&accounts_cfg);
                     state.libraries.clear();
@@ -476,17 +530,21 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
 
                     match state.view {
                         app::View::Settings => {
+                            let in_mpv = state.settings_state.section == app::SettingsSection::MpvPath;
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => state.settings_cancel(),
-                                KeyCode::Up if key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
-                                KeyCode::Down if key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
-                                KeyCode::Up | KeyCode::Char('k') => state.settings_select_prev(),
-                                KeyCode::Down | KeyCode::Char('j') => state.settings_select_next(),
-                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => state.settings_switch_column(),
-                                KeyCode::Char(' ') => state.settings_toggle(),
-                                KeyCode::Char('K') => state.settings_move_up(),
-                                KeyCode::Char('J') => state.settings_move_down(),
+                                KeyCode::Tab => state.settings_switch_section(),
+                                KeyCode::Char(c) if in_mpv => state.settings_mpv_input(c),
+                                KeyCode::Backspace if in_mpv => state.settings_mpv_backspace(),
+                                KeyCode::Up if !in_mpv && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
+                                KeyCode::Down if !in_mpv && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
+                                KeyCode::Up | KeyCode::Char('k') if !in_mpv => state.settings_select_prev(),
+                                KeyCode::Down | KeyCode::Char('j') if !in_mpv => state.settings_select_next(),
+                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') if !in_mpv => state.settings_switch_column(),
+                                KeyCode::Char(' ') if !in_mpv => state.settings_toggle(),
+                                KeyCode::Char('K') if !in_mpv => state.settings_move_up(),
+                                KeyCode::Char('J') if !in_mpv => state.settings_move_down(),
                                 KeyCode::Enter => {
                                     state.settings_save();
                                     state.loading_msg = "Loading libraries...".to_string();
@@ -593,15 +651,23 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                 }
                                 KeyCode::Enter => {
-                                    let ps = &state.playing_state;
-                                    let start_secs = if ps.resume_position.is_some() && ps.option_selected == 0 {
-                                        ps.resume_position.map(|t| t as f64 / 10_000_000.0)
+                                    let is_default_mpv = state.config.mpv_path == "mpv";
+                                    if is_default_mpv {
+                                        let ps = &state.playing_state;
+                                        let url = ps.url.clone();
+                                        let start = ps.resume_position;
+                                        state.open_mpv_prompt(&url, "", "", "", start);
                                     } else {
-                                        None
-                                    };
-                                    if let Ok(child) = mpv::play(&ps.url, mpv_path, None, None, None, start_secs) {
-                                        state.mpv_child = Some(child);
-                                        state.playing_state.playing = true;
+                                        let ps = &state.playing_state;
+                                        let start_secs = if ps.resume_position.is_some() && ps.option_selected == 0 {
+                                            ps.resume_position.map(|t| t as f64 / 10_000_000.0)
+                                        } else {
+                                            None
+                                        };
+                                        if let Ok(child) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
+                                            state.mpv_child = Some(child);
+                                            state.playing_state.playing = true;
+                                        }
                                     }
                                 }
                                 _ => {}
@@ -989,6 +1055,101 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.library_browser_year_backspace();
                                     }
                                 }
+                                _ => {}
+                            }
+                        }
+                        app::View::Wizard => {
+                            match key.code {
+                                KeyCode::Esc => break,
+                                KeyCode::Tab => {
+                                    if state.wizard_state.step == app::WizardField::MpvPath {
+                                        state.wizard_state.mpv_path = "mpv".to_string();
+                                        let ws = &state.wizard_state;
+                                        let server = ws.server.trim().to_string();
+                                        let username = ws.username.trim().to_string();
+                                        let password = ws.password.clone();
+                                        state.loading = true;
+                                        state.loading_msg = "Connecting...".to_string();
+                                        let tx = bg_tx.clone();
+                                        tokio::spawn(async move {
+                                            match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
+                                                Ok(client) => {
+                                                    let account = crate::config::Account {
+                                                        id: uuid::Uuid::new_v4().to_string(),
+                                                        label: format!("{}@{}", username, server),
+                                                        server,
+                                                        username,
+                                                        password_enc: crate::crypto::encrypt(&password),
+                                                    };
+                                                    let _ = tx.send(BackgroundResult::AccountLoginSuccess(account, client, String::new()));
+                                                }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("Login failed: {}", e))); }
+                                            }
+                                        });
+                                    }
+                                }
+                                KeyCode::Enter => {
+                                    match state.wizard_next() {
+                                        app::WizardAction::None => {}
+                                        app::WizardAction::FinishWizard => {
+                                            let mpv = state.wizard_state.mpv_path.trim().to_string();
+                                            if !mpv.is_empty() && mpv != "mpv" {
+                                                state.config.mpv_path = mpv;
+                                                let _ = crate::config::save_config(&state.config);
+                                            }
+                                            let server = state.wizard_state.server.trim().to_string();
+                                            let username = state.wizard_state.username.trim().to_string();
+                                            let password = state.wizard_state.password.clone();
+                                            state.loading = true;
+                                            state.loading_msg = "Connecting...".to_string();
+                                            let tx = bg_tx.clone();
+                                            tokio::spawn(async move {
+                                                match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
+                                                    Ok(client) => {
+                                                        let account = crate::config::Account {
+                                                            id: uuid::Uuid::new_v4().to_string(),
+                                                            label: format!("{}@{}", username, server),
+                                                            server,
+                                                            username,
+                                                            password_enc: crate::crypto::encrypt(&password),
+                                                        };
+                                                        let _ = tx.send(BackgroundResult::AccountLoginSuccess(account, client, String::new()));
+                                                    }
+                                                    Err(e) => { let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("Login failed: {}", e))); }
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                                KeyCode::Char(c) => state.wizard_input(c),
+                                KeyCode::Backspace => state.wizard_backspace(),
+                                _ => {}
+                            }
+                        }
+                        app::View::MpvPrompt => {
+                            match key.code {
+                                KeyCode::Esc => {
+                                    state.view = app::View::Home;
+                                    state.status_msg = None;
+                                }
+                                KeyCode::Enter => {
+                                    let mpv_path = state.mpv_prompt_state.mpv_path.trim().to_string();
+                                    if mpv_path.is_empty() {
+                                        state.status_msg = Some(app::Message::error("MPV path is required".to_string()));
+                                    } else {
+                                        state.config.mpv_path = mpv_path;
+                                        let _ = crate::config::save_config(&state.config);
+                                        let ps = &state.mpv_prompt_state;
+                                        let start_secs = ps.resume_position.map(|t| t as f64 / 10_000_000.0);
+                                        if let Ok(child) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
+                                            state.mpv_child = Some(child);
+                                        }
+                                        state.view = app::View::Home;
+                                        state.status_msg = Some(app::Message::success("MPV path saved".to_string()));
+                                    }
+                                }
+                                KeyCode::Char(c) => state.mpv_prompt_input(c),
+                                KeyCode::Backspace => state.mpv_prompt_backspace(),
                                 _ => {}
                             }
                         }

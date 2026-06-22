@@ -12,6 +12,12 @@ pub struct RembyConfig {
     pub latest_libraries: Vec<String>,
     #[serde(default)]
     pub following_series: Vec<String>,
+    #[serde(default = "default_mpv_path")]
+    pub mpv_path: String,
+}
+
+fn default_mpv_path() -> String {
+    "mpv".to_string()
 }
 
 impl RembyConfig {
