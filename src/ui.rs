@@ -143,8 +143,23 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
-    let items: Vec<ListItem> = state
-        .home_items
+    // Build combined list: following updates first, then home items
+    let mut combined: Vec<crate::emby::MediaItem> = Vec::new();
+
+    // Following updates section
+    for (series_name, episodes) in &state.following_updates {
+        if !episodes.is_empty() {
+            combined.push(crate::emby::MediaItem::separator(&format!("追剧更新 - {}", series_name)));
+            for ep in episodes.iter().take(5) {
+                combined.push(ep.clone());
+            }
+        }
+    }
+
+    // Home items
+    combined.extend(state.home_items.iter().cloned());
+
+    let items: Vec<ListItem> = combined
         .iter()
         .enumerate()
         .map(|(i, item)| {
@@ -711,7 +726,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
         View::TrackSelect => "←/→: section | ↑/↓: select track | Enter: play | Esc: back",
         View::SourceSelect => "↑↓: select source | Enter: confirm | Esc: back",
         View::Episodes => "↑↓: navigate | Enter: play | e: episodes | ←/BS: back",
-        View::SeriesInfo => "←/→: section | ↑/↓: select | Enter: open | e: episodes | Esc: back",
+        View::SeriesInfo => "←/→: section | ↑/↓: select | Enter: open | f: follow | e: episodes | Esc: back",
         View::Playing => {
             if state.playing_state.playing {
                 "Esc: back to tracks"

@@ -61,6 +61,7 @@ pub struct AppState {
     pub library_browser_state: LibraryBrowserState,
     pub favorites: Vec<MediaItem>,
     pub total_favorites: usize,
+    pub following_updates: Vec<(String, Vec<MediaItem>)>,
 }
 
 pub(crate) struct StackEntry {
@@ -367,6 +368,7 @@ impl AppState {
             library_browser_state: LibraryBrowserState::default(),
             favorites: Vec::new(),
             total_favorites: 0,
+            following_updates: Vec::new(),
         })
     }
 

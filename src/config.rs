@@ -10,6 +10,8 @@ pub struct RembyConfig {
     pub enabled_libraries: Vec<String>,
     #[serde(default)]
     pub latest_libraries: Vec<String>,
+    #[serde(default)]
+    pub following_series: Vec<String>,
 }
 
 impl RembyConfig {

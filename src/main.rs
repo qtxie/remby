@@ -50,6 +50,7 @@ enum BackgroundResult {
     HomeSectionLoaded(Vec<crate::emby::MediaItem>, usize, String),
     MoreHomeItemsLoaded(Vec<crate::emby::MediaItem>),
     HomeLoaded(Vec<crate::emby::MediaItem>),
+    FollowingUpdatesLoaded(Vec<(String, Vec<crate::emby::MediaItem>)>),
     LibrariesLoaded(Vec<crate::emby::Library>, Vec<(String, Vec<crate::emby::MediaItem>)>),
     SettingsLoaded(Vec<crate::emby::Library>),
     SeriesInfoLoaded(app::SeriesState),
@@ -203,6 +204,26 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         });
     }
 
+    // Check following series updates
+    if !state.config.following_series.is_empty() {
+        let tx = bg_tx.clone();
+        let client = state.client.clone();
+        let following = state.config.following_series.clone();
+        tokio::spawn(async move {
+            let mut updates = Vec::new();
+            for series_id in &following {
+                if let Ok(episodes) = client.get_unwatched_episodes(series_id).await {
+                    if !episodes.is_empty() {
+                        if let Ok(name) = client.get_item_name(series_id).await {
+                            updates.push((name, episodes));
+                        }
+                    }
+                }
+            }
+            let _ = tx.send(BackgroundResult::FollowingUpdatesLoaded(updates));
+        });
+    }
+
     loop {
         // Handle background results first
         while let Ok(result) = bg_rx.try_recv() {
@@ -211,6 +232,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.home_items = items;
                     state.loading = false;
                     state.status_msg = None;
+                }
+                BackgroundResult::FollowingUpdatesLoaded(updates) => {
+                    state.following_updates = updates;
                 }
                 BackgroundResult::HomeSectionLoaded(items, total, label) => {
                     let count = items.len();
@@ -590,6 +614,22 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Right | KeyCode::Char('l') => state.series_section_next(),
                                 KeyCode::Up | KeyCode::Char('k') => state.series_select_prev(),
                                 KeyCode::Down | KeyCode::Char('j') => state.series_select_next(),
+                                KeyCode::Char('f') => {
+                                    if let Some(ref series_item) = state.series_state.item {
+                                        let series_id = series_item.id.clone();
+                                        let is_following = state.config.following_series.contains(&series_id);
+                                        if is_following {
+                                            state.config.following_series.retain(|id| id != &series_id);
+                                            state.status_msg = Some(app::Message::info("Removed from following"));
+                                        } else {
+                                            state.config.following_series.push(series_id);
+                                            state.status_msg = Some(app::Message::info("Added to following"));
+                                        }
+                                        if let Err(e) = crate::config::save_config(&state.config) {
+                                            state.status_msg = Some(app::Message::error(format!("Save error: {e}")));
+                                        }
+                                    }
+                                }
                                 KeyCode::Enter => {
                                     match state.series_state.section {
                                         app::SeriesSection::Seasons => {

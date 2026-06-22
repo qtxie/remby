@@ -521,6 +521,35 @@ impl EmbyClient {
         Ok(data.items)
     }
 
+    pub async fn get_unwatched_episodes(&self, series_id: &str) -> Result<Vec<MediaItem>> {
+        let url = self.api_url(&format!("/Shows/{}/Episodes", series_id));
+        let resp = self.authed_get(&url)
+            .query(&[
+                ("UserId", self.user_id.as_str()),
+                ("Fields", "UserData"),
+                ("Recursive", "true"),
+                ("Filters", "IsUnplayed"),
+                ("SortBy", "ParentIndexNumber,IndexNumber"),
+                ("SortOrder", "Ascending"),
+            ])
+            .send()
+            .await
+            .context("Failed to fetch unwatched episodes")?;
+        let data: ItemsResponse = resp.json().await.context("Invalid episodes response")?;
+        Ok(data.items)
+    }
+
+    pub async fn get_item_name(&self, item_id: &str) -> Result<String> {
+        let url = self.api_url(&format!("/Users/{}/Items/{}", self.user_id, item_id));
+        let resp = self.authed_get(&url)
+            .query(&[("Fields", "Name")])
+            .send()
+            .await
+            .context("Failed to fetch item name")?;
+        let item: MediaItem = resp.json().await.context("Invalid item response")?;
+        Ok(item.name)
+    }
+
     pub async fn get_similar(&self, item_id: &str) -> Result<Vec<MediaItem>> {
         let url = self.api_url(&format!("/Items/{}/Similar", item_id));
         let resp = self.authed_get(&url)
