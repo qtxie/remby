@@ -3,6 +3,12 @@ use ratatui::widgets::*;
 
 use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
 
+fn rounded_block() -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+}
+
 pub fn render(f: &mut Frame, state: &AppState) {
     let area = f.area();
 
@@ -116,6 +122,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(Color::Cyan))
         .title(Span::styled(
             format!(" {title} "),
@@ -168,7 +175,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
         .map(|(i, item)| {
             if item.is_separator() {
                 ListItem::new(Line::from(Span::styled(
-                    item.name.clone(),
+                    format!("  {}", item.name),
                     Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD),
@@ -190,16 +197,31 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
                 } else {
                     Style::default()
                 };
-                ListItem::new(Line::from(vec![
+
+                // Progress bar for continue watching items
+                let pos = item.resume_position_ticks().unwrap_or(0);
+                let total = item.runtime_ticks.unwrap_or(0);
+                let bar = if pos > 0 && total > 0 {
+                    let pct = (pos as f64 / total as f64 * 100.0) as u32;
+                    format!(" {}%", pct)
+                } else {
+                    String::new()
+                };
+
+                let mut spans = vec![
                     Span::styled(star, Style::default().fg(Color::Yellow)),
                     Span::styled(format!("{name}{dur}"), style),
-                ]))
+                ];
+                if !bar.is_empty() {
+                    spans.push(Span::styled(bar, Style::default().fg(Color::DarkGray)));
+                }
+                ListItem::new(Line::from(spans))
             }
         })
         .collect();
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title("Home"))
+        .block(rounded_block().title(" Home "))
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
@@ -285,11 +307,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
     }
 
     let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Library"),
-        );
+        .block(rounded_block().title(" Library "));
 
     let mut state_list = ListState::default();
     state_list.select(Some(state.selected));
@@ -349,13 +367,13 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
 
     let list = List::new(items)
         .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(if state.view == View::Favorites {
-                    title.to_string()
+            rounded_block().title(
+                if state.view == View::Favorites {
+                    format!(" {} ", title)
                 } else {
-                    format!("{title} ({})", items_source.len())
-                }),
+                    format!(" {} ({}) ", title, items_source.len())
+                }
+            ),
         )
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
@@ -369,8 +387,7 @@ fn render_source_select(f: &mut Frame, state: &AppState, area: Rect) {
     let ss = &state.source_state;
     let item_name = ss.item.as_ref().map(|i| i.display_name()).unwrap_or_default();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
+    let block = rounded_block()
         .border_style(Style::default().fg(Color::Cyan))
         .title(Span::styled(
             format!(" {item_name} - Select Source "),
@@ -425,11 +442,7 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect) {
         format!("{} - Episodes ({})", state.series_name, state.episodes.len())
     };
     let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(title)
-        )
+        .block(rounded_block().title(title))
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
@@ -462,7 +475,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
         ss.overview.clone()
     };
     let overview = Paragraph::new(overview_text)
-        .block(Block::default().borders(Borders::ALL).title("Overview"))
+        .block(rounded_block().title(" Overview"))
         .wrap(Wrap { trim: true });
     f.render_widget(Clear, layout[0]);
     f.render_widget(overview, layout[0]);
@@ -497,6 +510,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
                     .border_style(Style::default().fg(border_color))
                     .title(Span::styled(
                         format!(" {} ({}) ", label, items.len()),
@@ -668,6 +682,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let title = format!(" mpv output ({} lines) ", output_len);
         let block = Block::default()
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::DarkGray))
             .title(Span::styled(title, Style::default().fg(Color::DarkGray)));
         let paragraph = Paragraph::new(visible).block(block);
@@ -676,6 +691,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     } else {
         let block = Block::default()
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::DarkGray))
             .title(" mpv output ");
         f.render_widget(Clear, output_area);
@@ -765,6 +781,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(lib_border))
                 .title(Span::styled(
                     " Settings - Library Preferences ",
@@ -787,7 +804,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         Style::default()
     };
     let mpv_block = Paragraph::new(Span::styled(mpv_text, mpv_style))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(mpv_border)).title(" MPV "));
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(mpv_border)).title(" MPV "));
     f.render_widget(mpv_block, layout[1]);
 }
 
@@ -881,8 +898,7 @@ fn render_track_select(f: &mut Frame, state: &AppState, area: Rect) {
         ])
         .split(area);
 
-    let title_block = Block::default()
-        .borders(Borders::ALL)
+    let title_block = rounded_block()
         .border_style(Style::default().fg(Color::Cyan))
         .title(Span::styled(
             format!(" {item_name} "),
@@ -929,6 +945,7 @@ fn render_track_section(
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(border_color))
                 .title(Span::styled(
                     format!(" {title} ({}) ", tracks.len()),
@@ -950,7 +967,7 @@ fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect) {
     }).collect();
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(format!(" {} ", bs.library_name)))
+        .block(rounded_block().title(format!(" {} ", bs.library_name)))
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
@@ -999,7 +1016,7 @@ fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
     }).collect();
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Sort By "));
+        .block(rounded_block().title(" Sort By "));
 
     let popup = centered_rect(30, 14, area);
     f.render_widget(Clear, popup);
@@ -1155,7 +1172,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
     }
 
     let list = List::new(items.clone())
-        .block(Block::default().borders(Borders::ALL).title(" Filter "))
+        .block(rounded_block().title(" Filter "))
         .highlight_style(Style::default())
         .highlight_symbol("");
 
@@ -1239,7 +1256,7 @@ fn render_account_list(f: &mut Frame, state: &AppState, area: Rect) {
     ))));
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Account Manager "))
+        .block(rounded_block().title(" Account Manager "))
         .highlight_style(Style::default())
         .highlight_symbol("");
 
@@ -1303,7 +1320,7 @@ fn render_account_form(f: &mut Frame, state: &AppState, area: Rect) {
     ))));
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(format!(" {} ", title)))
+        .block(rounded_block().title(format!(" {} ", title)))
         .highlight_style(Style::default())
         .highlight_symbol("");
 
@@ -1331,7 +1348,7 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
         f.render_widget(Clear, popup);
         f.render_widget(
             Paragraph::new(text)
-                .block(Block::default().borders(Borders::ALL).title(" Confirm "))
+                .block(rounded_block().title(" Confirm "))
                 .alignment(Alignment::Center),
             popup,
         );
@@ -1390,7 +1407,7 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
         Style::default().fg(Color::DarkGray),
     ))));
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Setup Wizard "))
+        .block(rounded_block().title(" Setup Wizard "))
         .highlight_style(Style::default())
         .highlight_symbol("");
     let popup = centered_rect(60, 14, area);
@@ -1418,7 +1435,7 @@ fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect) {
         ))),
     ];
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" MPV Path "))
+        .block(rounded_block().title(" MPV Path "))
         .highlight_style(Style::default())
         .highlight_symbol("");
     let popup = centered_rect(50, 8, area);
