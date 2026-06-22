@@ -551,7 +551,6 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Length(1),
                 Constraint::Length(2),
                 Constraint::Min(1),
             ])
@@ -560,7 +559,6 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
@@ -643,18 +641,9 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             ]),
         ];
         let options_widget = Paragraph::new(options);
-        f.render_widget(Clear, top[5]);
-        f.render_widget(options_widget, top[5]);
+        f.render_widget(Clear, top[4]);
+        f.render_widget(options_widget, top[4]);
     }
-
-    // URL at bottom of top half
-    let url_idx = if has_resume { 6 } else { 3 };
-    let url_text = Paragraph::new(Span::styled(
-        &ps.url,
-        Style::default().fg(Color::DarkGray),
-    )).wrap(Wrap { trim: false });
-    f.render_widget(Clear, top[url_idx]);
-    f.render_widget(url_text, top[url_idx]);
 
     // Bottom half: mpv output panel
     let output_area = halves[1];
@@ -666,15 +655,14 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
 
         let end = state.mpv_output.len().saturating_sub(scroll);
         let start = end.saturating_sub(visible_height);
-        let visible: Vec<Line> = state.mpv_output[start..end].iter().map(|l| {
-            let style = if l.contains("error") || l.contains("Error") || l.contains("ERROR") {
-                Style::default().fg(Color::Red)
-            } else if l.contains("warn") || l.contains("Warn") || l.contains("WARN") {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default()
+        let visible: Vec<Line> = state.mpv_output[start..end].iter().map(|(line, level)| {
+            let style = match level.as_str() {
+                "error" | "fatal" => Style::default().fg(Color::Red),
+                "warn" => Style::default().fg(Color::Yellow),
+                "info" => Style::default().fg(Color::DarkGray),
+                _ => Style::default(),
             };
-            Line::from(Span::styled(l.as_str(), style))
+            Line::from(Span::styled(line.as_str(), style))
         }).collect();
 
         let title = format!(" mpv output ({} lines) ", output_len);

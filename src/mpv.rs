@@ -1,15 +1,29 @@
 use anyhow::{Context, Result};
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 
-pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, subtitle: Option<i32>, start_secs: Option<f64>) -> Result<(Child, mpsc::Receiver<String>)> {
+#[derive(Debug)]
+pub enum MpvEvent {
+    LogLine(String, String),  // (line, level)
+    Position(f64),
+    Duration(f64),
+    PlaybackStarted,
+    PlaybackEnded,
+}
+
+pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, subtitle: Option<i32>, start_secs: Option<f64>) -> Result<(Child, mpsc::Receiver<MpvEvent>)> {
+    let ipc_path = make_ipc_path();
+
     let mut cmd = Command::new(mpv_path);
     cmd.arg(url);
     cmd.arg("--term-osd-bar=no");
     cmd.arg("--term-status-msg=no");
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+    cmd.arg("--no-terminal");
+    cmd.arg(format!("--input-ipc-server={}", ipc_path));
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
 
     if let Some(secs) = start_secs {
         cmd.arg(format!("--start={:.3}", secs));
@@ -24,59 +38,121 @@ pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, s
         cmd.arg(format!("--sid={}", sid + 1));
     }
 
-    let mut child = cmd.spawn()
+    let child = cmd.spawn()
         .context(format!("Failed to launch mpv at '{mpv_path}'. Is mpv installed?"))?;
 
     let (tx, rx) = mpsc::channel();
 
-    if let Some(stdout) = child.stdout.take() {
-        let tx = tx.clone();
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    let cleaned = strip_ansi(&line);
-                    if !cleaned.trim().is_empty() {
-                        if tx.send(cleaned).is_err() { break; }
-                    }
-                }
-            }
-        });
-    }
+    // IPC thread
+    let ipc = ipc_path.clone();
+    std::thread::spawn(move || {
+        for _ in 0..50 {
+            if connect_ipc(&ipc).is_some() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let Some(mut stream) = connect_ipc(&ipc) else { return };
+        let _ = stream.write_all(b"{\"command\":[\"observe_property\",1,\"time-pos\"]}\n");
+        let _ = stream.write_all(b"{\"command\":[\"observe_property\",2,\"duration\"]}\n");
+        let _ = stream.write_all(b"{\"command\":[\"observe_property\",3,\"pause\"]}\n");
+        let _ = stream.write_all(b"{\"command\":[\"request_log_messages\",\"info\"]}\n");
 
-    if let Some(stderr) = child.stderr.take() {
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    let cleaned = strip_ansi(&line);
-                    if !cleaned.trim().is_empty() {
-                        if tx.send(cleaned).is_err() { break; }
+        let mut buf = Vec::new();
+        let mut read_buf = [0u8; 8192];
+        loop {
+            match stream.read(&mut read_buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf.extend_from_slice(&read_buf[..n]);
+                    while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+                        let line = buf[..pos].to_vec();
+                        buf = buf[pos + 1..].to_vec();
+                        if let Ok(msg) = serde_json::from_slice::<serde_json::Value>(&line) {
+                            handle_ipc_message(&msg, &tx);
+                        }
                     }
                 }
+                Err(_) => break,
             }
-        });
-    }
+        }
+        let _ = tx.send(MpvEvent::PlaybackEnded);
+        let _ = std::fs::remove_file(&ipc);
+    });
 
     Ok((child, rx))
 }
 
-fn strip_ansi(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            while let Some(nc) = chars.next() {
-                if nc == 'm' { break; }
+fn handle_ipc_message(msg: &serde_json::Value, tx: &mpsc::Sender<MpvEvent>) {
+    if let Some(event) = msg.get("event").and_then(|v| v.as_str()) {
+        match event {
+            "property-change" => {
+                let name = msg.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let data = msg.get("data");
+                match name {
+                    "time-pos" => {
+                        if let Some(pos) = data.and_then(|v| v.as_f64()) {
+                            let _ = tx.send(MpvEvent::Position(pos));
+                        }
+                    }
+                    "duration" => {
+                        if let Some(dur) = data.and_then(|v| v.as_f64()) {
+                            let _ = tx.send(MpvEvent::Duration(dur));
+                        }
+                    }
+                    _ => {}
+                }
             }
-        } else {
-            result.push(c);
+            "file-loaded" => {
+                let _ = tx.send(MpvEvent::PlaybackStarted);
+            }
+            "log-message" => {
+                let prefix = msg.get("prefix").and_then(|v| v.as_str()).unwrap_or("");
+                let level = msg.get("level").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let text = msg.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                let line = if prefix.is_empty() {
+                    text.trim().to_string()
+                } else {
+                    format!("[{}] {}", prefix, text.trim())
+                };
+                if !line.is_empty() {
+                    let _ = tx.send(MpvEvent::LogLine(line, level));
+                }
+            }
+            _ => {}
         }
     }
-    result
 }
+
+fn make_ipc_path() -> String {
+    if cfg!(target_os = "windows") {
+        format!(r"\\.\pipe\remby-mpv-{}", std::process::id())
+    } else {
+        let tmp = std::env::temp_dir();
+        tmp.join(format!("remby-mpv-{}.sock", std::process::id()))
+            .to_string_lossy()
+            .to_string()
+    }
+}
+
+#[cfg(unix)]
+fn connect_ipc(path: &str) -> Option<Box<dyn ReadWrite>> {
+    std::os::unix::net::UnixStream::connect(path).ok().map(|s| Box::new(s) as Box<dyn ReadWrite>)
+}
+
+#[cfg(windows)]
+fn connect_ipc(path: &str) -> Option<Box<dyn ReadWrite>> {
+    // Windows named pipe - try connecting with retries
+    use std::time::Duration;
+    for _ in 0..10 {
+        match std::fs::OpenOptions::new().read(true).write(true).open(path) {
+            Ok(f) => return Some(Box::new(f)),
+            Err(_) => std::thread::sleep(Duration::from_millis(100)),
+        }
+    }
+    None
+}
+
+trait ReadWrite: Read + Write + Send {}
+impl<T: Read + Write + Send> ReadWrite for T {}
 
 pub fn find_mpv() -> Option<String> {
     if let Some(p) = find_in_path() {
