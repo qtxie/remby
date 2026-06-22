@@ -735,7 +735,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.go_back();
                                     }
                                 }
-                                KeyCode::Char('s') if !has_panel => {
+                                KeyCode::Char('s') if !has_panel && key.modifiers.contains(KeyModifiers::CONTROL) => {
                                     state.library_browser_open_sort_panel();
                                 }
                                 KeyCode::Char('Z') if !has_panel => {
@@ -790,7 +790,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         });
                                     }
                                 }
-                                KeyCode::Char('f') if !has_panel => {
+                                KeyCode::Char('f') if !has_panel && key.modifiers.contains(KeyModifiers::CONTROL) => {
                                     state.library_browser_open_filter_panel();
                                 }
                                 KeyCode::Left | KeyCode::Char('h') if has_panel && state.library_browser_state.panel == app::BrowserPanel::Filter => {
