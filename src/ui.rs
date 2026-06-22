@@ -143,10 +143,8 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
-    // Build combined list: following updates first, then home items
     let mut combined: Vec<crate::emby::MediaItem> = Vec::new();
 
-    // Following updates section
     for (series_name, episodes) in &state.following_updates {
         if !episodes.is_empty() {
             combined.push(crate::emby::MediaItem::separator(&format!("追剧更新 - {}", series_name)));
@@ -156,7 +154,6 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
         }
     }
 
-    // Home items
     combined.extend(state.home_items.iter().cloned());
 
     let items: Vec<ListItem> = combined

@@ -538,7 +538,7 @@ impl AppState {
         let mut count = 0;
         for (_series_name, episodes) in &self.following_updates {
             if !episodes.is_empty() {
-                count += 1; // separator
+                count += 1;
                 count += episodes.len().min(5);
             }
         }
@@ -550,18 +550,13 @@ impl AppState {
             View::Home => {
                 let offset = self.following_items_count();
                 if self.selected < offset {
-                    // In following updates section - need to map back
                     let mut idx = self.selected;
                     for (_name, episodes) in &self.following_updates {
                         if !episodes.is_empty() {
-                            if idx == 0 {
-                                return None; // separator, not selectable
-                            }
+                            if idx == 0 { return None; }
                             idx -= 1;
                             let take = episodes.len().min(5);
-                            if idx < take {
-                                return episodes.get(idx);
-                            }
+                            if idx < take { return episodes.get(idx); }
                             idx -= take;
                         }
                     }
