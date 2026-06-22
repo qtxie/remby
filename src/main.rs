@@ -1402,6 +1402,25 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     spawn_home_load(tx, client);
+                                    // Also refresh following updates
+                                    if !state.config.following_series.is_empty() {
+                                        let tx2 = bg_tx.clone();
+                                        let client2 = state.client.clone();
+                                        let following = state.config.following_series.clone();
+                                        tokio::spawn(async move {
+                                            let mut updates = Vec::new();
+                                            for series_id in &following {
+                                                if let Ok(episodes) = client2.get_unwatched_episodes(series_id).await {
+                                                    if !episodes.is_empty() {
+                                                        if let Ok(name) = client2.get_item_name(series_id).await {
+                                                            updates.push((name, episodes));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            let _ = tx2.send(BackgroundResult::FollowingUpdatesLoaded(updates));
+                                        });
+                                    }
                                 }
                                 _ => {}
                             }
