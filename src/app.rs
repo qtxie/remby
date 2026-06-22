@@ -160,12 +160,14 @@ pub struct SettingsState {
     pub column: SettingsColumn,
     pub section: SettingsSection,
     pub mpv_path: String,
+    pub language: String,
 }
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum SettingsSection {
     Libraries,
     MpvPath,
+    Language,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -200,6 +202,7 @@ impl Default for SettingsState {
             column: SettingsColumn::Enabled,
             section: SettingsSection::Libraries,
             mpv_path: String::new(),
+            language: String::new(),
         }
     }
 }
@@ -257,6 +260,7 @@ impl Default for AccountManagerState {
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum WizardField {
+    Language,
     Server,
     Username,
     Password,
@@ -265,6 +269,7 @@ pub enum WizardField {
 
 pub struct WizardState {
     pub step: WizardField,
+    pub language: String,
     pub server: String,
     pub username: String,
     pub password: String,
@@ -275,7 +280,8 @@ pub struct WizardState {
 impl Default for WizardState {
     fn default() -> Self {
         Self {
-            step: WizardField::Server,
+            step: WizardField::Language,
+            language: crate::i18n::detect_system_lang().to_string(),
             server: String::new(),
             username: String::new(),
             password: String::new(),
@@ -955,6 +961,7 @@ impl AppState {
     // --- Settings ---
     pub fn open_settings(&mut self) {
         let mpv = self.config.mpv_path.clone();
+        let lang = self.config.language.clone();
         self.settings_state = SettingsState {
             libraries: self.libraries.iter().map(|lib| {
                 SettingsLibrary {
@@ -968,6 +975,7 @@ impl AppState {
             column: SettingsColumn::Enabled,
             section: SettingsSection::Libraries,
             mpv_path: mpv,
+            language: lang,
         };
         self.navigate_to(View::Settings);
     }
@@ -1031,6 +1039,8 @@ impl AppState {
         self.config.latest_libraries = latest;
         let mpv = self.settings_state.mpv_path.trim().to_string();
         self.config.mpv_path = if mpv.is_empty() { "mpv".to_string() } else { mpv };
+        self.config.language = self.settings_state.language.clone();
+        crate::i18n::init(&self.config.language);
         if let Err(e) = crate::config::save_config(&self.config) {
             self.status_msg = Some(Message::error(format!("Save error: {e}")));
         } else {
@@ -1051,7 +1061,8 @@ impl AppState {
     pub fn settings_switch_section(&mut self) {
         self.settings_state.section = match self.settings_state.section {
             SettingsSection::Libraries => SettingsSection::MpvPath,
-            SettingsSection::MpvPath => SettingsSection::Libraries,
+            SettingsSection::MpvPath => SettingsSection::Language,
+            SettingsSection::Language => SettingsSection::Libraries,
         };
         self.settings_state.selected = 0;
     }
@@ -1065,6 +1076,16 @@ impl AppState {
     pub fn settings_mpv_backspace(&mut self) {
         if self.settings_state.section == SettingsSection::MpvPath {
             self.settings_state.mpv_path.pop();
+        }
+    }
+
+    pub fn settings_toggle_language(&mut self) {
+        if self.settings_state.section == SettingsSection::Language {
+            self.settings_state.language = if self.settings_state.language == "zh" {
+                "en".to_string()
+            } else {
+                "zh".to_string()
+            };
         }
     }
 
@@ -1482,6 +1503,7 @@ impl AppState {
 
     pub fn wizard_input(&mut self, c: char) {
         match self.wizard_state.step {
+            WizardField::Language => {} // Language uses toggle, not text input
             WizardField::Server => self.wizard_state.server.push(c),
             WizardField::Username => self.wizard_state.username.push(c),
             WizardField::Password => self.wizard_state.password.push(c),
@@ -1491,6 +1513,7 @@ impl AppState {
 
     pub fn wizard_backspace(&mut self) {
         match self.wizard_state.step {
+            WizardField::Language => {}
             WizardField::Server => { self.wizard_state.server.pop(); }
             WizardField::Username => { self.wizard_state.username.pop(); }
             WizardField::Password => { self.wizard_state.password.pop(); }
@@ -1498,11 +1521,26 @@ impl AppState {
         }
     }
 
+    pub fn wizard_toggle_language(&mut self) {
+        self.wizard_state.language = if self.wizard_state.language == "zh" {
+            "en".to_string()
+        } else {
+            "zh".to_string()
+        };
+    }
+
     pub fn wizard_next(&mut self) -> WizardAction {
         match self.wizard_state.step {
+            WizardField::Language => {
+                // Apply language immediately for UI updates
+                crate::i18n::init(&self.wizard_state.language);
+                self.wizard_state.step = WizardField::Server;
+                self.wizard_state.status_msg = None;
+                WizardAction::None
+            }
             WizardField::Server => {
                 if self.wizard_state.server.trim().is_empty() {
-                    self.wizard_state.status_msg = Some("Server URL is required".to_string());
+                    self.wizard_state.status_msg = Some(crate::i18n::t("status.server_required").to_string());
                     return WizardAction::None;
                 }
                 self.wizard_state.step = WizardField::Username;
@@ -1511,7 +1549,7 @@ impl AppState {
             }
             WizardField::Username => {
                 if self.wizard_state.username.trim().is_empty() {
-                    self.wizard_state.status_msg = Some("Username is required".to_string());
+                    self.wizard_state.status_msg = Some(crate::i18n::t("status.username_required").to_string());
                     return WizardAction::None;
                 }
                 self.wizard_state.step = WizardField::Password;
@@ -1520,7 +1558,7 @@ impl AppState {
             }
             WizardField::Password => {
                 if self.wizard_state.password.is_empty() {
-                    self.wizard_state.status_msg = Some("Password is required".to_string());
+                    self.wizard_state.status_msg = Some(crate::i18n::t("status.password_required").to_string());
                     return WizardAction::None;
                 }
                 self.wizard_state.step = WizardField::MpvPath;

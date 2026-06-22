@@ -2,6 +2,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 
 use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
+use crate::i18n::{t, tf};
 
 fn rounded_block() -> Block<'static> {
     Block::default()
@@ -50,11 +51,11 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
         format!("/ {}", state.search_query)
     } else {
         match state.view {
-            View::Home => "Remby".to_string(),
+            View::Home => t("title.home").to_string(),
             View::ContinueWatching | View::LatestItems => {
                 let label = match state.view {
-                    View::ContinueWatching => "Continue Watching",
-                    _ => "Latest",
+                    View::ContinueWatching => t("title.continue_watching"),
+                    _ => t("title.latest"),
                 };
                 let count = if state.total_items > 0 {
                     format!("{} / {}", state.home_items.len(), state.total_items)
@@ -63,7 +64,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
                 };
                 format!("{} [{count}]", label)
             }
-            View::Libraries => "Remby - Libraries".to_string(),
+            View::Libraries => t("title.libraries").to_string(),
             View::Items => {
                 let count = if state.total_items > 0 {
                     format!("{} / {}", state.items.len(), state.total_items)
@@ -72,21 +73,21 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
                 };
                 format!("Remby [{count}]")
             }
-            View::SearchResults => format!("Search: {}", state.search_query),
-            View::Favorites => format!("Favorites ({})", state.favorites.len()),
-            View::AccountManager => "Account Manager".to_string(),
-            View::Wizard => "Setup Wizard".to_string(),
-            View::MpvPrompt => "Configure MPV Path".to_string(),
-            View::TrackSelect => "Select Tracks".to_string(),
-            View::SourceSelect => "Select Source".to_string(),
-            View::Episodes => format!("{} - Episodes", state.series_name),
+            View::SearchResults => format!("{}: {}", t("title.search"), state.search_query),
+            View::Favorites => format!("{} ({})", t("title.favorites"), state.favorites.len()),
+            View::AccountManager => t("title.account_manager").to_string(),
+            View::Wizard => t("title.wizard").to_string(),
+            View::MpvPrompt => t("title.mpv_prompt").to_string(),
+            View::TrackSelect => t("title.track_select").to_string(),
+            View::SourceSelect => t("title.source_select").to_string(),
+            View::Episodes => format!("{} - {}", state.series_name, t("title.episodes")),
             View::SeriesInfo => {
                 state.series_state.item.as_ref()
                     .map(|i| i.name.clone())
                     .unwrap_or_else(|| "Series".to_string())
             }
-            View::Playing => "Playing".to_string(),
-            View::Settings => "Settings".to_string(),
+            View::Playing => t("title.playing").to_string(),
+            View::Settings => t("title.settings").to_string(),
             View::LibraryBrowser => {
                 let bs = &state.library_browser_state;
                 let count = if bs.total > 0 {
@@ -160,7 +161,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
 
     for (series_name, episodes) in &state.following_updates {
         if !episodes.is_empty() {
-            combined.push(crate::emby::MediaItem::separator(&format!("追剧更新 - {}", series_name)));
+            combined.push(crate::emby::MediaItem::separator(&format!("{} - {}", t("item.following_update"), series_name)));
             for ep in episodes.iter().take(5) {
                 combined.push(ep.clone());
             }
@@ -221,7 +222,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
         .collect();
 
     let list = List::new(items)
-        .block(rounded_block().title(" Home "))
+        .block(rounded_block().title(format!(" {} ", t("section.home"))))
         .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
@@ -235,7 +236,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
 
     // Libraries header (not selectable)
     items.push(ListItem::new(Line::from(Span::styled(
-        "  Libraries",
+        format!("  {}", t("section.libraries")),
         Style::default().fg(Color::Cyan),
     ))));
 
@@ -307,7 +308,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
     }
 
     let list = List::new(items)
-        .block(rounded_block().title(" Library "));
+        .block(rounded_block().title(format!(" {} ", t("section.libraries"))));
 
     let mut state_list = ListState::default();
     state_list.select(Some(state.selected));
@@ -322,15 +323,11 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
         _ => &state.items,
     };
     let title = match state.view {
-        View::SearchResults => "Search Results",
+        View::SearchResults => t("title.search"),
         View::Favorites => {
-            let fav_count = state.favorites.iter().filter(|i| i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
-            let follow_count = state.favorites.iter().filter(|i| i.item_type == "Series" && state.config.following_series.contains(&i.id) && !i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
-            if follow_count > 0 {
-                &format!("★ {} | ▶ {}", fav_count, follow_count)
-            } else {
-                "Favorites"
-            }
+            let _fav_count = state.favorites.iter().filter(|i| i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
+            let _follow_count = state.favorites.iter().filter(|i| i.item_type == "Series" && state.config.following_series.contains(&i.id) && !i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
+            t("title.favorites")
         }
         _ => "Items",
     };
@@ -475,7 +472,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
         ss.overview.clone()
     };
     let overview = Paragraph::new(overview_text)
-        .block(rounded_block().title(" Overview"))
+        .block(rounded_block().title(format!(" {}", t("section.overview"))))
         .wrap(Wrap { trim: true });
     f.render_widget(Clear, layout[0]);
     f.render_widget(overview, layout[0]);
@@ -491,9 +488,9 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
         .split(layout[1]);
 
     let tabs = [
-        ("Seasons", &ss.seasons, SeriesSection::Seasons),
-        ("Episodes", &ss.episodes, SeriesSection::Episodes),
-        ("Similar", &ss.similar, SeriesSection::Similar),
+        (t("section.seasons"), &ss.seasons, SeriesSection::Seasons),
+        (t("section.episodes"), &ss.episodes, SeriesSection::Episodes),
+        (t("section.similar"), &ss.similar, SeriesSection::Similar),
     ];
 
     for (i, (label, items, section)) in tabs.iter().enumerate() {
@@ -532,15 +529,15 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
 fn render_track_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
     let track_info = vec![
         Line::from(vec![
-            Span::styled("  Video:  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  {}:  ", t("track.video")), Style::default().fg(Color::DarkGray)),
             Span::raw(&ps.video_track),
         ]),
         Line::from(vec![
-            Span::styled("  Audio:  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  {}:  ", t("track.audio")), Style::default().fg(Color::DarkGray)),
             Span::raw(&ps.audio_track),
         ]),
         Line::from(vec![
-            Span::styled("  Sub:    ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  {}:    ", t("track.sub")), Style::default().fg(Color::DarkGray)),
             Span::raw(&ps.subtitle_track),
         ]),
     ];
@@ -598,14 +595,14 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             .unwrap_or_default()
             .as_millis() / 100) as usize % spinner.len();
         let playing_text = Paragraph::new(Span::styled(
-            format!("{} Playing in mpv...", spinner[idx]),
+            format!("{} {}", spinner[idx], t("playing.in_mpv")),
             Style::default().fg(Color::Cyan),
         )).alignment(Alignment::Center);
         f.render_widget(Clear, top[1]);
         f.render_widget(playing_text, top[1]);
     } else {
         let prompt = Paragraph::new(Span::styled(
-            "Choose playback option:",
+            t("playing.choose_option"),
             Style::default().fg(Color::Yellow),
         )).alignment(Alignment::Center);
         f.render_widget(Clear, top[1]);
@@ -631,7 +628,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
                     Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(
-                    format!("Resume from {}", resume_time),
+                    format!("{} {}", t("playing.resume_from"), resume_time),
                     if ps.option_selected == 0 {
                         Style::default().fg(Color::Cyan)
                     } else {
@@ -646,7 +643,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
                     Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(
-                    "Play from start",
+                    t("playing.play_from_start"),
                     if ps.option_selected == 1 {
                         Style::default().fg(Color::Cyan)
                     } else {
@@ -661,9 +658,8 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     } else {
         // Play button when no resume
         let play_btn = Paragraph::new(Line::from(vec![
-            Span::styled("  \u{25b8} ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled("Play", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled("  (Enter)", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  \u{25b8} {} ", t("playing.play")), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("  {}", t("playing.press_enter")), Style::default().fg(Color::DarkGray)),
         ])).alignment(Alignment::Center);
         f.render_widget(Clear, top[3]);
         f.render_widget(play_btn, top[3]);
@@ -689,7 +685,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             Line::from(Span::styled(line.as_str(), style))
         }).collect();
 
-        let title = format!(" mpv output ({} lines) ", output_len);
+        let title = format!(" {} ({} lines) ", t("section.mpv_output"), output_len);
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -703,7 +699,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::DarkGray))
-            .title(" mpv output ");
+            .title(format!(" {} ", t("section.mpv_output")));
         f.render_widget(Clear, output_area);
         f.render_widget(block, output_area);
     }
@@ -717,6 +713,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         .constraints([
             Constraint::Min(1),
             Constraint::Length(3),
+            Constraint::Length(3),
         ])
         .split(area);
 
@@ -726,9 +723,9 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
     let mut items: Vec<ListItem> = Vec::new();
 
-    let enabled_header = if ss.column == SettingsColumn::Enabled { ">Enabled" } else { " Enabled" };
-    let latest_header = if ss.column == SettingsColumn::Latest { ">Latest" } else { " Latest" };
-    let header_name = format!("{:<width$}", " Library", width = name_col);
+    let enabled_header = if ss.column == SettingsColumn::Enabled { format!(">{}", t("settings.enabled")) } else { format!(" {}", t("settings.enabled")) };
+    let latest_header = if ss.column == SettingsColumn::Latest { format!(">{}", t("settings.latest")) } else { format!(" {}", t("settings.latest")) };
+    let header_name = format!("{:<width$}", format!(" {}", t("settings.library")), width = name_col);
     items.push(ListItem::new(Line::from(vec![
         Span::styled(header_name, header_style),
         Span::styled(
@@ -794,7 +791,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(lib_border))
                 .title(Span::styled(
-                    " Settings - Library Preferences ",
+                    format!(" {} ", t("settings.library_prefs")),
                     Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
                 ))
                 .title_alignment(Alignment::Center),
@@ -807,28 +804,46 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
     let mpv_active = ss.section == SettingsSection::MpvPath;
     let mpv_border = if mpv_active { Color::Cyan } else { Color::DarkGray };
     let cursor = if mpv_active { "█" } else { "" };
-    let mpv_text = format!("  MPV Path: {}{}", ss.mpv_path, cursor);
+    let mpv_text = format!("  {}: {}{}", t("settings.mpv_path"), ss.mpv_path, cursor);
     let mpv_style = if mpv_active {
         Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
     let mpv_block = Paragraph::new(Span::styled(mpv_text, mpv_style))
-        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(mpv_border)).title(" MPV "));
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(mpv_border)).title(format!(" {} ", t("section.mpv"))));
     f.render_widget(mpv_block, layout[1]);
+
+    // Language section
+    let lang_active = ss.section == SettingsSection::Language;
+    let lang_border = if lang_active { Color::Cyan } else { Color::DarkGray };
+    let lang_label = if ss.language == "zh" { "中文" } else { "English" };
+    let lang_text = format!("  Language: {}", lang_label);
+    let lang_style = if lang_active {
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+    let lang_hint = if lang_active { "  (←/→ to switch)" } else { "" };
+    let lang_block = Paragraph::new(Line::from(vec![
+        Span::styled(lang_text, lang_style),
+        Span::styled(lang_hint.to_string(), Style::default().fg(Color::DarkGray)),
+    ]))
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(lang_border)).title(" Language "));
+    f.render_widget(lang_block, layout[2]);
 }
 
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
-        View::Home => "l: libraries | /: search | f: follow | F: favorites | u: accounts | Ctrl+F: refresh | q: quit",
-        View::ContinueWatching | View::LatestItems => "/: search",
+        View::Home => t("footer.home"),
+        View::ContinueWatching | View::LatestItems => t("footer.continue_watching"),
         View::Libraries => "",
-        View::Items => "f: follow | /: search",
-        View::SearchResults => "f: follow",
-        View::TrackSelect => "←/→: section | Enter: play",
-        View::SourceSelect => "Enter: confirm",
-        View::Episodes => "e: episodes",
-        View::SeriesInfo => "←/→: section | Enter: open | f: follow | e: episodes",
+        View::Items => t("footer.items"),
+        View::SearchResults => t("footer.search_results"),
+        View::TrackSelect => t("footer.track_select"),
+        View::SourceSelect => t("footer.source_select"),
+        View::Episodes => t("footer.episodes"),
+        View::SeriesInfo => t("footer.series_info"),
         View::Playing => {
             if state.playing_state.playing {
                 ""
@@ -838,23 +853,23 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
                 "Enter: play"
             }
         }
-        View::Settings => "Tab: section | ←/→: col | Space: toggle | Shift+↑↓: move | Enter: save",
+        View::Settings => t("footer.settings"),
         View::LibraryBrowser => {
             if state.library_browser_state.panel == BrowserPanel::Filter {
-                "←/→: Section | Enter: Apply"
+                t("footer.filter_panel")
             } else if state.library_browser_state.panel != BrowserPanel::None {
-                "Enter: Select"
+                t("footer.sort_panel")
             } else {
-                "Ctrl+s: Sort | Ctrl+f: Filter | /: search | e: info | z: Favorite | Z: Favorites"
+                t("footer.library_browser")
             }
         },
-        View::Favorites => "f: follow | z: unfavorite | m: mark watched",
-        View::AccountManager => "a: add | e: edit | d: delete | Enter: switch | Esc: back",
-        View::Wizard => "Tab: next field | Enter: continue | Esc: quit",
-        View::MpvPrompt => "Enter: save & play | Esc: cancel",
+        View::Favorites => t("footer.favorites"),
+        View::AccountManager => t("footer.account_manager"),
+        View::Wizard => t("footer.wizard"),
+        View::MpvPrompt => t("footer.mpv_prompt"),
     };
     let help = if state.searching {
-        "Enter: search | Esc: cancel"
+        t("footer.search")
     } else {
         help
     };
@@ -927,9 +942,9 @@ fn render_track_select(f: &mut Frame, state: &AppState, area: Rect) {
         ])
         .split(layout[1]);
 
-    render_track_section(f, state, sections_layout[0], "Video", &ts.video_tracks, ts.selected_video, &ts.section, TrackSection::Video);
-    render_track_section(f, state, sections_layout[1], "Audio", &ts.audio_tracks, ts.selected_audio, &ts.section, TrackSection::Audio);
-    render_track_section(f, state, sections_layout[2], "Subtitle", &ts.subtitle_tracks, ts.selected_subtitle, &ts.section, TrackSection::Subtitle);
+    render_track_section(f, state, sections_layout[0], t("section.video"), &ts.video_tracks, ts.selected_video, &ts.section, TrackSection::Video);
+    render_track_section(f, state, sections_layout[1], t("section.audio"), &ts.audio_tracks, ts.selected_audio, &ts.section, TrackSection::Audio);
+    render_track_section(f, state, sections_layout[2], t("section.subtitle"), &ts.subtitle_tracks, ts.selected_subtitle, &ts.section, TrackSection::Subtitle);
 }
 
 fn render_track_section(
@@ -1026,7 +1041,7 @@ fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
     }).collect();
 
     let list = List::new(items)
-        .block(rounded_block().title(" Sort By "));
+        .block(rounded_block().title(format!(" {} ", t("section.sort_by"))));
 
     let popup = centered_rect(30, 14, area);
     f.render_widget(Clear, popup);
@@ -1182,7 +1197,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
     }
 
     let list = List::new(items.clone())
-        .block(rounded_block().title(" Filter "))
+        .block(rounded_block().title(format!(" {} ", t("section.filter"))))
         .highlight_style(Style::default())
         .highlight_symbol("");
 
@@ -1261,12 +1276,12 @@ fn render_account_list(f: &mut Frame, state: &AppState, area: Rect) {
         Style::default().fg(Color::Yellow)
     };
     items.push(ListItem::new(Line::from(Span::styled(
-        format!("{}+ Add new account", add_marker),
+        format!("{}{}", add_marker, t("account.add_new")),
         add_style,
     ))));
 
     let list = List::new(items)
-        .block(rounded_block().title(" Account Manager "))
+        .block(rounded_block().title(format!(" {} ", t("title.account_manager"))))
         .highlight_style(Style::default())
         .highlight_symbol("");
 
@@ -1325,7 +1340,7 @@ fn render_account_form(f: &mut Frame, state: &AppState, area: Rect) {
 
     items.push(ListItem::new(Line::from(Span::raw(""))));
     items.push(ListItem::new(Line::from(Span::styled(
-        "Tab: next field | Enter: save | Esc: cancel",
+        format!("  {}", t("account.form_hint")),
         Style::default().fg(Color::DarkGray),
     ))));
 
@@ -1345,12 +1360,12 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
         let name = ams.accounts.get(*idx).map(|a| a.label.as_str()).unwrap_or("?");
         let text = vec![
             Line::from(Span::styled(
-                format!("Delete account '{}'?", name),
+                tf("account.delete_confirm", name),
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(Span::styled(
-                "y: confirm | n: cancel",
+                t("account.confirm_delete"),
                 Style::default().fg(Color::DarkGray),
             )),
         ];
@@ -1358,7 +1373,7 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
         f.render_widget(Clear, popup);
         f.render_widget(
             Paragraph::new(text)
-                .block(rounded_block().title(" Confirm "))
+                .block(rounded_block().title(format!(" {} ", t("section.confirm"))))
                 .alignment(Alignment::Center),
             popup,
         );
@@ -1367,18 +1382,39 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
     let ws = &state.wizard_state;
-    let fields = [
-        ("Server URL", &ws.server, WizardField::Server),
-        ("Username", &ws.username, WizardField::Username),
-        ("Password", &ws.password, WizardField::Password),
-        ("MPV Path", &ws.mpv_path, WizardField::MpvPath),
-    ];
     let mut items: Vec<ListItem> = Vec::new();
     items.push(ListItem::new(Line::from(Span::styled(
-        "  Welcome to remby! Please configure your connection.",
+        format!("  {}", t("wizard.welcome")),
         Style::default().fg(Color::Yellow),
     ))));
     items.push(ListItem::new(Line::from(Span::raw(""))));
+
+    // Language selection (special: toggle, not text input)
+    {
+        let active = ws.step == WizardField::Language;
+        let marker = if active { "▸ " } else { "  " };
+        let field_style = if active {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        let lang_label = if ws.language == "zh" { "中文" } else { "English" };
+        let toggle_hint = if active { "  (←/→ to switch)" } else { "" };
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(format!("{}{:<14}", marker, "Language"), field_style),
+            Span::raw(": "),
+            Span::styled(lang_label, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(toggle_hint.to_string(), Style::default().fg(Color::DarkGray)),
+        ])));
+    }
+
+    // Text input fields
+    let fields = [
+        (t("wizard.server"), &ws.server, WizardField::Server),
+        (t("wizard.username"), &ws.username, WizardField::Username),
+        (t("wizard.password"), &ws.password, WizardField::Password),
+        (t("wizard.mpv_path"), &ws.mpv_path, WizardField::MpvPath),
+    ];
     for (label, value, field) in fields.iter() {
         let active = ws.step == *field;
         let marker = if active { "▸ " } else { "  " };
@@ -1394,9 +1430,9 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
         };
         let cursor = if active { "█" } else { "" };
         let hint = if *field == WizardField::MpvPath {
-            "  (Tab to skip)"
+            format!("  {}", t("wizard.skip_hint"))
         } else {
-            ""
+            String::new()
         };
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("{}{:<14}", marker, label), field_style),
@@ -1413,11 +1449,11 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
     }
     items.push(ListItem::new(Line::from(Span::raw(""))));
     items.push(ListItem::new(Line::from(Span::styled(
-        "  Enter: next | Tab: skip MPV | Esc: quit",
+        format!("  {}", t("wizard.hint")),
         Style::default().fg(Color::DarkGray),
     ))));
     let list = List::new(items)
-        .block(rounded_block().title(" Setup Wizard "))
+        .block(rounded_block().title(format!(" {} ", t("title.wizard"))))
         .highlight_style(Style::default())
         .highlight_symbol("");
     let popup = centered_rect(60, 14, area);
@@ -1429,23 +1465,23 @@ fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect) {
     let ms = &state.mpv_prompt_state;
     let items: Vec<ListItem> = vec![
         ListItem::new(Line::from(Span::styled(
-            "  MPV path not configured. Please enter the path to mpv:",
+            format!("  {}", t("mpv_prompt.message")),
             Style::default().fg(Color::Yellow),
         ))),
         ListItem::new(Line::from(Span::raw(""))),
         ListItem::new(Line::from(vec![
-            Span::styled("  MPV Path: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("  {}: ", t("settings.mpv_path")), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             Span::raw(&ms.mpv_path),
             Span::raw("\u{2588}"),
         ])),
         ListItem::new(Line::from(Span::raw(""))),
         ListItem::new(Line::from(Span::styled(
-            "  Enter: save & play | Esc: cancel",
+            format!("  {}", t("mpv_prompt.hint")),
             Style::default().fg(Color::DarkGray),
         ))),
     ];
     let list = List::new(items)
-        .block(rounded_block().title(" MPV Path "))
+        .block(rounded_block().title(format!(" {} ", t("title.mpv_prompt"))))
         .highlight_style(Style::default())
         .highlight_symbol("");
     let popup = centered_rect(50, 8, area);

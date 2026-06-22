@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod crypto;
 mod emby;
+mod i18n;
 mod mpv;
 mod ui;
 
@@ -29,13 +30,13 @@ fn spawn_home_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::e
             let mut items = Vec::new();
             if let Ok(resume) = resume_result {
                 if !resume.is_empty() {
-                    items.push(crate::emby::MediaItem::separator("Continue Watching"));
+                    items.push(crate::emby::MediaItem::separator(t("title.continue_watching")));
                     items.extend(resume);
                 }
             }
             if let Ok(latest) = latest_result {
                 if !latest.is_empty() {
-                    items.push(crate::emby::MediaItem::separator("Latest"));
+                    items.push(crate::emby::MediaItem::separator(t("title.latest")));
                     items.extend(latest);
                 }
             }
@@ -95,11 +96,16 @@ fn update_favorite_in_list(items: &mut [crate::emby::MediaItem], item_id: &str, 
 }
 
 use app::BackgroundResult;
+use crate::i18n::{t, tf};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     crate::emby::init_device_id();
+
+    // Initialize i18n
+    let config = crate::config::load_config();
+    crate::i18n::init(&config.language);
 
     // Splash screen
     enable_raw_mode()?;
@@ -249,7 +255,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
 
     // Load home in background
     state.loading = true;
-    state.loading_msg = "Loading home...".to_string();
+    state.loading_msg = t("status.loading_home").to_string();
     {
         let tx = bg_tx.clone();
         let client = state.client.clone();
@@ -411,8 +417,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.view = app::View::Home;
                     state.selected = 0;
                     state.loading = true;
-                    state.loading_msg = "Loading home...".to_string();
-                    state.status_msg = Some(app::Message::success(format!("Logged in as {}", account.username)));
+                    state.loading_msg = t("status.loading_home").to_string();
+                    state.status_msg = Some(app::Message::success(format!("{} {}", t("status.logged_in"), account.username)));
                     let tx = bg_tx.clone();
                     let client = state.client.clone();
                     spawn_home_load(tx, client);
@@ -463,7 +469,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 BackgroundResult::SeriesMarkedWatched(series_id, count) => {
                     state.favorites.retain(|item| item.id != series_id);
                     state.loading = false;
-                    state.status_msg = Some(app::Message::success(format!("Marked {} episodes as watched", count)));
+                    state.status_msg = Some(app::Message::success(tf("status.marked_watched", &count.to_string())));
                 }
                 BackgroundResult::FavoriteToggled(item_id, is_favorite, item_type) => {
                     update_favorite_in_list(&mut state.home_items, &item_id, is_favorite);
@@ -490,7 +496,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         }
                     }
                     state.loading = false;
-                    state.status_msg = Some(app::Message::success(if is_favorite { "Added to favorites" } else { "Removed from favorites" }));
+                    state.status_msg = Some(app::Message::success(if is_favorite { t("status.added_favorites").to_string() } else { t("status.removed_favorites").to_string() }));
                 }
             }
         }
@@ -506,7 +512,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 tokio::spawn(async move {
                     let _ = client.report_playback_stopped(&item_id, &source_id, &session_id, position_ticks).await;
                 });
-                state.status_msg = Some(app::Message::info("mpv closed".to_string()));
+                state.status_msg = Some(app::Message::info(t("status.mpv_closed").to_string()));
             }
         }
 
@@ -562,23 +568,25 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     match state.view {
                         app::View::Settings => {
                             let in_mpv = state.settings_state.section == app::SettingsSection::MpvPath;
+                            let in_lang = state.settings_state.section == app::SettingsSection::Language;
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => state.settings_cancel(),
                                 KeyCode::Tab => state.settings_switch_section(),
                                 KeyCode::Char(c) if in_mpv => state.settings_mpv_input(c),
                                 KeyCode::Backspace if in_mpv => state.settings_mpv_backspace(),
-                                KeyCode::Up if !in_mpv && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
-                                KeyCode::Down if !in_mpv && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
-                                KeyCode::Up | KeyCode::Char('k') if !in_mpv => state.settings_select_prev(),
-                                KeyCode::Down | KeyCode::Char('j') if !in_mpv => state.settings_select_next(),
-                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') if !in_mpv => state.settings_switch_column(),
-                                KeyCode::Char(' ') if !in_mpv => state.settings_toggle(),
-                                KeyCode::Char('K') if !in_mpv => state.settings_move_up(),
-                                KeyCode::Char('J') if !in_mpv => state.settings_move_down(),
+                                KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') | KeyCode::Enter if in_lang => state.settings_toggle_language(),
+                                KeyCode::Up if !in_mpv && !in_lang && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
+                                KeyCode::Down if !in_mpv && !in_lang && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
+                                KeyCode::Up | KeyCode::Char('k') if !in_mpv && !in_lang => state.settings_select_prev(),
+                                KeyCode::Down | KeyCode::Char('j') if !in_mpv && !in_lang => state.settings_select_next(),
+                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') if !in_mpv && !in_lang => state.settings_switch_column(),
+                                KeyCode::Char(' ') if !in_mpv && !in_lang => state.settings_toggle(),
+                                KeyCode::Char('K') if !in_mpv && !in_lang => state.settings_move_up(),
+                                KeyCode::Char('J') if !in_mpv && !in_lang => state.settings_move_down(),
                                 KeyCode::Enter => {
                                     state.settings_save();
-                                    state.loading_msg = "Loading libraries...".to_string();
+                                    state.loading_msg = t("status.loading_libraries").to_string();
                                     let tx = bg_tx.clone();
                                     let client = state.client.clone();
                                     let config = state.config.clone();
@@ -717,7 +725,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let start = ps.resume_position;
                                         state.open_mpv_prompt(&url, "", "", "", start);
                                     } else {
-                                        state.status_msg = Some(app::Message::Loading("⣾".to_string(), "Launching mpv...".to_string()));
+                                        state.status_msg = Some(app::Message::Loading("⣾".to_string(), t("status.launching_mpv").to_string()));
                                         let ps = &state.playing_state;
                                         let start_secs = if ps.resume_position.is_some() && ps.option_selected == 0 {
                                             ps.resume_position.map(|t| t as f64 / 10_000_000.0)
@@ -755,7 +763,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_prev();
                                     if state.should_load_more_episodes() {
                                         state.loading = true;
-                                        state.loading_msg = format!("Loading more episodes for {}...", state.series_name);
+                                        state.loading_msg = tf("status.loading", &state.series_name);
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let series_id = state.episodes_series_id.clone();
@@ -772,7 +780,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_next();
                                     if state.should_load_more_episodes() {
                                         state.loading = true;
-                                        state.loading_msg = format!("Loading more episodes for {}...", state.series_name);
+                                        state.loading_msg = tf("status.loading", &state.series_name);
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let series_id = state.episodes_series_id.clone();
@@ -796,7 +804,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if let Some(item) = state.selected_item().cloned() {
                                         if item.is_video() {
                                             state.loading = true;
-                                            state.loading_msg = format!("Loading {}...", item.display_name());
+                                            state.loading_msg = tf("status.loading", &item.display_name());
                                             spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                         }
                                     }
@@ -834,7 +842,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         app::SeriesSection::Similar => {
                                             if let Some(item) = state.series_selected_item().cloned() {
                                                 state.loading = true;
-                                                state.loading_msg = format!("Loading similar to {}...", item.display_name());
+                                                state.loading_msg = tf("status.loading", &item.display_name());
                                                 spawn_series_info(bg_tx.clone(), state.client.clone(), item);
                                             }
                                         }
@@ -846,7 +854,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let series_id = item.series_id.clone().unwrap_or_else(|| item.id.clone());
                                             let series_name = item.series_name.clone().unwrap_or_default();
                                             state.loading = true;
-                                            state.loading_msg = format!("Loading episodes for {}...", series_name);
+                                            state.loading_msg = tf("status.loading", &series_name);
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             tokio::spawn(async move {
@@ -905,7 +913,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('Z') if !has_panel => {
                                     state.open_favorites();
                                     state.loading = true;
-                                    state.loading_msg = "Loading favorites...".to_string();
+                                    state.loading_msg = t("status.loading_favorites").to_string();
                                     spawn_load_favorites(bg_tx.clone(), state.client.clone(), state.config.following_series.clone());
                                 }
                                 KeyCode::Char('z') if !has_panel => {
@@ -948,7 +956,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('e') if !has_panel => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         state.loading = true;
-                                        state.loading_msg = format!("Loading {}...", item.display_name());
+                                        state.loading_msg = tf("status.loading", &item.display_name());
                                         spawn_series_info(bg_tx.clone(), state.client.clone(), item);
                                     }
                                 }
@@ -1023,11 +1031,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if let Some(item) = state.selected_item().cloned() {
                                             if item.is_video() {
                                                 state.loading = true;
-                                                state.loading_msg = format!("Loading {}...", item.display_name());
+                                                state.loading_msg = tf("status.loading", &item.display_name());
                                                 spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                             } else if item.is_navigable() {
                                                 state.loading = true;
-                                                state.loading_msg = format!("Loading {}...", item.display_name());
+                                                state.loading_msg = tf("status.loading", &item.display_name());
                                                 let tx = bg_tx.clone();
                                                 let client = state.client.clone();
                                                 let item_id = item.id.clone();
@@ -1067,15 +1075,23 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::Wizard => {
                             match key.code {
                                 KeyCode::Esc => break,
+                                KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
+                                    if state.wizard_state.step == app::WizardField::Language {
+                                        state.wizard_toggle_language();
+                                    }
+                                }
                                 KeyCode::Tab => {
-                                    if state.wizard_state.step == app::WizardField::MpvPath {
+                                    if state.wizard_state.step == app::WizardField::Language {
+                                        // Tab on language = go to next step
+                                        state.wizard_next();
+                                    } else if state.wizard_state.step == app::WizardField::MpvPath {
                                         state.wizard_state.mpv_path = "mpv".to_string();
                                         let ws = &state.wizard_state;
                                         let server = ws.server.trim().to_string();
                                         let username = ws.username.trim().to_string();
                                         let password = ws.password.clone();
                                         state.loading = true;
-                                        state.loading_msg = "Connecting...".to_string();
+                                        state.loading_msg = t("status.connecting").to_string();
                                         let tx = bg_tx.clone();
                                         tokio::spawn(async move {
                                             match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
@@ -1089,7 +1105,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                     };
                                                     let _ = tx.send(BackgroundResult::AccountLoginSuccess(account, client, String::new()));
                                                 }
-                                                Err(e) => { let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("Login failed: {}", e))); }
+                                                Err(e) => { let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("{}: {}", t("status.login_failed"), e))); }
                                             }
                                         });
                                     }
@@ -1099,15 +1115,17 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         app::WizardAction::None => {}
                                         app::WizardAction::FinishWizard => {
                                             let mpv = state.wizard_state.mpv_path.trim().to_string();
+                                            let lang = state.wizard_state.language.clone();
+                                            state.config.language = lang;
                                             if !mpv.is_empty() && mpv != "mpv" {
                                                 state.config.mpv_path = mpv;
-                                                let _ = crate::config::save_config(&state.config);
                                             }
+                                            let _ = crate::config::save_config(&state.config);
                                             let server = state.wizard_state.server.trim().to_string();
                                             let username = state.wizard_state.username.trim().to_string();
                                             let password = state.wizard_state.password.clone();
                                             state.loading = true;
-                                            state.loading_msg = "Connecting...".to_string();
+                                            state.loading_msg = t("status.connecting").to_string();
                                             let tx = bg_tx.clone();
                                             tokio::spawn(async move {
                                                 match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
@@ -1121,7 +1139,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                         };
                                                         let _ = tx.send(BackgroundResult::AccountLoginSuccess(account, client, String::new()));
                                                     }
-                                                    Err(e) => { let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("Login failed: {}", e))); }
+                                                    Err(e) => { let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("{}: {}", t("status.login_failed"), e))); }
                                                 }
                                             });
                                         }
@@ -1222,7 +1240,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
 
                                             state.account_manager_state.accounts = accounts;
                                             state.account_manager_state.action = app::AccountManagerAction::View;
-                                            state.account_manager_state.status_msg = Some("Account saved".to_string());
+                                            state.account_manager_state.status_msg = Some(t("status.account_saved").to_string());
                                         }
                                     }
                                     _ => {}
@@ -1242,7 +1260,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         };
                                         let _ = crate::config::save_accounts(&accounts_cfg);
                                         state.account_manager_state.action = app::AccountManagerAction::View;
-                                        state.account_manager_state.status_msg = Some("Account deleted".to_string());
+                                        state.account_manager_state.status_msg = Some(t("status.account_deleted").to_string());
                                     }
                                     _ => {}
                                 }
@@ -1379,7 +1397,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_prev();
                                     if state.should_load_more_items() {
                                         state.loading = true;
-                                        state.loading_msg = "Loading more items...".to_string();
+                                        state.loading_msg = t("status.loading_items").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let folder_id = state.current_folder_id.clone();
@@ -1392,7 +1410,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         });
                                     } else if state.should_load_more_home_items() {
                                         state.loading = true;
-                                        state.loading_msg = "Loading more...".to_string();
+                                        state.loading_msg = t("status.loading").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let start = state.home_items.len();
@@ -1415,7 +1433,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.select_next();
                                     if state.should_load_more_items() {
                                         state.loading = true;
-                                        state.loading_msg = "Loading more items...".to_string();
+                                        state.loading_msg = t("status.loading_items").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let folder_id = state.current_folder_id.clone();
@@ -1428,7 +1446,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         });
                                     } else if state.should_load_more_home_items() {
                                         state.loading = true;
-                                        state.loading_msg = "Loading more...".to_string();
+                                        state.loading_msg = t("status.loading").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let start = state.home_items.len();
@@ -1455,7 +1473,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.page_down();
                                     if state.should_load_more_items() {
                                         state.loading = true;
-                                        state.loading_msg = "Loading more items...".to_string();
+                                        state.loading_msg = t("status.loading_items").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let folder_id = state.current_folder_id.clone();
@@ -1497,7 +1515,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if state.searching { continue; }
                                     state.show_libraries().await;
                                     if !state.is_libraries_cache_valid() || !state.is_latest_cache_valid() {
-                                        state.loading_msg = "Loading libraries...".to_string();
+                                        state.loading_msg = t("status.loading_libraries").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let config = state.config.clone();
@@ -1537,17 +1555,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Enter => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         if item.is_separator() {
-                                            let section = if item.name.contains("Continue Watching") {
+                                            let cw_label = t("title.continue_watching");
+                                            let latest_label = t("title.latest");
+                                            let section = if item.name.contains(cw_label) {
                                                 "continue_watching"
-                                            } else if item.name.contains("Latest") {
+                                            } else if item.name.contains(latest_label) {
                                                 "latest"
                                             } else {
                                                 continue;
                                             };
                                             let label = if section == "continue_watching" {
-                                                "Continue Watching".to_string()
+                                                cw_label.to_string()
                                             } else {
-                                                "Latest".to_string()
+                                                latest_label.to_string()
                                             };
                                             if section == "continue_watching" {
                                                 state.open_continue_watching();
@@ -1555,7 +1575,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 state.open_latest_items();
                                             }
                                             state.loading = true;
-                                            state.loading_msg = format!("Loading {}...", label);
+                                            state.loading_msg = tf("status.loading", &label);
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let section = section.to_string();
@@ -1576,11 +1596,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                         if item.is_video() {
                                             state.loading = true;
-                                            state.loading_msg = format!("Loading {}...", item.display_name());
+                                            state.loading_msg = tf("status.loading", &item.display_name());
                                             spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                         } else if item.is_navigable() {
                                             state.loading = true;
-                                            state.loading_msg = format!("Loading {}...", item.display_name());
+                                            state.loading_msg = tf("status.loading", &item.display_name());
                                             let tx = bg_tx.clone();
                                             let client = state.client.clone();
                                             let item_id = item.id.clone();
@@ -1605,13 +1625,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         } else if !item.is_separator() && !item.id.is_empty() {
                                             // Fallback: try loading as item detail
                                             state.loading = true;
-                                            state.loading_msg = format!("Loading {}...", item.display_name());
+                                            state.loading_msg = tf("status.loading", &item.display_name());
                                             spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                         }
                                     } else if let Some(lib) = state.selected_library().cloned() {
                                         state.open_library_browser(lib.id.clone(), lib.name.clone());
                                         state.loading = true;
-                                        state.loading_msg = format!("Loading {}...", lib.name);
+                                        state.loading_msg = tf("status.loading", &lib.name);
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         let library_id = lib.id.clone();
@@ -1660,14 +1680,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if state.searching { continue; }
                                     state.open_favorites();
                                     state.loading = true;
-                                    state.loading_msg = "Loading favorites...".to_string();
+                                    state.loading_msg = t("status.loading_favorites").to_string();
                                     spawn_load_favorites(bg_tx.clone(), state.client.clone(), state.config.following_series.clone());
                                 }
                                 KeyCode::Char('s') => {
                                     if state.searching { continue; }
                                     if state.libraries.is_empty() {
                                         state.loading = true;
-                                        state.loading_msg = "Loading libraries...".to_string();
+                                        state.loading_msg = t("status.loading_libraries").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
@@ -1686,7 +1706,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if state.searching { continue; }
                                     if let Some(item) = state.selected_item().cloned() {
                                         state.loading = true;
-                                        state.loading_msg = format!("Loading {}...", item.display_name());
+                                        state.loading_msg = tf("status.loading", &item.display_name());
                                         spawn_series_info(bg_tx.clone(), state.client.clone(), item);
                                     }
                                 }

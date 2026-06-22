@@ -14,10 +14,16 @@ pub struct RembyConfig {
     pub following_series: Vec<String>,
     #[serde(default = "default_mpv_path")]
     pub mpv_path: String,
+    #[serde(default = "default_language")]
+    pub language: String,
 }
 
 fn default_mpv_path() -> String {
     "mpv".to_string()
+}
+
+fn default_language() -> String {
+    crate::i18n::detect_system_lang().to_string()
 }
 
 impl RembyConfig {
