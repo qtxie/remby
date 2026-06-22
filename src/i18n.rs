@@ -195,7 +195,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     // View titles
     "title.home" => "Remby",
     "title.libraries" => "Remby - 媒体库",
-    "title.favorites" => "收藏",
+    "title.favorites" => "收藏夹",
     "title.playing" => "播放",
     "title.settings" => "设置",
     "title.search" => "搜索",
@@ -270,7 +270,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "playing.press_enter" => "(回车)",
 
     // Footer hints
-    "footer.home" => "l: 媒体库 | /: 搜索 | f: 追剧 | F: 收藏 | u: 账户 | Ctrl+F: 刷新 | q: 退出",
+    "footer.home" => "l: 媒体库 | /: 搜索 | f: 追剧 | F: 收藏夹 | u: 账户 | Ctrl+F: 刷新 | q: 退出",
     "footer.continue_watching" => "/: 搜索",
     "footer.items" => "f: 追剧 | /: 搜索",
     "footer.search_results" => "f: 追剧",
@@ -279,7 +279,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "footer.episodes" => "e: 剧集",
     "footer.series_info" => "←/→: 分区 | 回车: 打开 | f: 追剧 | e: 剧集",
     "footer.settings" => "Tab: 分区 | ←/→: 列 | 空格: 切换 | Shift+↑↓: 移动 | 回车: 保存",
-    "footer.library_browser" => "Ctrl+s: 排序 | Ctrl+f: 筛选 | /: 搜索 | e: 信息 | z: 收藏 | Z: 收藏列表",
+    "footer.library_browser" => "Ctrl+s: 排序 | Ctrl+f: 筛选 | /: 搜索 | e: 信息 | z: 收藏 | Z: 收藏夹",
     "footer.favorites" => "f: 追剧 | z: 取消收藏 | m: 标记已看",
     "footer.account_manager" => "a: 添加 | e: 编辑 | d: 删除 | 回车: 切换 | Esc: 返回",
     "footer.wizard" => "Tab: 下一项 | 回车: 继续 | Esc: 退出",

@@ -164,7 +164,7 @@ async fn main() -> Result<()> {
             let frame = SPINNER[i % SPINNER.len()];
             f.render_widget(
                 Paragraph::new(Span::styled(
-                    format!("{} Connecting to server...", frame),
+                    format!("{} {}", frame, t("status.connecting")),
                     Style::default().fg(Color::Yellow),
                 ))
                 .alignment(Alignment::Center),
@@ -575,7 +575,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Tab => state.settings_switch_section(),
                                 KeyCode::Char(c) if in_mpv => state.settings_mpv_input(c),
                                 KeyCode::Backspace if in_mpv => state.settings_mpv_backspace(),
-                                KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') | KeyCode::Enter if in_lang => state.settings_toggle_language(),
+                                KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') if in_lang => state.settings_toggle_language(),
                                 KeyCode::Up if !in_mpv && !in_lang && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
                                 KeyCode::Down if !in_mpv && !in_lang && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
                                 KeyCode::Up | KeyCode::Char('k') if !in_mpv && !in_lang => state.settings_select_prev(),
