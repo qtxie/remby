@@ -109,6 +109,7 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 
 | Key | Action |
 |-----|--------|
+| `↑`/`↓` or `k`/`j` | Navigate items |
 | `Enter` | Select / Toggle filter |
 | `←`/`→` | Switch section (Genre/Tag/Studio/Year/Folder) |
 | `Esc` | Cancel without applying |
@@ -117,6 +118,7 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 
 | Key | Action |
 |-----|--------|
+| `↑`/`↓` or `k`/`j` | Navigate options |
 | `Enter` | Select sort order |
 | `Esc` | Cancel |
 
@@ -124,6 +126,7 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 
 | Key | Action |
 |-----|--------|
+| `↑`/`↓` or `k`/`j` | Navigate items |
 | `f` | Follow/unfollow series |
 | `z` | Toggle favorite |
 | `m` | Mark all episodes as watched |
@@ -221,6 +224,7 @@ remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 
 | 按键 | 功能 |
 |------|------|
+| `↑`/`↓` 或 `k`/`j` | 导航选项 |
 | `Enter` | 选择 / 切换筛选 |
 | `←`/`→` | 切换分类（类型/标签/制片厂/年份/文件夹） |
 | `Esc` | 取消不应用 |
@@ -229,6 +233,7 @@ remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 
 | 按键 | 功能 |
 |------|------|
+| `↑`/`↓` 或 `k`/`j` | 导航选项 |
 | `Enter` | 选择排序方式 |
 | `Esc` | 取消 |
 
@@ -236,6 +241,7 @@ remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 
 | 按键 | 功能 |
 |------|------|
+| `↑`/`↓` 或 `k`/`j` | 导航选项 |
 | `f` | 追剧/取消追剧 |
 | `z` | 切换收藏 |
 | `m` | 标记所有剧集为已看 |
