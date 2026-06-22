@@ -371,11 +371,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = Some(app::Message::info(format!("{} / {} favorites", state.favorites.len(), total)));
                 }
                 BackgroundResult::SeriesMarkedWatched(series_id, count) => {
-                    state.config.following_series.retain(|id| id != &series_id);
-                    let _ = crate::config::save_config(&state.config);
                     state.favorites.retain(|item| item.id != series_id);
                     state.loading = false;
-                    state.status_msg = Some(app::Message::success(format!("Marked {} episodes as watched, removed from following", count)));
+                    state.status_msg = Some(app::Message::success(format!("Marked {} episodes as watched", count)));
                 }
                 BackgroundResult::FavoriteToggled(item_id, is_favorite, item_type) => {
                     update_favorite_in_list(&mut state.home_items, &item_id, is_favorite);
