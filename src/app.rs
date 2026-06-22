@@ -6,6 +6,31 @@ use crate::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
 
 const CACHE_TTL_SECS: u64 = 300; // 5 minutes
 
+pub enum BackgroundResult {
+    HomeSectionLoaded(Vec<MediaItem>, usize, String),
+    MoreHomeItemsLoaded(Vec<MediaItem>),
+    HomeLoaded(Vec<MediaItem>),
+    FollowingUpdatesLoaded(Vec<(String, Vec<MediaItem>)>),
+    LibrariesLoaded(Vec<Library>, Vec<(String, Vec<MediaItem>)>),
+    SettingsLoaded(Vec<Library>),
+    SeriesInfoLoaded(SeriesState),
+    EpisodesLoaded(String, Vec<MediaItem>, usize, String),
+    MoreEpisodesLoaded(Vec<MediaItem>),
+    FolderLoaded(Vec<MediaItem>, String, usize),
+    MoreItemsLoaded(Vec<MediaItem>, String),
+    SearchLoaded(Vec<MediaItem>),
+    ItemDetailLoaded(MediaItem),
+    LibraryBrowserLoaded(Vec<MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<MediaItem>),
+    MoreLibraryBrowserLoaded(Vec<MediaItem>, String),
+    FavoritesLoaded(Vec<MediaItem>, usize),
+    SeriesMarkedWatched(String, usize),
+    FavoriteToggled(String, bool, String),
+    AccountLoginSuccess(crate::config::Account, EmbyClient, String),
+    AccountLoginFailed(String),
+    Error(String),
+    Timeout(String),
+}
+
 pub enum Message {
     Info(String),
     Success(String),
@@ -63,6 +88,7 @@ pub struct AppState {
     pub mpv_duration: f64,
     pub play_session_id: String,
     pub playback_started_at: Option<std::time::Instant>,
+    pub bg_tx: Option<tokio::sync::mpsc::UnboundedSender<BackgroundResult>>,
     pub settings_state: SettingsState,
     pub config: RembyConfig,
     pub library_browser_state: LibraryBrowserState,
@@ -492,6 +518,7 @@ impl AppState {
             mpv_duration: 0.0,
             play_session_id: String::new(),
             playback_started_at: None,
+            bg_tx: None,
             settings_state: SettingsState::default(),
             config,
             library_browser_state: LibraryBrowserState::default(),
@@ -504,6 +531,7 @@ impl AppState {
         })
     }
 
+    // --- Series Navigation ---
     pub fn open_source_select(&mut self, item: &MediaItem, sources: Vec<MediaSource>) {
         self.source_state = SourceState {
             item: Some(item.clone()),
@@ -603,6 +631,7 @@ impl AppState {
         self.source_state.sources.get(self.selected)
     }
 
+    // --- Navigation ---
     pub fn navigate_to(&mut self, view: View) {
         self.stack.push(StackEntry {
             items: self.items.clone(),
@@ -677,6 +706,7 @@ impl AppState {
         count
     }
 
+    // --- Selection ---
     pub fn selected_item(&self) -> Option<&MediaItem> {
         match self.view {
             View::Home => {
@@ -788,6 +818,7 @@ impl AppState {
         }
     }
 
+    // --- Search ---
     pub fn start_search(&mut self, context: SearchContext) {
         self.searching = true;
         self.search_context = context;
@@ -879,6 +910,7 @@ impl AppState {
         }
     }
 
+    // --- MPV Playback ---
     pub fn kill_mpv(&mut self) {
         if let Some(mut child) = self.mpv_child.take() {
             #[cfg(target_os = "windows")]
@@ -920,6 +952,7 @@ impl AppState {
         position_ticks
     }
 
+    // --- Settings ---
     pub fn open_settings(&mut self) {
         let mpv = self.config.mpv_path.clone();
         self.settings_state = SettingsState {
@@ -1053,6 +1086,7 @@ impl AppState {
         self.navigate_to(View::Playing);
     }
 
+    // --- Library Browser ---
     pub fn open_library_browser(&mut self, library_id: String, library_name: String) {
         self.library_browser_state = LibraryBrowserState {
             library_id,
@@ -1354,6 +1388,7 @@ impl AppState {
         self.navigate_to(View::LatestItems);
     }
 
+    // --- Account Manager ---
     pub fn open_account_manager(&mut self) {
         let accounts_cfg = crate::config::load_accounts();
         self.account_manager_state = AccountManagerState {
@@ -1423,6 +1458,7 @@ impl AppState {
         };
     }
 
+    // --- Wizard ---
     pub fn open_wizard(&mut self) {
         let mpv = crate::mpv::find_mpv().unwrap_or_else(|| "mpv".to_string());
         self.wizard_state = WizardState {
@@ -1485,6 +1521,7 @@ impl AppState {
         }
     }
 
+    // --- MPV Prompt ---
     pub fn open_mpv_prompt(&mut self, url: &str, _video: &str, _audio: &str, _subtitle: &str, resume: Option<i64>) {
         self.mpv_prompt_state = MpvPromptState {
             mpv_path: self.config.mpv_path.clone(),

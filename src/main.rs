@@ -94,30 +94,7 @@ fn update_favorite_in_list(items: &mut [crate::emby::MediaItem], item_id: &str, 
     }
 }
 
-enum BackgroundResult {
-    HomeSectionLoaded(Vec<crate::emby::MediaItem>, usize, String),
-    MoreHomeItemsLoaded(Vec<crate::emby::MediaItem>),
-    HomeLoaded(Vec<crate::emby::MediaItem>),
-    FollowingUpdatesLoaded(Vec<(String, Vec<crate::emby::MediaItem>)>),
-    LibrariesLoaded(Vec<crate::emby::Library>, Vec<(String, Vec<crate::emby::MediaItem>)>),
-    SettingsLoaded(Vec<crate::emby::Library>),
-    SeriesInfoLoaded(app::SeriesState),
-    EpisodesLoaded(String, Vec<crate::emby::MediaItem>, usize, String),
-    MoreEpisodesLoaded(Vec<crate::emby::MediaItem>),
-    FolderLoaded(Vec<crate::emby::MediaItem>, String, usize),
-    MoreItemsLoaded(Vec<crate::emby::MediaItem>, String),
-    SearchLoaded(Vec<crate::emby::MediaItem>),
-    ItemDetailLoaded(crate::emby::MediaItem),
-    LibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<crate::emby::MediaItem>),
-    MoreLibraryBrowserLoaded(Vec<crate::emby::MediaItem>, String),
-    FavoritesLoaded(Vec<crate::emby::MediaItem>, usize),
-    SeriesMarkedWatched(String, usize),
-    FavoriteToggled(String, bool, String),
-    AccountLoginSuccess(crate::config::Account, crate::emby::EmbyClient, String),
-    AccountLoginFailed(String),
-    Error(String),
-    Timeout(String),
-}
+use app::BackgroundResult;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -268,6 +245,7 @@ async fn main() -> Result<()> {
 async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &mut app::AppState) -> Result<()> {
     let mut spin_idx: usize = 0;
     let (bg_tx, mut bg_rx) = mpsc::unbounded_channel::<BackgroundResult>();
+    state.bg_tx = Some(bg_tx.clone());
 
     // Load home in background
     state.loading = true;
@@ -810,29 +788,16 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('e') => {
                                     // Show series info for current series
                                     let series_id = state.episodes_series_id.clone();
-                                    let tx = bg_tx.clone();
-                                    let client = state.client.clone();
-                                    tokio::spawn(async move {
-                                        let mut item = crate::emby::MediaItem::separator("");
-                                        item.id = series_id;
-                                        let result = build_series_state(&client, &item).await;
-                                        let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
-                                    });
+                                    let mut series_item = crate::emby::MediaItem::separator("");
+                                    series_item.id = series_id;
+                                    spawn_series_info(bg_tx.clone(), state.client.clone(), series_item);
                                 }
                                 KeyCode::Enter => {
                                     if let Some(item) = state.selected_item().cloned() {
                                         if item.is_video() {
                                             state.loading = true;
                                             state.loading_msg = format!("Loading {}...", item.display_name());
-                                            let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let item_id = item.id.clone();
-                                            tokio::spawn(async move {
-                                                match client.get_item_detail(&item_id).await {
-                                                    Ok(detail) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
-                                                    Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load item: {}", e))); }
-                                                }
-                                            });
+                                            spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                         }
                                     }
                                 }
@@ -862,16 +827,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             if let Some(item) = state.series_selected_item().cloned() {
                                                 if item.is_video() {
                                                     state.loading = true;
-                                                    let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let item_id = item.id.clone();
-                                            tokio::spawn(async move {
-                                                let timeout = std::time::Duration::from_secs(60);
-                                                match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
-                                                    Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
-                                                    _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
-                                                }
-                                            });
+                                                    spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                                 }
                                             }
                                         }
@@ -879,13 +835,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             if let Some(item) = state.series_selected_item().cloned() {
                                                 state.loading = true;
                                                 state.loading_msg = format!("Loading similar to {}...", item.display_name());
-                                                let tx = bg_tx.clone();
-                                                let client = state.client.clone();
-                                                let item_clone = item.clone();
-                                                tokio::spawn(async move {
-                                                    let result = build_series_state(&client, &item_clone).await;
-                                                    let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
-                                                });
+                                                spawn_series_info(bg_tx.clone(), state.client.clone(), item);
                                             }
                                         }
                                     }
@@ -999,12 +949,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if let Some(item) = state.selected_item().cloned() {
                                         state.loading = true;
                                         state.loading_msg = format!("Loading {}...", item.display_name());
-                                        let tx = bg_tx.clone();
-                                        let client = state.client.clone();
-                                        tokio::spawn(async move {
-                                            let result = build_series_state(&client, &item).await;
-                                            let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
-                                        });
+                                        spawn_series_info(bg_tx.clone(), state.client.clone(), item);
                                     }
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
@@ -1079,16 +1024,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             if item.is_video() {
                                                 state.loading = true;
                                                 state.loading_msg = format!("Loading {}...", item.display_name());
-                                                let tx = bg_tx.clone();
-                                                let client = state.client.clone();
-                                                let item_id = item.id.clone();
-                                                tokio::spawn(async move {
-                                                    let timeout = std::time::Duration::from_secs(60);
-                                                    match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
-                                                        Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
-                                                        _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
-                                                    }
-                                                });
+                                                spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                             } else if item.is_navigable() {
                                                 state.loading = true;
                                                 state.loading_msg = format!("Loading {}...", item.display_name());
@@ -1641,16 +1577,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if item.is_video() {
                                             state.loading = true;
                                             state.loading_msg = format!("Loading {}...", item.display_name());
-                                            let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let item_id = item.id.clone();
-                                            tokio::spawn(async move {
-                                                let timeout = std::time::Duration::from_secs(60);
-                                                match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
-                                                    Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
-                                                    _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
-                                                }
-                                            });
+                                            spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                         } else if item.is_navigable() {
                                             state.loading = true;
                                             state.loading_msg = format!("Loading {}...", item.display_name());
@@ -1679,16 +1606,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             // Fallback: try loading as item detail
                                             state.loading = true;
                                             state.loading_msg = format!("Loading {}...", item.display_name());
-                                            let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let item_id = item.id.clone();
-                                            tokio::spawn(async move {
-                                                let timeout = std::time::Duration::from_secs(60);
-                                                match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
-                                                    Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
-                                                    _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
-                                                }
-                                            });
+                                            spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                         }
                                     } else if let Some(lib) = state.selected_library().cloned() {
                                         state.open_library_browser(lib.id.clone(), lib.name.clone());
@@ -1769,12 +1687,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if let Some(item) = state.selected_item().cloned() {
                                         state.loading = true;
                                         state.loading_msg = format!("Loading {}...", item.display_name());
-                                        let tx = bg_tx.clone();
-                                        let client = state.client.clone();
-                                        tokio::spawn(async move {
-                                            let result = build_series_state(&client, &item).await;
-                                            let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
-                                        });
+                                        spawn_series_info(bg_tx.clone(), state.client.clone(), item);
                                     }
                                 }
                                 KeyCode::Char('m') => {
@@ -1861,6 +1774,23 @@ fn spawn_load_favorites(tx: mpsc::UnboundedSender<BackgroundResult>, client: cra
         }
 
         let _ = tx.send(BackgroundResult::FavoritesLoaded(all_items, total));
+    });
+}
+
+fn spawn_item_detail(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, item_id: String) {
+    tokio::spawn(async move {
+        let timeout = std::time::Duration::from_secs(60);
+        match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
+            Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
+            _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
+        }
+    });
+}
+
+fn spawn_series_info(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, item: crate::emby::MediaItem) {
+    tokio::spawn(async move {
+        let result = build_series_state(&client, &item).await;
+        let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
     });
 }
 
