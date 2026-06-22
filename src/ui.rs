@@ -731,7 +731,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
-        View::Home => "↑↓: navigate | Enter: play/open | l: libraries | /: search | q: quit",
+        View::Home => "↑↓: navigate | Enter: play/open | l: libraries | /: search | Z: favorites | q: quit",
         View::ContinueWatching | View::LatestItems => "↑↓: navigate | Enter: play | /: search | ←/BS: back",
         View::Libraries => "↑↓: select | Enter: open | ←/BS: back",
         View::Items => "↑↓: navigate | Enter: open/play | ←/BS: back | /: search",
