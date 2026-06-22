@@ -667,8 +667,8 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             lines.push(Line::from(Span::raw(line.as_str())));
         }
 
-        let start = scroll.min(lines.len());
-        let end = (start + visible_height).min(lines.len());
+        let end = lines.len().saturating_sub(scroll);
+        let start = end.saturating_sub(visible_height);
         let visible: Vec<Line> = lines[start..end].to_vec();
 
         let title = format!(" mpv output ({} lines) ", output_len);
