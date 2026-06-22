@@ -302,7 +302,15 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
     };
     let title = match state.view {
         View::SearchResults => "Search Results",
-        View::Favorites => "Favorites",
+        View::Favorites => {
+            let fav_count = state.favorites.iter().filter(|i| i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
+            let follow_count = state.favorites.iter().filter(|i| i.item_type == "Series" && state.config.following_series.contains(&i.id) && !i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
+            if follow_count > 0 {
+                &format!("★ {} | ▶ {}", fav_count, follow_count)
+            } else {
+                "Favorites"
+            }
+        }
         _ => "Items",
     };
 
@@ -310,7 +318,11 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
         .iter()
         .map(|item| {
             let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
+            let is_following = state.view == View::Favorites
+                && item.item_type == "Series"
+                && state.config.following_series.contains(&item.id);
             let star = if is_favorite { "★ " } else { "  " };
+            let follow_mark = if is_following && !is_favorite { "▶ " } else { "" };
             let name = item.display_name();
             let duration = item.duration_str().unwrap_or_default();
             let dur = if !duration.is_empty() {
@@ -320,6 +332,7 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
             };
             ListItem::new(Line::from(vec![
                 Span::styled(star, Style::default().fg(Color::Yellow)),
+                Span::styled(follow_mark.to_string(), Style::default().fg(Color::Green)),
                 Span::raw(name),
                 Span::styled(dur, Style::default().fg(Color::DarkGray)),
             ]))
