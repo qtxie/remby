@@ -1,5 +1,6 @@
 mod app;
 mod config;
+mod crypto;
 mod emby;
 mod mpv;
 mod ui;
@@ -112,6 +113,8 @@ enum BackgroundResult {
     FavoritesLoaded(Vec<crate::emby::MediaItem>, usize),
     SeriesMarkedWatched(String, usize),
     FavoriteToggled(String, bool, String),
+    AccountLoginSuccess(crate::config::Account, crate::emby::EmbyClient, String),
+    AccountLoginFailed(String),
     Error(String),
     Timeout(String),
 }
@@ -130,11 +133,22 @@ async fn main() -> Result<()> {
 
     // Splash screen with animation during connection
     // Start connection in background
-    let server = cli.server.clone();
-    let user = cli.user.clone();
-    let pass = cli.pass.clone();
+    let account = if cli.server.is_some() && cli.user.is_some() && cli.pass.is_some() {
+        Some(crate::config::Account {
+            id: String::new(),
+            label: "CLI".to_string(),
+            server: cli.server.clone().unwrap(),
+            username: cli.user.clone().unwrap(),
+            password_enc: crate::crypto::encrypt(&cli.pass.clone().unwrap()),
+        })
+    } else {
+        let accounts_cfg = crate::config::load_accounts();
+        accounts_cfg.last_account_id.and_then(|id| {
+            accounts_cfg.accounts.into_iter().find(|a| a.id == id)
+        })
+    };
     let connect_task = tokio::spawn(async move {
-        app::AppState::new(server, user, pass).await
+        app::AppState::new(account).await
     });
 
     // Animate while waiting for connection
@@ -191,12 +205,7 @@ async fn main() -> Result<()> {
     });
 
     if state.server.is_empty() {
-        disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-        terminal.show_cursor()?;
-        eprintln!("Usage: remby -s <server-url> -u <username> -p <password>");
-        eprintln!("   or: remby -s <server-url> -t <api-token>");
-        std::process::exit(1);
+        state.open_account_manager();
     }
 
     let result = run_app(&mut terminal, &mut state, &cli.mpv).await;
@@ -337,6 +346,39 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = Some(app::Message::error(format!("{} timed out", task)));
                 }
                 BackgroundResult::Error(msg) => {
+                    state.loading = false;
+                    state.status_msg = Some(app::Message::error(msg));
+                }
+                BackgroundResult::AccountLoginSuccess(account, client, account_id) => {
+                    state.client = client;
+                    state.server = account.server.clone();
+                    state.config = crate::config::load_config();
+                    let mut accounts_cfg = crate::config::load_accounts();
+                    accounts_cfg.last_account_id = Some(account_id);
+                    let _ = crate::config::save_accounts(&accounts_cfg);
+                    state.libraries.clear();
+                    state.libraries_fetched_at = None;
+                    state.library_latest.clear();
+                    state.library_latest_fetched_at = None;
+                    state.home_items.clear();
+                    state.following_updates.clear();
+                    state.favorites.clear();
+                    state.items.clear();
+                    state.stack.clear();
+                    state.view = app::View::Home;
+                    state.selected = 0;
+                    state.loading = true;
+                    state.loading_msg = "Loading home...".to_string();
+                    state.status_msg = Some(app::Message::success(format!("Logged in as {}", account.username)));
+                    let tx = bg_tx.clone();
+                    let client = state.client.clone();
+                    spawn_home_load(tx, client);
+                    let tx2 = bg_tx.clone();
+                    let client2 = state.client.clone();
+                    let following = state.config.following_series.clone();
+                    spawn_following_load(tx2, client2, following);
+                }
+                BackgroundResult::AccountLoginFailed(msg) => {
                     state.loading = false;
                     state.status_msg = Some(app::Message::error(msg));
                 }
@@ -950,6 +992,167 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 _ => {}
                             }
                         }
+                        app::View::AccountManager => {
+                            let ams = &state.account_manager_state;
+                            let is_input = matches!(ams.action, app::AccountManagerAction::Add | app::AccountManagerAction::Edit(_));
+                            let is_delete = matches!(ams.action, app::AccountManagerAction::Delete(_));
+
+                            if is_input {
+                                match key.code {
+                                    KeyCode::Esc => {
+                                        state.account_manager_state.action = app::AccountManagerAction::View;
+                                        state.account_manager_state.status_msg = None;
+                                    }
+                                    KeyCode::Tab => state.account_manager_next_field(),
+                                    KeyCode::Char(c) => state.account_manager_input(c),
+                                    KeyCode::Backspace => state.account_manager_backspace(),
+                                    KeyCode::Enter => {
+                                        let ams = &state.account_manager_state;
+                                        let server = ams.input_server.trim().to_string();
+                                        let username = ams.input_username.trim().to_string();
+                                        let password = ams.input_password.clone();
+                                        let label = if ams.input_label.trim().is_empty() {
+                                            format!("{}@{}", username, server)
+                                        } else {
+                                            ams.input_label.trim().to_string()
+                                        };
+
+                                        if server.is_empty() || username.is_empty() || password.is_empty() {
+                                            state.account_manager_state.status_msg = Some("Server, username and password are required".to_string());
+                                        } else {
+                                            let password_enc = crate::crypto::encrypt(&password);
+                                            let edit_idx = if let app::AccountManagerAction::Edit(idx) = ams.action { Some(idx) } else { None };
+
+                                            let account = crate::config::Account {
+                                                id: if let Some(idx) = edit_idx {
+                                                    ams.accounts.get(idx).map(|a| a.id.clone()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+                                                } else {
+                                                    uuid::Uuid::new_v4().to_string()
+                                                },
+                                                label,
+                                                server,
+                                                username,
+                                                password_enc,
+                                            };
+
+                                            let mut accounts = ams.accounts.clone();
+                                            if let Some(idx) = edit_idx {
+                                                if idx < accounts.len() {
+                                                    accounts[idx] = account;
+                                                }
+                                            } else {
+                                                accounts.push(account);
+                                            }
+
+                                            let accounts_cfg = crate::config::AccountsConfig {
+                                                accounts: accounts.clone(),
+                                                last_account_id: ams.last_account_id.clone(),
+                                            };
+                                            let _ = crate::config::save_accounts(&accounts_cfg);
+
+                                            state.account_manager_state.accounts = accounts;
+                                            state.account_manager_state.action = app::AccountManagerAction::View;
+                                            state.account_manager_state.status_msg = Some("Account saved".to_string());
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            } else if is_delete {
+                                match key.code {
+                                    KeyCode::Esc | KeyCode::Char('n') => {
+                                        state.account_manager_state.action = app::AccountManagerAction::View;
+                                        state.account_manager_state.status_msg = None;
+                                    }
+                                    KeyCode::Char('y') | KeyCode::Enter => {
+                                        let idx = if let app::AccountManagerAction::Delete(i) = state.account_manager_state.action { i } else { 0 };
+                                        state.account_manager_state.accounts.remove(idx);
+                                        let accounts_cfg = crate::config::AccountsConfig {
+                                            accounts: state.account_manager_state.accounts.clone(),
+                                            last_account_id: state.account_manager_state.last_account_id.clone(),
+                                        };
+                                        let _ = crate::config::save_accounts(&accounts_cfg);
+                                        state.account_manager_state.action = app::AccountManagerAction::View;
+                                        state.account_manager_state.status_msg = Some("Account deleted".to_string());
+                                    }
+                                    _ => {}
+                                }
+                            } else {
+                                match key.code {
+                                    KeyCode::Esc | KeyCode::Char('u') => state.go_back(),
+                                    KeyCode::Char('q') => break,
+                                    KeyCode::Up | KeyCode::Char('k') => state.account_manager_select_prev(),
+                                    KeyCode::Down | KeyCode::Char('j') => state.account_manager_select_next(),
+                                    KeyCode::Char('a') => {
+                                        state.account_manager_state.action = app::AccountManagerAction::Add;
+                                        state.account_manager_state.input_server.clear();
+                                        state.account_manager_state.input_username.clear();
+                                        state.account_manager_state.input_password.clear();
+                                        state.account_manager_state.input_label.clear();
+                                        state.account_manager_state.input_field = app::AccountInputField::Label;
+                                        state.account_manager_state.selected = 0;
+                                        state.account_manager_state.status_msg = None;
+                                    }
+                                    KeyCode::Enter => {
+                                        let sel = state.account_manager_state.selected;
+                                        let acc_count = state.account_manager_state.accounts.len();
+                                        if sel < acc_count {
+                                            if let Some(acc) = state.account_manager_state.accounts.get(sel).cloned() {
+                                                let password = crate::crypto::decrypt(&acc.password_enc).unwrap_or_default();
+                                                let server = acc.server.clone();
+                                                let username = acc.username.clone();
+                                                let account_id = acc.id.clone();
+                                                state.loading = true;
+                                                state.loading_msg = format!("Logging in as {}...", acc.username);
+                                                let tx = bg_tx.clone();
+                                                tokio::spawn(async move {
+                                                    match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
+                                                        Ok(client) => {
+                                                            let _ = tx.send(BackgroundResult::AccountLoginSuccess(acc, client, account_id));
+                                                        }
+                                                        Err(e) => {
+                                                            let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("Login failed: {}", e)));
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        } else if sel == acc_count {
+                                            state.account_manager_state.action = app::AccountManagerAction::Add;
+                                            state.account_manager_state.input_server.clear();
+                                            state.account_manager_state.input_username.clear();
+                                            state.account_manager_state.input_password.clear();
+                                            state.account_manager_state.input_label.clear();
+                                            state.account_manager_state.input_field = app::AccountInputField::Label;
+                                            state.account_manager_state.selected = 0;
+                                            state.account_manager_state.status_msg = None;
+                                        }
+                                    }
+                                    KeyCode::Char('e') => {
+                                        let sel = state.account_manager_state.selected;
+                                        if sel < state.account_manager_state.accounts.len() {
+                                            if let Some(acc) = state.account_manager_state.accounts.get(sel).cloned() {
+                                                let password = crate::crypto::decrypt(&acc.password_enc).unwrap_or_default();
+                                                state.account_manager_state.input_label = acc.label;
+                                                state.account_manager_state.input_server = acc.server;
+                                                state.account_manager_state.input_username = acc.username;
+                                                state.account_manager_state.input_password = password;
+                                                state.account_manager_state.input_field = app::AccountInputField::Label;
+                                                state.account_manager_state.selected = 0;
+                                                state.account_manager_state.action = app::AccountManagerAction::Edit(sel);
+                                                state.account_manager_state.status_msg = None;
+                                            }
+                                        }
+                                    }
+                                    KeyCode::Char('d') | KeyCode::Delete => {
+                                        let sel = state.account_manager_state.selected;
+                                        if sel < state.account_manager_state.accounts.len() {
+                                            state.account_manager_state.action = app::AccountManagerAction::Delete(sel);
+                                            state.account_manager_state.selected = 0;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
                         _ => {
                             match key.code {
                                 KeyCode::Char('q') if !state.searching => break,
@@ -1349,6 +1552,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     } else {
                                         state.open_settings();
                                     }
+                                }
+                                KeyCode::Char('u') => {
+                                    if state.searching { continue; }
+                                    state.open_account_manager();
                                 }
                                 KeyCode::Char('e') => {
                                     if state.searching { continue; }

@@ -62,6 +62,7 @@ pub struct AppState {
     pub favorites: Vec<MediaItem>,
     pub total_favorites: usize,
     pub following_updates: Vec<(String, Vec<MediaItem>)>,
+    pub account_manager_state: AccountManagerState,
 }
 
 pub(crate) struct StackEntry {
@@ -148,6 +149,52 @@ impl Default for SettingsState {
             libraries: Vec::new(),
             selected: 0,
             column: SettingsColumn::Enabled,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum AccountManagerAction {
+    View,
+    Add,
+    Edit(usize),
+    Delete(usize),
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub enum AccountInputField {
+    Label,
+    Server,
+    Username,
+    Password,
+}
+
+pub struct AccountManagerState {
+    pub accounts: Vec<crate::config::Account>,
+    pub last_account_id: Option<String>,
+    pub selected: usize,
+    pub action: AccountManagerAction,
+    pub input_server: String,
+    pub input_username: String,
+    pub input_password: String,
+    pub input_label: String,
+    pub input_field: AccountInputField,
+    pub status_msg: Option<String>,
+}
+
+impl Default for AccountManagerState {
+    fn default() -> Self {
+        Self {
+            accounts: Vec::new(),
+            last_account_id: None,
+            selected: 0,
+            action: AccountManagerAction::View,
+            input_server: String::new(),
+            input_username: String::new(),
+            input_password: String::new(),
+            input_label: String::new(),
+            input_field: AccountInputField::Label,
+            status_msg: None,
         }
     }
 }
@@ -313,25 +360,22 @@ pub enum View {
     Favorites,
     ContinueWatching,
     LatestItems,
+    AccountManager,
 }
 
 impl AppState {
     pub async fn new(
-        server: Option<String>,
-        user: Option<String>,
-        pass: Option<String>,
+        account: Option<crate::config::Account>,
     ) -> Result<Self> {
-        let server = server.unwrap_or_default();
-        let user = user.unwrap_or_default();
-        let pass = pass.unwrap_or_default();
-
-        let client = if !user.is_empty() && !pass.is_empty() && !server.is_empty() {
-            EmbyClient::authenticate(&server, &user, &pass).await?
-        } else {
-            EmbyClient::new(server.clone(), String::new())
-        };
-
         let config = crate::config::load_config();
+
+        let (client, server) = if let Some(acc) = account {
+            let password = crate::crypto::decrypt(&acc.password_enc).unwrap_or_default();
+            let client = EmbyClient::authenticate(&acc.server, &acc.username, &password).await?;
+            (client, acc.server)
+        } else {
+            (EmbyClient::new(String::new(), String::new()), String::new())
+        };
 
         Ok(Self {
             client,
@@ -369,6 +413,7 @@ impl AppState {
             favorites: Vec::new(),
             total_favorites: 0,
             following_updates: Vec::new(),
+            account_manager_state: AccountManagerState::default(),
         })
     }
 
@@ -598,6 +643,7 @@ impl AppState {
             View::SeriesInfo => self.series_selected_item(),
             View::Playing => self.track_state.item.as_ref(),
             View::Settings => None,
+            View::AccountManager => None,
             View::LibraryBrowser => self.library_browser_state.items.get(self.selected),
             View::Favorites => self.favorites.get(self.selected),
         }
@@ -1155,6 +1201,75 @@ impl AppState {
         self.navigate_to(View::LatestItems);
     }
 
+    pub fn open_account_manager(&mut self) {
+        let accounts_cfg = crate::config::load_accounts();
+        self.account_manager_state = AccountManagerState {
+            accounts: accounts_cfg.accounts,
+            last_account_id: accounts_cfg.last_account_id,
+            selected: 0,
+            action: AccountManagerAction::View,
+            ..Default::default()
+        };
+        self.navigate_to(View::AccountManager);
+    }
+
+    pub fn account_manager_select_next(&mut self) {
+        let len = match self.account_manager_state.action {
+            AccountManagerAction::View => self.account_manager_state.accounts.len() + 1,
+            AccountManagerAction::Add | AccountManagerAction::Edit(_) => 4,
+            AccountManagerAction::Delete(_) => 2,
+        };
+        if len > 0 {
+            self.account_manager_state.selected = (self.account_manager_state.selected + 1) % len;
+        }
+    }
+
+    pub fn account_manager_select_prev(&mut self) {
+        let len = match self.account_manager_state.action {
+            AccountManagerAction::View => self.account_manager_state.accounts.len() + 1,
+            AccountManagerAction::Add | AccountManagerAction::Edit(_) => 4,
+            AccountManagerAction::Delete(_) => 2,
+        };
+        if len > 0 {
+            self.account_manager_state.selected = (self.account_manager_state.selected + len - 1) % len;
+        }
+    }
+
+    pub fn account_manager_input(&mut self, c: char) {
+        let field = &self.account_manager_state.input_field;
+        match field {
+            AccountInputField::Label => self.account_manager_state.input_label.push(c),
+            AccountInputField::Server => self.account_manager_state.input_server.push(c),
+            AccountInputField::Username => self.account_manager_state.input_username.push(c),
+            AccountInputField::Password => self.account_manager_state.input_password.push(c),
+        }
+    }
+
+    pub fn account_manager_backspace(&mut self) {
+        let field = &self.account_manager_state.input_field;
+        match field {
+            AccountInputField::Label => { self.account_manager_state.input_label.pop(); }
+            AccountInputField::Server => { self.account_manager_state.input_server.pop(); }
+            AccountInputField::Username => { self.account_manager_state.input_username.pop(); }
+            AccountInputField::Password => { self.account_manager_state.input_password.pop(); }
+        }
+    }
+
+    pub fn account_manager_next_field(&mut self) {
+        self.account_manager_state.input_field = match self.account_manager_state.input_field {
+            AccountInputField::Label => AccountInputField::Server,
+            AccountInputField::Server => AccountInputField::Username,
+            AccountInputField::Username => AccountInputField::Password,
+            AccountInputField::Password => AccountInputField::Label,
+        };
+        self.account_manager_state.selected = match self.account_manager_state.input_field {
+            AccountInputField::Label => 0,
+            AccountInputField::Server => 1,
+            AccountInputField::Username => 2,
+            AccountInputField::Password => 3,
+        };
+    }
+
     fn current_list_len(&self) -> usize {
         match self.view {
             View::Home => self.following_items_count() + self.home_items.len(),
@@ -1183,6 +1298,14 @@ impl AppState {
             View::Settings => self.settings_state.libraries.len(),
             View::LibraryBrowser => self.library_browser_state.items.len(),
             View::Favorites => self.favorites.len(),
+            View::AccountManager => {
+                let ams = &self.account_manager_state;
+                match ams.action {
+                    AccountManagerAction::View => ams.accounts.len() + 1,
+                    AccountManagerAction::Add | AccountManagerAction::Edit(_) => 4,
+                    AccountManagerAction::Delete(_) => 2,
+                }
+            }
         }
     }
 }

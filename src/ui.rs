@@ -31,6 +31,7 @@ pub fn render(f: &mut Frame, state: &AppState) {
         View::Settings => render_settings(f, state, layout[1]),
         View::LibraryBrowser => render_library_browser(f, state, layout[1]),
         View::ContinueWatching | View::LatestItems => render_home(f, state, layout[1]),
+        View::AccountManager => render_account_manager(f, state, layout[1]),
     }
 
     render_footer(f, state, layout[2]);
@@ -65,6 +66,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
             }
             View::SearchResults => format!("Search: {}", state.search_query),
             View::Favorites => format!("Favorites ({})", state.favorites.len()),
+            View::AccountManager => "Account Manager".to_string(),
             View::TrackSelect => "Select Tracks".to_string(),
             View::SourceSelect => "Select Source".to_string(),
             View::Episodes => format!("{} - Episodes", state.series_name),
@@ -737,7 +739,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
-        View::Home => "l: libraries | /: search | f: follow | F: favorites | Ctrl+F: refresh | q: quit",
+        View::Home => "l: libraries | /: search | f: follow | F: favorites | u: accounts | Ctrl+F: refresh | q: quit",
         View::ContinueWatching | View::LatestItems => "/: search",
         View::Libraries => "",
         View::Items => "f: follow | /: search",
@@ -766,6 +768,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
             }
         },
         View::Favorites => "f: follow | z: unfavorite | m: mark watched",
+        View::AccountManager => "a: add | e: edit | d: delete | Enter: switch | Esc: back",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"
@@ -1129,4 +1132,152 @@ fn centered_rect(percent_x: u16, height: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+fn render_account_manager(f: &mut Frame, state: &AppState, area: Rect) {
+    let ams = &state.account_manager_state;
+
+    match &ams.action {
+        crate::app::AccountManagerAction::View => {
+            render_account_list(f, state, area);
+        }
+        crate::app::AccountManagerAction::Add | crate::app::AccountManagerAction::Edit(_) => {
+            render_account_form(f, state, area);
+        }
+        crate::app::AccountManagerAction::Delete(_) => {
+            render_account_list(f, state, area);
+            render_delete_confirm(f, state, area);
+        }
+    }
+}
+
+fn render_account_list(f: &mut Frame, state: &AppState, area: Rect) {
+    let ams = &state.account_manager_state;
+    let mut items: Vec<ListItem> = Vec::new();
+
+    for (i, acc) in ams.accounts.iter().enumerate() {
+        let is_active = ams.last_account_id.as_ref() == Some(&acc.id);
+        let marker = if i == ams.selected { "▸ " } else { "  " };
+        let active_mark = if is_active { "● " } else { "  " };
+        let style = if i == ams.selected {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else if is_active {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default()
+        };
+        let label = format!("{}{}{} @ {}", marker, active_mark, acc.label, acc.server);
+        items.push(ListItem::new(Line::from(Span::styled(label, style))));
+    }
+
+    let add_idx = ams.accounts.len();
+    let add_marker = if add_idx == ams.selected { "▸ " } else { "  " };
+    let add_style = if add_idx == ams.selected {
+        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Yellow)
+    };
+    items.push(ListItem::new(Line::from(Span::styled(
+        format!("{}+ Add new account", add_marker),
+        add_style,
+    ))));
+
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" Account Manager "))
+        .highlight_style(Style::default())
+        .highlight_symbol("");
+
+    f.render_widget(Clear, area);
+    f.render_widget(list, area);
+
+    if let Some(ref msg) = ams.status_msg {
+        let status_area = Rect {
+            x: area.x + 1,
+            y: area.y + area.height.saturating_sub(2),
+            width: area.width.saturating_sub(2),
+            height: 1,
+        };
+        f.render_widget(
+            Paragraph::new(Span::styled(msg.as_str(), Style::default().fg(Color::Green))),
+            status_area,
+        );
+    }
+}
+
+fn render_account_form(f: &mut Frame, state: &AppState, area: Rect) {
+    let ams = &state.account_manager_state;
+    let is_edit = matches!(ams.action, crate::app::AccountManagerAction::Edit(_));
+    let title = if is_edit { "Edit Account" } else { "Add Account" };
+
+    let fields = [
+        ("Label", &ams.input_label, crate::app::AccountInputField::Label),
+        ("Server", &ams.input_server, crate::app::AccountInputField::Server),
+        ("Username", &ams.input_username, crate::app::AccountInputField::Username),
+        ("Password", &ams.input_password, crate::app::AccountInputField::Password),
+    ];
+
+    let mut items: Vec<ListItem> = Vec::new();
+    for (_i, (label, value, field)) in fields.iter().enumerate() {
+        let active = ams.input_field == *field;
+        let marker = if active { "▸ " } else { "  " };
+        let field_style = if active {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+
+        let display_value = if *field == crate::app::AccountInputField::Password {
+            "*".repeat(value.len())
+        } else {
+            value.to_string()
+        };
+
+        let cursor = if active { "█" } else { "" };
+        items.push(ListItem::new(Line::from(vec![
+            Span::styled(format!("{}{:<12}", marker, label), field_style),
+            Span::raw(": "),
+            Span::raw(format!("{}{}", display_value, cursor)),
+        ])));
+    }
+
+    items.push(ListItem::new(Line::from(Span::raw(""))));
+    items.push(ListItem::new(Line::from(Span::styled(
+        "Tab: next field | Enter: save | Esc: cancel",
+        Style::default().fg(Color::DarkGray),
+    ))));
+
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(format!(" {} ", title)))
+        .highlight_style(Style::default())
+        .highlight_symbol("");
+
+    let popup = centered_rect(60, 10, area);
+    f.render_widget(Clear, popup);
+    f.render_widget(list, popup);
+}
+
+fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
+    let ams = &state.account_manager_state;
+    if let crate::app::AccountManagerAction::Delete(idx) = &ams.action {
+        let name = ams.accounts.get(*idx).map(|a| a.label.as_str()).unwrap_or("?");
+        let text = vec![
+            Line::from(Span::styled(
+                format!("Delete account '{}'?", name),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "y: confirm | n: cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let popup = centered_rect(40, 6, area);
+        f.render_widget(Clear, popup);
+        f.render_widget(
+            Paragraph::new(text)
+                .block(Block::default().borders(Borders::ALL).title(" Confirm "))
+                .alignment(Alignment::Center),
+            popup,
+        );
+    }
 }

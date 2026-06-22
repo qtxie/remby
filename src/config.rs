@@ -63,3 +63,45 @@ pub fn save_config(config: &RembyConfig) -> Result<()> {
     std::fs::write(&path, data)?;
     Ok(())
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Account {
+    pub id: String,
+    pub label: String,
+    pub server: String,
+    pub username: String,
+    pub password_enc: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct AccountsConfig {
+    #[serde(default)]
+    pub accounts: Vec<Account>,
+    #[serde(default)]
+    pub last_account_id: Option<String>,
+}
+
+fn accounts_path() -> PathBuf {
+    let dir = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("remby");
+    dir.join("accounts.json")
+}
+
+pub fn load_accounts() -> AccountsConfig {
+    let path = accounts_path();
+    match std::fs::read_to_string(&path) {
+        Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
+        Err(_) => AccountsConfig::default(),
+    }
+}
+
+pub fn save_accounts(config: &AccountsConfig) -> Result<()> {
+    let path = accounts_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let data = serde_json::to_string_pretty(config)?;
+    std::fs::write(&path, data)?;
+    Ok(())
+}
