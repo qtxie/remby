@@ -1137,6 +1137,17 @@ impl AppState {
         }
     }
 
+    pub fn toggle_follow(&mut self, series_id: &str) {
+        if self.config.following_series.iter().any(|id| id == series_id) {
+            self.config.following_series.retain(|id| id != series_id);
+            self.status_msg = Some(Message::info("Removed from following"));
+        } else {
+            self.config.following_series.push(series_id.to_string());
+            self.status_msg = Some(Message::info("Added to following"));
+        }
+        let _ = crate::config::save_config(&self.config);
+    }
+
     pub fn open_favorites(&mut self) {
         self.navigate_to(View::Favorites);
     }

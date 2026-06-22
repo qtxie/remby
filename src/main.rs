@@ -382,14 +382,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     if !is_favorite {
                         state.favorites.retain(|item| item.id != item_id);
                         state.total_favorites = state.total_favorites.saturating_sub(1);
-                        if item_type == "Series" {
-                            state.config.following_series.retain(|id| id != &item_id);
-                            let _ = crate::config::save_config(&state.config);
-                        }
-                    } else if item_type == "Series" {
-                        if !state.config.following_series.contains(&item_id) {
-                            state.config.following_series.push(item_id);
-                            let _ = crate::config::save_config(&state.config);
+                    }
+                    if item_type == "Series" {
+                        if is_favorite && !state.config.following_series.contains(&item_id) {
+                            state.toggle_follow(&item_id);
+                        } else if !is_favorite && state.config.following_series.contains(&item_id) {
+                            state.toggle_follow(&item_id);
                         }
                     }
                     state.loading = false;
@@ -633,18 +631,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Down | KeyCode::Char('j') => state.series_select_next(),
                                 KeyCode::Char('f') => {
                                     if let Some(ref series_item) = state.series_state.item {
-                                        let series_id = series_item.id.clone();
-                                        let is_following = state.config.following_series.contains(&series_id);
-                                        if is_following {
-                                            state.config.following_series.retain(|id| id != &series_id);
-                                            state.status_msg = Some(app::Message::info("Removed from following"));
-                                        } else {
-                                            state.config.following_series.push(series_id);
-                                            state.status_msg = Some(app::Message::info("Added to following"));
-                                        }
-                                        if let Err(e) = crate::config::save_config(&state.config) {
-                                            state.status_msg = Some(app::Message::error(format!("Save error: {e}")));
-                                        }
+                                        let id = series_item.id.clone();
+                                        state.toggle_follow(&id);
                                     }
                                 }
                                 KeyCode::Enter => {
@@ -1381,17 +1369,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 None
                                             };
                                             if let Some(series_id) = series_id {
-                                                let is_following = state.config.following_series.contains(&series_id);
-                                                if is_following {
-                                                    state.config.following_series.retain(|id| id != &series_id);
-                                                    state.status_msg = Some(app::Message::info("Removed from following"));
-                                                } else {
-                                                    state.config.following_series.push(series_id);
-                                                    state.status_msg = Some(app::Message::info("Added to following"));
-                                                }
-                                                if let Err(e) = crate::config::save_config(&state.config) {
-                                                    state.status_msg = Some(app::Message::error(format!("Save error: {e}")));
-                                                }
+                                                state.toggle_follow(&series_id);
                                             }
                                         }
                                     }
