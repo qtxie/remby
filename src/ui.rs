@@ -740,35 +740,35 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     let help = match state.view {
-        View::Home => "↑↓: navigate | Enter: play/open | l: libraries | /: search | f: follow | F: favorites | Ctrl+F: refresh | q: quit",
-        View::ContinueWatching | View::LatestItems => "↑↓: navigate | Enter: play | /: search | ←/BS: back",
-        View::Libraries => "↑↓: select | Enter: open | ←/BS: back",
-        View::Items => "↑↓: navigate | Enter: open/play | f: follow | ←/BS: back | /: search",
-        View::SearchResults => "↑↓: navigate | Enter: play | f: follow | ←/BS: back",
-        View::TrackSelect => "←/→: section | ↑/↓: select track | Enter: play | Esc: back",
-        View::SourceSelect => "↑↓: select source | Enter: confirm | Esc: back",
-        View::Episodes => "↑↓: navigate | Enter: play | e: episodes | ←/BS: back",
-        View::SeriesInfo => "←/→: section | ↑/↓: select | Enter: open | f: follow | e: episodes | Esc: back",
+        View::Home => "l: libraries | /: search | f: follow | F: favorites | Ctrl+F: refresh | q: quit",
+        View::ContinueWatching | View::LatestItems => "/: search",
+        View::Libraries => "",
+        View::Items => "f: follow | /: search",
+        View::SearchResults => "f: follow",
+        View::TrackSelect => "←/→: section | Enter: play",
+        View::SourceSelect => "Enter: confirm",
+        View::Episodes => "e: episodes",
+        View::SeriesInfo => "←/→: section | Enter: open | f: follow | e: episodes",
         View::Playing => {
             if state.playing_state.playing {
-                "Esc: back to tracks"
+                ""
             } else if state.playing_state.resume_position.is_some() {
-                "↑/↓: select | Enter: confirm | Esc: back"
+                "↑/↓: select | Enter: confirm"
             } else {
-                "Enter: play | Esc: back to tracks"
+                "Enter: play"
             }
         }
-        View::Settings => "↑↓: nav | ←/→: col | Space: toggle | Shift+↑↓: move | Enter: save | Esc: cancel",
+        View::Settings => "←/→: col | Space: toggle | Shift+↑↓: move | Enter: save",
         View::LibraryBrowser => {
             if state.library_browser_state.panel == BrowserPanel::Filter {
-                "j/k: Nav | ←/→: Section | Enter: Select/Apply | Esc: Cancel"
+                "←/→: Section | Enter: Apply"
             } else if state.library_browser_state.panel != BrowserPanel::None {
-                "j/k: Navigate | Enter: Select | Esc: Close"
+                "Enter: Select"
             } else {
-                "j/k: Navigate | Enter: Open | Ctrl+s: Sort | Ctrl+f: Filter | /: search | z: Favorite | Z: View favorites | Esc: Back"
+                "Ctrl+s: Sort | Ctrl+f: Filter | /: search | z: Favorite | Z: Favorites"
             }
         },
-        View::Favorites => "↑↓: navigate | Enter: open/play | f: follow | z: unfavorite | m: mark watched | ←/BS: back",
+        View::Favorites => "f: follow | z: unfavorite | m: mark watched",
     };
     let help = if state.searching {
         "Enter: search | Esc: cancel"
