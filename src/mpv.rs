@@ -7,8 +7,9 @@ use std::sync::mpsc;
 pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, subtitle: Option<i32>, start_secs: Option<f64>) -> Result<(Child, mpsc::Receiver<String>)> {
     let mut cmd = Command::new(mpv_path);
     cmd.arg(url);
-    cmd.arg("--no-terminal");
-    cmd.stdout(Stdio::piped());
+    cmd.arg("-v");
+    cmd.arg("--term-osd-bar=no");
+    cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::piped());
 
     if let Some(secs) = start_secs {
@@ -30,30 +31,14 @@ pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, s
 
     let (tx, rx) = mpsc::channel();
 
-    if let Some(stdout) = child.stdout.take() {
-        let tx = tx.clone();
-        std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    let cleaned = strip_ansi(&line);
-                    if !cleaned.trim().is_empty() {
-                        let _ = tx.send(cleaned);
-                    }
-                }
-            }
-        });
-    }
-
     if let Some(stderr) = child.stderr.take() {
-        let tx = tx.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {
                     let cleaned = strip_ansi(&line);
                     if !cleaned.trim().is_empty() {
-                        let _ = tx.send(cleaned);
+                        if tx.send(cleaned).is_err() { break; }
                     }
                 }
             }
