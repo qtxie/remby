@@ -875,6 +875,7 @@ impl EmbyClient {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn report_playback_progress(&self, item_id: &str, media_source_id: &str, play_session_id: &str, position_ticks: i64, is_paused: bool) -> Result<()> {
         let url = self.api_url("/Sessions/Playing/Progress");
         let body = json!({

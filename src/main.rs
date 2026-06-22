@@ -520,16 +520,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         // Check if mpv exited
         if let Some(ref mut child) = state.mpv_child {
             if let Ok(Some(_)) = child.try_wait() {
-                // Use IPC-tracked position for accurate resume sync
-                let position_ticks = if state.mpv_duration > 0.0 {
-                    (state.mpv_position * 10_000_000.0) as i64
-                } else if let (Some(started), Some(runtime)) = (state.playback_started_at, state.playing_state.runtime_ticks) {
-                    let elapsed = started.elapsed().as_secs() as i64 * 10_000_000;
-                    let offset = state.playing_state.resume_position.unwrap_or(0);
-                    (offset + elapsed).min(runtime)
-                } else {
-                    0
-                };
+                let position_ticks = state.stop_playback();
                 let item_id = state.playing_state.item_id.clone();
                 let source_id = state.playing_state.media_source_id.clone();
                 let session_id = state.play_session_id.clone();
@@ -537,14 +528,6 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 tokio::spawn(async move {
                     let _ = client.report_playback_stopped(&item_id, &source_id, &session_id, position_ticks).await;
                 });
-                state.mpv_child = None;
-                state.mpv_rx = None;
-                state.playing_state.playing = false;
-                state.playing_state.resume_position = Some(position_ticks);
-                state.playing_state.option_selected = 0;
-                state.playback_started_at = None;
-                state.mpv_position = 0.0;
-                state.mpv_duration = 0.0;
                 state.status_msg = Some(app::Message::info("mpv closed".to_string()));
             }
         }
@@ -712,15 +695,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => {
                                     if !state.playing_state.playing {
-                                        // Already stopped → go back
                                         state.go_back();
                                     } else {
-                                        // Report playback stopped before killing
-                                        let position_ticks = if state.mpv_duration > 0.0 {
-                                            (state.mpv_position * 10_000_000.0) as i64
-                                        } else {
-                                            0
-                                        };
+                                        let position_ticks = state.stop_playback();
                                         let item_id = state.playing_state.item_id.clone();
                                         let source_id = state.playing_state.media_source_id.clone();
                                         let session_id = state.play_session_id.clone();
@@ -728,12 +705,6 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         tokio::spawn(async move {
                                             let _ = client.report_playback_stopped(&item_id, &source_id, &session_id, position_ticks).await;
                                         });
-                                        state.kill_mpv();
-                                        state.playback_started_at = None;
-                                        state.mpv_position = 0.0;
-                                        state.mpv_duration = 0.0;
-                                        state.playing_state.playing = false;
-                                        state.playing_state.option_selected = 0;
                                     }
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
@@ -985,33 +956,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.open_favorites();
                                     state.loading = true;
                                     state.loading_msg = "Loading favorites...".to_string();
-                                    let tx = bg_tx.clone();
-                                    let client = state.client.clone();
-                                    let following = state.config.following_series.clone();
-                                    tokio::spawn(async move {
-                                        let fav_result = client.get_favorites(0, 200).await;
-                                        let mut fav_ids = std::collections::HashSet::new();
-                                        let mut all_items = Vec::new();
-                                        let mut total = 0;
-
-                                        if let Ok(result) = fav_result {
-                                            total = result.total;
-                                            for item in &result.items {
-                                                fav_ids.insert(item.id.clone());
-                                            }
-                                            all_items.extend(result.items);
-                                        }
-
-                                        for series_id in &following {
-                                            if !fav_ids.contains(series_id) {
-                                                if let Ok(item) = client.get_item_detail(series_id).await {
-                                                    all_items.push(item);
-                                                }
-                                            }
-                                        }
-
-                                        let _ = tx.send(BackgroundResult::FavoritesLoaded(all_items, total));
-                                    });
+                                    spawn_load_favorites(bg_tx.clone(), state.client.clone(), state.config.following_series.clone());
                                 }
                                 KeyCode::Char('z') if !has_panel => {
                                     if let Some(item) = state.selected_item().cloned() {
@@ -1798,34 +1743,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.open_favorites();
                                     state.loading = true;
                                     state.loading_msg = "Loading favorites...".to_string();
-                                    let tx = bg_tx.clone();
-                                    let client = state.client.clone();
-                                    let following = state.config.following_series.clone();
-                                    tokio::spawn(async move {
-                                        let fav_result = client.get_favorites(0, 200).await;
-                                        let mut fav_ids = std::collections::HashSet::new();
-                                        let mut all_items = Vec::new();
-                                        let mut total = 0;
-
-                                        if let Ok(result) = fav_result {
-                                            total = result.total;
-                                            for item in &result.items {
-                                                fav_ids.insert(item.id.clone());
-                                            }
-                                            all_items.extend(result.items);
-                                        }
-
-                                        // Add following-only series (not in favorites)
-                                        for series_id in &following {
-                                            if !fav_ids.contains(series_id) {
-                                                if let Ok(item) = client.get_item_detail(series_id).await {
-                                                    all_items.push(item);
-                                                }
-                                            }
-                                        }
-
-                                        let _ = tx.send(BackgroundResult::FavoritesLoaded(all_items, total));
-                                    });
+                                    spawn_load_favorites(bg_tx.clone(), state.client.clone(), state.config.following_series.clone());
                                 }
                                 KeyCode::Char('s') => {
                                     if state.searching { continue; }
@@ -1917,6 +1835,33 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         }
     }
     Ok(())
+}
+
+fn spawn_load_favorites(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, following: Vec<String>) {
+    tokio::spawn(async move {
+        let fav_result = client.get_favorites(0, 200).await;
+        let mut fav_ids = std::collections::HashSet::new();
+        let mut all_items = Vec::new();
+        let mut total = 0;
+
+        if let Ok(result) = fav_result {
+            total = result.total;
+            for item in &result.items {
+                fav_ids.insert(item.id.clone());
+            }
+            all_items.extend(result.items);
+        }
+
+        for series_id in &following {
+            if !fav_ids.contains(series_id) {
+                if let Ok(item) = client.get_item_detail(series_id).await {
+                    all_items.push(item);
+                }
+            }
+        }
+
+        let _ = tx.send(BackgroundResult::FavoritesLoaded(all_items, total));
+    });
 }
 
 fn reload_library_items(state: &mut app::AppState, bg_tx: &mpsc::UnboundedSender<BackgroundResult>, start: usize) {

@@ -881,7 +881,6 @@ impl AppState {
 
     pub fn kill_mpv(&mut self) {
         if let Some(mut child) = self.mpv_child.take() {
-            // Kill entire process tree on Windows (mpv spawns child processes)
             #[cfg(target_os = "windows")]
             {
                 let _ = std::process::Command::new("taskkill")
@@ -895,6 +894,30 @@ impl AppState {
             let _ = child.wait();
         }
         self.mpv_rx = None;
+    }
+
+    pub fn current_position_ticks(&self) -> i64 {
+        if self.mpv_duration > 0.0 {
+            (self.mpv_position * 10_000_000.0) as i64
+        } else if let (Some(started), Some(runtime)) = (self.playback_started_at, self.playing_state.runtime_ticks) {
+            let elapsed = started.elapsed().as_secs() as i64 * 10_000_000;
+            let offset = self.playing_state.resume_position.unwrap_or(0);
+            (offset + elapsed).min(runtime)
+        } else {
+            0
+        }
+    }
+
+    pub fn stop_playback(&mut self) -> i64 {
+        let position_ticks = self.current_position_ticks();
+        self.kill_mpv();
+        self.playing_state.playing = false;
+        self.playing_state.resume_position = Some(position_ticks);
+        self.playing_state.option_selected = 0;
+        self.playback_started_at = None;
+        self.mpv_position = 0.0;
+        self.mpv_duration = 0.0;
+        position_ticks
     }
 
     pub fn open_settings(&mut self) {
