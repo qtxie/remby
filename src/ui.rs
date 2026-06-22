@@ -765,7 +765,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
             } else if state.library_browser_state.panel != BrowserPanel::None {
                 "Enter: Select"
             } else {
-                "Ctrl+s: Sort | Ctrl+f: Filter | /: search | z: Favorite | Z: Favorites"
+                "Ctrl+s: Sort | Ctrl+f: Filter | /: search | e: info | z: Favorite | Z: Favorites"
             }
         },
         View::Favorites => "f: follow | z: unfavorite | m: mark watched",

@@ -812,6 +812,18 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     let lib_id = state.library_browser_state.library_id.clone();
                                     state.start_search(app::SearchContext::Library(lib_id));
                                 }
+                                KeyCode::Char('e') if !has_panel => {
+                                    if let Some(item) = state.selected_item().cloned() {
+                                        state.loading = true;
+                                        state.loading_msg = format!("Loading {}...", item.display_name());
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            let result = build_series_state(&client, &item).await;
+                                            let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
+                                        });
+                                    }
+                                }
                                 KeyCode::Up | KeyCode::Char('k') => {
                                     if has_panel {
                                         state.library_browser_panel_prev();
