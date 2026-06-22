@@ -575,7 +575,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
 
     // Playing indicator or resume prompt
     if ps.playing {
-        let spinner = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
+        let spinner = ["\u{28f8}", "\u{28fd}", "\u{28fb}", "\u{28bf}", "\u{28ff}", "\u{28fe}", "\u{287f}", "\u{287b}"];
         let idx = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -610,7 +610,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             Line::from(vec![
                 Span::styled("  ", Style::default()),
                 Span::styled(
-                    if ps.option_selected == 0 { "▸ " } else { "  " },
+                    if ps.option_selected == 0 { "\u{25b8} " } else { "  " },
                     Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(
@@ -625,7 +625,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             Line::from(vec![
                 Span::styled("  ", Style::default()),
                 Span::styled(
-                    if ps.option_selected == 1 { "▸ " } else { "  " },
+                    if ps.option_selected == 1 { "\u{25b8} " } else { "  " },
                     Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(
@@ -642,17 +642,49 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         f.render_widget(Clear, layout[5]);
         f.render_widget(options_widget, layout[5]);
     } else if ps.playing {
-        render_track_info(f, ps, layout[5]);
+        render_track_info(f, ps, layout[3]);
     }
 
-    // URL (truncated)
-    let url_idx = if has_resume { 6 } else { 5 };
-    let url_text = Paragraph::new(Span::styled(
-        &ps.url,
-        Style::default().fg(Color::DarkGray),
-    )).wrap(Wrap { trim: false });
-    f.render_widget(Clear, layout[url_idx]);
-    f.render_widget(url_text, layout[url_idx]);
+    // Bottom area: mpv output or URL
+    let bottom_idx = if has_resume { 6 } else { 5 };
+    if !state.mpv_output.is_empty() {
+        let output_len = state.mpv_output.len();
+        let visible_height = layout[bottom_idx].height as usize;
+        let total_lines = output_len + 1; // +1 for URL line
+        let max_scroll = total_lines.saturating_sub(visible_height);
+        let scroll = state.mpv_output_scroll.min(max_scroll);
+
+        let mut lines: Vec<Line> = Vec::new();
+        // URL line
+        lines.push(Line::from(Span::styled(
+            &ps.url,
+            Style::default().fg(Color::DarkGray),
+        )));
+        // Output lines
+        for line in &state.mpv_output {
+            lines.push(Line::from(Span::raw(line.as_str())));
+        }
+
+        let start = scroll.min(lines.len());
+        let end = (start + visible_height).min(lines.len());
+        let visible: Vec<Line> = lines[start..end].to_vec();
+
+        let title = format!(" mpv output ({}) ", output_len);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::DarkGray))
+            .title(Span::styled(title, Style::default().fg(Color::DarkGray)));
+        let paragraph = Paragraph::new(visible).block(block);
+        f.render_widget(Clear, layout[bottom_idx]);
+        f.render_widget(paragraph, layout[bottom_idx]);
+    } else {
+        let url_text = Paragraph::new(Span::styled(
+            &ps.url,
+            Style::default().fg(Color::DarkGray),
+        )).wrap(Wrap { trim: false });
+        f.render_widget(Clear, layout[bottom_idx]);
+        f.render_widget(url_text, layout[bottom_idx]);
+    }
 }
 
 fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {

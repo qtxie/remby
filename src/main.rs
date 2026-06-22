@@ -383,8 +383,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         let url = state.client.stream_url_for_source(&detail, &Default::default());
                         if state.config.mpv_path == "mpv" {
                             state.open_mpv_prompt(&url, "", "", "", None);
-                        } else if let Ok(child) = mpv::play(&url, &state.config.mpv_path, None, None, None, None) {
+                        } else if let Ok((child, rx)) = mpv::play(&url, &state.config.mpv_path, None, None, None, None) {
                             state.mpv_child = Some(child);
+                            state.mpv_rx = Some(rx);
+                            state.mpv_output.clear();
+                            state.mpv_output_scroll = 0;
                         }
                     }
                 }
@@ -518,8 +521,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         if let Some(ref mut child) = state.mpv_child {
             if let Ok(Some(_)) = child.try_wait() {
                 state.mpv_child = None;
+                state.mpv_rx = None;
                 state.playing_state.playing = false;
                 state.status_msg = Some(app::Message::info("mpv closed".to_string()));
+            }
+        }
+
+        // Drain mpv output
+        if let Some(ref rx) = state.mpv_rx {
+            while let Ok(line) = rx.try_recv() {
+                state.mpv_output.push(line);
+                if state.mpv_output.len() > 200 {
+                    state.mpv_output.remove(0);
+                }
             }
         }
 
@@ -651,6 +665,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             }
                         }
                         app::View::Playing => {
+                            let mpv_has_output = !state.mpv_output.is_empty();
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => {
@@ -658,13 +673,27 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     state.go_back();
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
-                                    if state.playing_state.resume_position.is_some() {
+                                    if state.playing_state.playing && mpv_has_output {
+                                        state.mpv_output_scroll = state.mpv_output_scroll.saturating_add(1);
+                                    } else if state.playing_state.resume_position.is_some() {
                                         state.playing_state.option_selected = 0;
                                     }
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
-                                    if state.playing_state.resume_position.is_some() {
+                                    if state.playing_state.playing && mpv_has_output {
+                                        state.mpv_output_scroll = state.mpv_output_scroll.saturating_sub(1);
+                                    } else if state.playing_state.resume_position.is_some() {
                                         state.playing_state.option_selected = 1;
+                                    }
+                                }
+                                KeyCode::PageUp => {
+                                    if mpv_has_output {
+                                        state.mpv_output_scroll = state.mpv_output_scroll.saturating_add(10);
+                                    }
+                                }
+                                KeyCode::PageDown => {
+                                    if mpv_has_output {
+                                        state.mpv_output_scroll = state.mpv_output_scroll.saturating_sub(10);
                                     }
                                 }
                                 KeyCode::Enter => {
@@ -681,8 +710,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         } else {
                                             None
                                         };
-                                        if let Ok(child) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
+                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
                                             state.mpv_child = Some(child);
+                                            state.mpv_rx = Some(rx);
+                                            state.mpv_output.clear();
+                                            state.mpv_output_scroll = 0;
                                             state.playing_state.playing = true;
                                         }
                                     }
@@ -1158,8 +1190,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let _ = crate::config::save_config(&state.config);
                                         let ps = &state.mpv_prompt_state;
                                         let start_secs = ps.resume_position.map(|t| t as f64 / 10_000_000.0);
-                                        if let Ok(child) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
+                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
                                             state.mpv_child = Some(child);
+                                            state.mpv_rx = Some(rx);
+                                            state.mpv_output.clear();
+                                            state.mpv_output_scroll = 0;
                                         }
                                         state.view = app::View::Home;
                                         state.status_msg = Some(app::Message::success("MPV path saved".to_string()));

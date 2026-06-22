@@ -1,16 +1,20 @@
 use anyhow::{Context, Result};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
 
-pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, subtitle: Option<i32>, start_secs: Option<f64>) -> Result<Child> {
+pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, subtitle: Option<i32>, start_secs: Option<f64>) -> Result<(Child, mpsc::Receiver<String>)> {
     let mut cmd = Command::new(mpv_path);
     cmd.arg(url);
+    cmd.arg("--no-terminal");
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
 
     if let Some(secs) = start_secs {
         cmd.arg(format!("--start={:.3}", secs));
     }
 
-    // Sequential position per type (0-based) → mpv track number (1-based)
     if let Some(vid) = video {
         cmd.arg(format!("--vid={}", vid + 1));
     }
@@ -21,9 +25,57 @@ pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, s
         cmd.arg(format!("--sid={}", sid + 1));
     }
 
-    let child = cmd.spawn()
+    let mut child = cmd.spawn()
         .context(format!("Failed to launch mpv at '{mpv_path}'. Is mpv installed?"))?;
-    Ok(child)
+
+    let (tx, rx) = mpsc::channel();
+
+    if let Some(stdout) = child.stdout.take() {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let cleaned = strip_ansi(&line);
+                    if !cleaned.trim().is_empty() {
+                        let _ = tx.send(cleaned);
+                    }
+                }
+            }
+        });
+    }
+
+    if let Some(stderr) = child.stderr.take() {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let cleaned = strip_ansi(&line);
+                    if !cleaned.trim().is_empty() {
+                        let _ = tx.send(cleaned);
+                    }
+                }
+            }
+        });
+    }
+
+    Ok((child, rx))
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            while let Some(nc) = chars.next() {
+                if nc == 'm' { break; }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 pub fn find_mpv() -> Option<String> {
