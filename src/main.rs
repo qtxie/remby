@@ -1369,6 +1369,40 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                     }
                                 }
+                                KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                    if state.searching { continue; }
+                                    state.loading = true;
+                                    state.loading_msg = "Refreshing home...".to_string();
+                                    let tx = bg_tx.clone();
+                                    let client = state.client.clone();
+                                    tokio::spawn(async move {
+                                        let timeout = std::time::Duration::from_secs(120);
+                                        let result = tokio::time::timeout(timeout, async {
+                                            let (resume_result, latest_result) = tokio::join!(
+                                                client.get_resume_items(20),
+                                                client.get_latest_items(20),
+                                            );
+                                            let mut items = Vec::new();
+                                            if let Ok(resume) = resume_result {
+                                                if !resume.is_empty() {
+                                                    items.push(crate::emby::MediaItem::separator("Continue Watching"));
+                                                    items.extend(resume);
+                                                }
+                                            }
+                                            if let Ok(latest) = latest_result {
+                                                if !latest.is_empty() {
+                                                    items.push(crate::emby::MediaItem::separator("Latest"));
+                                                    items.extend(latest);
+                                                }
+                                            }
+                                            items
+                                        }).await;
+                                        match result {
+                                            Ok(items) => { let _ = tx.send(BackgroundResult::HomeLoaded(items)); }
+                                            Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Home page".to_string())); }
+                                        }
+                                    });
+                                }
                                 _ => {}
                             }
                         }
