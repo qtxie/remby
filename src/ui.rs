@@ -576,6 +576,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
+                Constraint::Length(2),
                 Constraint::Min(1),
             ])
             .split(halves[0])
@@ -657,6 +658,15 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let options_widget = Paragraph::new(options);
         f.render_widget(Clear, top[4]);
         f.render_widget(options_widget, top[4]);
+    } else {
+        // Play button when no resume
+        let play_btn = Paragraph::new(Line::from(vec![
+            Span::styled("  \u{25b8} ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("Play", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("  (Enter)", Style::default().fg(Color::DarkGray)),
+        ])).alignment(Alignment::Center);
+        f.render_widget(Clear, top[3]);
+        f.render_widget(play_btn, top[3]);
     }
 
     // Bottom half: mpv output panel
