@@ -283,6 +283,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.search_results = results;
                     state.navigate_to(app::View::SearchResults);
                     state.loading = false;
+                    state.searching = false;
                     state.status_msg = None;
                 }
                 BackgroundResult::ItemDetailLoaded(detail) => {
@@ -1143,6 +1144,20 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                         Ok(result) => { let _ = tx.send(BackgroundResult::FolderLoaded(result.items, item_id, result.total)); }
                                                         Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load folder: {}", e))); }
                                                     }
+                                                }
+                                            });
+                                        } else if !item.is_separator() && !item.id.is_empty() {
+                                            // Fallback: try loading as item detail
+                                            state.loading = true;
+                                            state.loading_msg = format!("Loading {}...", item.display_name());
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let item_id = item.id.clone();
+                                            tokio::spawn(async move {
+                                                let timeout = std::time::Duration::from_secs(60);
+                                                match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
+                                                    Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
+                                                    _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
                                                 }
                                             });
                                         }

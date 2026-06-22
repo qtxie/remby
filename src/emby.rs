@@ -393,6 +393,7 @@ impl EmbyClient {
                 ("SearchTerm", query),
                 ("Recursive", "true"),
                 ("IncludeItemTypes", "Movie,Series,Episode"),
+                ("Fields", "MediaSources,ChildCount,UserData"),
                 ("Limit", "20"),
             ])
             .send()
@@ -411,6 +412,7 @@ impl EmbyClient {
                 ("ParentId", parent_id),
                 ("Recursive", "true"),
                 ("IncludeItemTypes", "Movie,Series,Episode"),
+                ("Fields", "MediaSources,ChildCount,UserData"),
                 ("Limit", "50"),
             ])
             .send()
