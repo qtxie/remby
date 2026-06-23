@@ -234,13 +234,22 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
 }
 
 fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
-    let mut items: Vec<ListItem> = Vec::new();
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(1),
+        ])
+        .split(area);
 
-    // Libraries header (not selectable)
-    items.push(ListItem::new(Line::from(Span::styled(
+    // Libraries header (not part of list)
+    let header = Paragraph::new(Line::from(Span::styled(
         format!("  {}", t("section.libraries")),
         Style::default().fg(theme.accent),
-    ))));
+    )));
+    f.render_widget(header, layout[0]);
+
+    let mut items: Vec<ListItem> = Vec::new();
 
     // Library items (selectable from index 0)
     for (i, lib) in state.libraries.iter().enumerate() {
@@ -314,7 +323,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
 
     let mut state_list = ListState::default();
     state_list.select(Some(state.selected));
-    f.render_stateful_widget(list, area, &mut state_list);
+    f.render_stateful_widget(list, layout[1], &mut state_list);
 }
 
 fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {

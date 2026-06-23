@@ -1633,7 +1633,6 @@ impl AppState {
             View::Home => self.following_items_count() + self.home_items.len(),
             View::ContinueWatching | View::LatestItems => self.home_items.len(),
             View::Libraries => {
-                // Libraries + latest items (header is not selectable)
                 let mut count = self.libraries.len();
                 for (_, items) in &self.library_latest {
                     count += 1 + items.len(); // +1 for section header
