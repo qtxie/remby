@@ -178,7 +178,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
         .map(|(i, item)| {
             if item.is_separator() {
                 ListItem::new(Line::from(Span::styled(
-                    format!("  {}", item.name),
+                    item.name.as_str(),
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
