@@ -1352,8 +1352,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                             }
                         }
+                        app::View::Help => {
+                            match key.code {
+                                KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q') => {
+                                    state.close_help();
+                                }
+                                _ => {}
+                            }
+                        }
                         _ => {
                             match key.code {
+                                KeyCode::Char('?') => {
+                                    state.open_help();
+                                }
                                 KeyCode::Char('q') if !state.searching => break,
                                 KeyCode::Esc => {
                                     if state.searching {
