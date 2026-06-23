@@ -1724,19 +1724,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.items = items;
                                         state.total_items = state.items.len();
                                         state.loading = false;
-                                    } else if state.view == app::View::Libraries {
+                                    } else if let Some(lib_name) = state.selected_section_name() {
                                         // Section header — open library browser for that library
-                                        let mut section_idx = state.selected - 1 - state.libraries.len();
-                                        let mut target_lib_name = None;
-                                        for (lib_name, _) in &state.library_latest {
-                                            if section_idx == 0 {
-                                                target_lib_name = Some(lib_name.clone());
-                                                break;
-                                            }
-                                            section_idx -= 1;
-                                        }
-                                        if let Some(lib_name) = target_lib_name {
-                                            if let Some(lib) = state.libraries.iter().find(|l| l.name == lib_name).cloned() {
+                                        if let Some(lib) = state.libraries.iter().find(|l| l.name == lib_name).cloned() {
                                                 state.open_library_browser(lib.id.clone(), lib.name.clone());
                                                 state.loading = true;
                                                 state.loading_msg = tf("status.loading", &lib.name);
@@ -1766,9 +1756,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                         Ok(r) => { let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(r.0, r.1, r.2, r.3, r.4, r.5, r.6)); }
                                                         Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
                                                     }
-                                                });
+                                                 });
                                             }
-                                        }
                                     }
                                 }
                                 KeyCode::Backspace => {

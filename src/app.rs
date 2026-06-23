@@ -810,6 +810,28 @@ impl AppState {
         None
     }
 
+    pub fn selected_section_name(&self) -> Option<String> {
+        if self.view != View::Libraries {
+            return None;
+        }
+        let mut idx = self.selected;
+        if idx == 0 { return None; }
+        idx -= 1;
+        if idx < self.libraries.len() { return None; }
+        idx -= self.libraries.len();
+        for (lib_name, items) in &self.library_latest {
+            if idx == 0 {
+                return Some(lib_name.clone());
+            }
+            idx -= 1;
+            if idx < items.len() {
+                return None;
+            }
+            idx -= items.len();
+        }
+        None
+    }
+
     pub fn is_libraries_cache_valid(&self) -> bool {
         self.libraries_fetched_at
             .map(|t| t.elapsed().as_secs() < CACHE_TTL_SECS)
