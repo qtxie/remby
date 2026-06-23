@@ -20,9 +20,13 @@ A lightweight Emby client with terminal UI and mpv playback.
 - **Auto-login** — remembers last account, auto-connects on startup
 - **First-time wizard** — guides setup on first launch (server, account, mpv path)
 - **Home page** with Continue Watching, Latest media, and Following updates
+- **Libraries view** — browse all libraries, navigate to library browser or latest items
 - **Library browser** with sort (Name/Year/Rating/Date Added) and filter (Genre/Tag/Studio/Year/Folder)
 - **Favorites & Following** — toggle favorite with `z`, follow series with `f`, unified management view
-- **Settings** — configure libraries, latest items, and mpv path
+- **Settings** — configure libraries, latest items, mpv path, language, and theme
+- **Theme system** — 3 built-in themes (default/green/dracula) + custom themes via `theme.json`
+- **Multi-language** — English and 中文 with runtime switching
+- **Help system** — press `?` anytime for context-sensitive keybinding reference
 - **Context-aware search** — search globally or within specific libraries
 - **Source selection** with detailed info (resolution, codec, audio, file size)
 - **Track selection** for video, audio, and subtitle
@@ -88,45 +92,51 @@ With custom mpv path:
 remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 ```
 
+Check version:
+
+```bash
+remby --version
+```
+
 ### Keyboard Shortcuts
+
+Press `?` in any view for a context-sensitive help popup.
 
 #### Global
 
 | Key | Action |
 |-----|--------|
+| `↑`/`↓` or `k`/`j` | Navigate |
 | `Enter` | Select / Play |
 | `Esc` | Go back / Cancel |
 | `q` | Quit |
 | `/` | Search |
 | `f` | Follow/unfollow series |
-| `F` | View favorites & following |
+| `z` | Toggle favorite |
 | `e` | Show series info |
 | `l` | Open libraries |
 | `u` | Account manager |
-| `z` | Toggle favorite |
 | `s` | Open settings |
-| `Ctrl+F` | Refresh home |
+| `?` | Show help |
 
-#### Account Manager (`u`)
+#### Libraries View
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` or `k`/`j` | Navigate accounts |
-| `a` | Add new account |
-| `e` | Edit selected account |
-| `d` | Delete selected account |
-| `Enter` | Switch to selected account |
-| `Esc`/`u` | Close |
+| `↑`/`↓` | Navigate |
+| `Enter` | Open library / section items |
+| `s` | Settings |
+| `q` | Quit |
 
 #### Settings (`s`)
 
 | Key | Action |
 |-----|--------|
-| `Tab` | Switch section (Libraries / MPV Path) |
+| `Tab` | Switch section (Libraries / MPV Path / Language / Theme) |
 | `↑`/`↓` or `k`/`j` | Navigate libraries |
-| `←`/`→` | Switch column (Enabled / Latest) |
 | `Space` | Toggle checkbox |
 | `Shift+↑/↓` | Reorder libraries |
+| `←`/`→` | Toggle language / cycle theme |
 | `Enter` | Save settings |
 | `Esc` | Cancel |
 
@@ -134,7 +144,7 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 
 | Key | Action |
 |-----|--------|
-| `↑`/`↓` or `k`/`j` | Scroll mpv output (when playing) / Select resume option (when paused) |
+| `↑`/`↓` or `k`/`j` | Scroll mpv output / Select resume option |
 | `PageUp`/`PageDown` | Scroll mpv output by 10 lines |
 | `Enter` | Start playback |
 | `Esc` | Stop mpv / Go back |
@@ -145,31 +155,11 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 |-----|--------|
 | `Ctrl+S` | Open sort panel |
 | `Ctrl+F` | Open filter panel |
-| `f` | Follow/unfollow series |
-| `z` | Toggle favorite |
-| `Z` | View favorites |
 | `/` | Search within library |
 | `e` | Show series info |
 | `c` | Clear all filters |
 | `Enter` | Open item / Apply sort/filter |
 | `Esc` | Close panel / Go back |
-
-#### Filter Panel
-
-| Key | Action |
-|-----|--------|
-| `↑`/`↓` or `k`/`j` | Navigate items |
-| `Enter` | Select / Toggle filter |
-| `←`/`→` | Switch section (Genre/Tag/Studio/Year/Folder) |
-| `Esc` | Cancel without applying |
-
-#### Sort Panel
-
-| Key | Action |
-|-----|--------|
-| `↑`/`↓` or `k`/`j` | Navigate options |
-| `Enter` | Select sort order |
-| `Esc` | Cancel |
 
 #### Favorites & Following View
 
@@ -181,6 +171,28 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 | `m` | Mark all episodes as watched |
 | `Enter` | Open/play item |
 
+### Custom Themes
+
+Create `theme.json` in your config directory (`~/.config/remby/` on Linux, `%APPDATA%/remby/` on Windows):
+
+```json
+{
+  "ocean": {
+    "accent": "Blue",
+    "text": "White",
+    "muted": "DarkGray",
+    "warning": "Yellow",
+    "success": "Green",
+    "error": "Red",
+    "selection_fg": "Black"
+  }
+}
+```
+
+Then set `"theme": "ocean"` in `config.json`. All color fields are optional — omitted fields inherit defaults.
+
+Available colors: `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`, `DarkGray`, `LightRed`, `LightGreen`, `LightYellow`, `LightBlue`, `LightMagenta`, `LightCyan`, `Gray`.
+
 ---
 
 ## 中文
@@ -191,9 +203,13 @@ remby -s https://your-server:8096 -u user -p pass --mpv /path/to/mpv
 - **自动登录** — 记住上次登录的账户，启动时自动连接
 - **首次向导** — 首次运行时引导配置（服务器、账户、mpv 路径）
 - **首页** — 继续观看、最近添加、追剧更新
+- **媒体库视图** — 浏览所有媒体库，进入媒体库浏览或最新内容
 - **媒体库浏览** — 支持排序（名称/年份/评分/添加日期）和筛选（类型/标签/制片厂/年份/文件夹）
 - **收藏与追剧** — 按 `z` 切换收藏，按 `f` 追剧，统一管理页面
-- **设置** — 配置媒体库、最新内容和 mpv 路径
+- **设置** — 配置媒体库、最新内容、mpv 路径、语言和主题
+- **主题系统** — 3 个内置主题（default/green/dracula）+ 自定义主题（通过 `theme.json`）
+- **多语言** — 支持 English 和 中文，运行时切换
+- **帮助系统** — 随时按 `?` 查看当前视图的快捷键参考
 - **上下文搜索** — 全局搜索或在特定媒体库内搜索
 - **源选择** — 显示详细信息（分辨率、编码、音频、文件大小）
 - **轨道选择** — 选择视频、音频和字幕轨道
@@ -259,45 +275,51 @@ remby
 remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 ```
 
+查看版本：
+
+```bash
+remby --version
+```
+
 ### 快捷键
+
+在任何视图按 `?` 可查看当前视图的快捷键帮助。
 
 #### 全局
 
 | 按键 | 功能 |
 |------|------|
+| `↑`/`↓` 或 `k`/`j` | 导航 |
 | `Enter` | 选择 / 播放 |
 | `Esc` | 返回 / 取消 |
 | `q` | 退出 |
 | `/` | 搜索 |
 | `f` | 追剧/取消追剧 |
-| `F` | 查看收藏与追剧 |
+| `z` | 切换收藏 |
 | `e` | 显示剧集信息 |
 | `l` | 打开媒体库 |
 | `u` | 账户管理 |
-| `z` | 切换收藏 |
 | `s` | 打开设置 |
-| `Ctrl+F` | 刷新首页 |
+| `?` | 显示帮助 |
 
-#### 账户管理（`u`）
+#### 媒体库视图
 
 | 按键 | 功能 |
 |------|------|
-| `↑`/`↓` 或 `k`/`j` | 导航账户 |
-| `a` | 添加新账户 |
-| `e` | 编辑选中账户 |
-| `d` | 删除选中账户 |
-| `Enter` | 切换到选中账户 |
-| `Esc`/`u` | 关闭 |
+| `↑`/`↓` | 导航 |
+| `Enter` | 打开媒体库 / 分区内容 |
+| `s` | 设置 |
+| `q` | 退出 |
 
 #### 设置（`s`）
 
 | 按键 | 功能 |
 |------|------|
-| `Tab` | 切换分区（媒体库 / MPV 路径） |
+| `Tab` | 切换分区（媒体库 / MPV 路径 / 语言 / 主题） |
 | `↑`/`↓` 或 `k`/`j` | 导航媒体库 |
-| `←`/`→` | 切换列（启用 / 最新） |
 | `Space` | 切换复选框 |
 | `Shift+↑/↓` | 调整媒体库顺序 |
+| `←`/`→` | 切换语言 / 循环主题 |
 | `Enter` | 保存设置 |
 | `Esc` | 取消 |
 
@@ -305,7 +327,7 @@ remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 
 | 按键 | 功能 |
 |------|------|
-| `↑`/`↓` 或 `k`/`j` | 滚动 mpv 输出（播放中）/ 选择续播选项（暂停时） |
+| `↑`/`↓` 或 `k`/`j` | 滚动 mpv 输出 / 选择续播选项 |
 | `PageUp`/`PageDown` | 滚动 mpv 输出 10 行 |
 | `Enter` | 开始播放 |
 | `Esc` | 停止 mpv / 返回 |
@@ -316,31 +338,11 @@ remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 |------|------|
 | `Ctrl+S` | 打开排序面板 |
 | `Ctrl+F` | 打开筛选面板 |
-| `f` | 追剧/取消追剧 |
-| `z` | 切换收藏 |
-| `Z` | 查看收藏 |
 | `/` | 在媒体库内搜索 |
 | `e` | 显示剧集信息 |
 | `c` | 清除所有筛选 |
 | `Enter` | 打开项目 / 应用排序或筛选 |
 | `Esc` | 关闭面板 / 返回 |
-
-#### 筛选面板
-
-| 按键 | 功能 |
-|------|------|
-| `↑`/`↓` 或 `k`/`j` | 导航选项 |
-| `Enter` | 选择 / 切换筛选 |
-| `←`/`→` | 切换分类（类型/标签/制片厂/年份/文件夹） |
-| `Esc` | 取消不应用 |
-
-#### 排序面板
-
-| 按键 | 功能 |
-|------|------|
-| `↑`/`↓` 或 `k`/`j` | 导航选项 |
-| `Enter` | 选择排序方式 |
-| `Esc` | 取消 |
 
 #### 收藏与追剧页面
 
@@ -351,6 +353,28 @@ remby -s https://你的服务器:8096 -u 用户名 -p 密码 --mpv /path/to/mpv
 | `z` | 切换收藏 |
 | `m` | 标记所有剧集为已看 |
 | `Enter` | 打开/播放项目 |
+
+### 自定义主题
+
+在配置目录创建 `theme.json`（Linux: `~/.config/remby/`，Windows: `%APPDATA%/remby/`）：
+
+```json
+{
+  "ocean": {
+    "accent": "Blue",
+    "text": "White",
+    "muted": "DarkGray",
+    "warning": "Yellow",
+    "success": "Green",
+    "error": "Red",
+    "selection_fg": "Black"
+  }
+}
+```
+
+然后在 `config.json` 中设置 `"theme": "ocean"`。所有颜色字段可选 — 省略的字段使用默认值。
+
+可用颜色：`Black`、`Red`、`Green`、`Yellow`、`Blue`、`Magenta`、`Cyan`、`White`、`DarkGray`、`LightRed`、`LightGreen`、`LightYellow`、`LightBlue`、`LightMagenta`、`LightCyan`、`Gray`。
 
 ---
 
