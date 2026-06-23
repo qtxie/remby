@@ -100,6 +100,7 @@ pub struct AppState {
     pub account_manager_state: AccountManagerState,
     pub wizard_state: WizardState,
     pub mpv_prompt_state: MpvPromptState,
+    pub help_state: HelpState,
 }
 
 pub(crate) struct StackEntry {
@@ -484,6 +485,11 @@ pub enum View {
     AccountManager,
     Wizard,
     MpvPrompt,
+    Help,
+}
+
+pub struct HelpState {
+    pub previous_view: View,
 }
 
 impl AppState {
@@ -552,6 +558,7 @@ impl AppState {
             account_manager_state: AccountManagerState::default(),
             wizard_state: WizardState::default(),
             mpv_prompt_state: MpvPromptState::default(),
+            help_state: HelpState { previous_view: View::Home },
         })
     }
 
@@ -793,6 +800,7 @@ impl AppState {
             View::AccountManager => None,
             View::Wizard => None,
             View::MpvPrompt => None,
+            View::Help => None,
             View::LibraryBrowser => self.library_browser_state.items.get(self.selected),
             View::Favorites => self.favorites.get(self.selected),
         }
@@ -1107,6 +1115,17 @@ impl AppState {
 
     pub fn settings_cancel(&mut self) {
         self.go_back();
+    }
+
+    pub fn open_help(&mut self) {
+        self.help_state.previous_view = self.view.clone();
+        self.navigate_to(View::Help);
+    }
+
+    pub fn close_help(&mut self) {
+        let prev = self.help_state.previous_view.clone();
+        self.go_back();
+        self.view = prev;
     }
 
     pub fn settings_switch_section(&mut self) {
@@ -1696,6 +1715,7 @@ impl AppState {
             }
             View::Wizard => 0,
             View::MpvPrompt => 0,
+            View::Help => 0,
         }
     }
 }

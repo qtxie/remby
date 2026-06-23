@@ -26,6 +26,11 @@ pub fn render(f: &mut Frame, state: &AppState) {
 
     render_header(f, state, layout[0], theme);
 
+    if state.view == View::Help {
+        render_help(f, state, area, theme);
+        return;
+    }
+
     match state.view {
         View::Home => render_home(f, state, layout[1], theme),
         View::Libraries => render_libraries(f, state, layout[1], theme),
@@ -43,6 +48,7 @@ pub fn render(f: &mut Frame, state: &AppState) {
         View::AccountManager => render_account_manager(f, state, layout[1], theme),
         View::Wizard => render_wizard(f, state, layout[1], theme),
         View::MpvPrompt => render_mpv_prompt(f, state, layout[1], theme),
+        View::Help => unreachable!(),
     }
 
     render_footer(f, state, layout[2], theme);
@@ -80,6 +86,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
             View::AccountManager => t("title.account_manager").to_string(),
             View::Wizard => t("title.wizard").to_string(),
             View::MpvPrompt => t("title.mpv_prompt").to_string(),
+            View::Help => "Help".to_string(),
             View::TrackSelect => t("title.track_select").to_string(),
             View::SourceSelect => t("title.source_select").to_string(),
             View::Episodes => format!("{} - {}", state.series_name, t("title.episodes")),
@@ -983,6 +990,47 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
     f.render_widget(theme_block, layout[3]);
 }
 
+fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+    let view_name = match state.help_state.previous_view {
+        crate::app::View::Home => "Home",
+        crate::app::View::Libraries => "Libraries",
+        crate::app::View::Items => "Items",
+        crate::app::View::SearchResults => "Search",
+        crate::app::View::Episodes => "Episodes",
+        crate::app::View::SeriesInfo => "SeriesInfo",
+        crate::app::View::Playing => "Playing",
+        crate::app::View::LibraryBrowser => "LibraryBrowser",
+        crate::app::View::Favorites => "Favorites",
+        crate::app::View::Settings => "Settings",
+        crate::app::View::ContinueWatching | crate::app::View::LatestItems => "Home",
+        _ => "Help",
+    };
+
+    let bindings = crate::help::bindings_for_view(view_name);
+    let label = crate::help::view_label(view_name);
+
+    let items: Vec<ListItem> = bindings.iter().map(|b| {
+        ListItem::new(Line::from(vec![
+            Span::styled(format!("  {:<12}", b.keys), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+            Span::raw(b.description),
+        ]))
+    }).collect();
+
+    let height = (items.len() + 4) as u16;
+    let popup = centered_rect(50, height, area);
+
+    let block = rounded_block()
+        .border_style(Style::default().fg(theme.accent))
+        .title(Span::styled(
+            format!(" Help: {} ", label),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+        ))
+        .title_alignment(Alignment::Center);
+
+    f.render_widget(Clear, popup);
+    f.render_widget(List::new(items).block(block), popup);
+}
+
 fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let help = match state.view {
         View::Home => t("footer.home"),
@@ -1017,6 +1065,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
         View::AccountManager => t("footer.account_manager"),
         View::Wizard => t("footer.wizard"),
         View::MpvPrompt => t("footer.mpv_prompt"),
+        View::Help => "",
     };
     let help = if state.searching {
         t("footer.search")
