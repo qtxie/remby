@@ -1665,38 +1665,21 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                              }
                                          });
                                     } else if state.view == app::View::Libraries && state.selected == 0 {
-                                        // "媒体库" header — load all items from all libraries
+                                        // "媒体库" header — show all libraries as folder entries
                                         let libs = state.libraries.clone();
-                                        state.loading = true;
-                                        state.loading_msg = t("status.loading_libraries").to_string();
-                                        let tx = bg_tx.clone();
-                                        let client = state.client.clone();
-                                        tokio::spawn(async move {
-                                            let timeout = std::time::Duration::from_secs(120);
-                                            let result = tokio::time::timeout(timeout, async {
-                                                let futures: Vec<_> = libs.iter().map(|lib| {
-                                                    let client = client.clone();
-                                                    let id = lib.id.clone();
-                                                    async move { client.get_items(&id, 0, 200).await }
-                                                }).collect();
-                                                let results = futures::future::join_all(futures).await;
-                                                let mut all_items = Vec::new();
-                                                let mut total = 0;
-                                                for r in results {
-                                                    if let Ok(page) = r {
-                                                        all_items.extend(page.items);
-                                                        total += page.total;
-                                                    }
-                                                }
-                                                (all_items, total)
-                                            }).await;
-                                            match result {
-                                                Ok((items, total)) => { let _ = tx.send(BackgroundResult::FolderLoaded(items, String::new(), total)); }
-                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Libraries".to_string())); }
-                                            }
-                                        });
+                                        let items: Vec<_> = libs.iter().map(|lib| {
+                                            let mut item = crate::emby::MediaItem::separator("");
+                                            item.id = lib.id.clone();
+                                            item.name = lib.name.clone();
+                                            item.item_type = "Folder".to_string();
+                                            item
+                                        }).collect();
+                                        state.navigate_to(app::View::Items);
+                                        state.items = items;
+                                        state.total_items = libs.len();
+                                        state.loading = false;
                                     } else if state.view == app::View::Libraries {
-                                        // Section header — load all items from that library
+                                        // Section header — open library browser for that library
                                         let mut section_idx = state.selected - 1 - state.libraries.len();
                                         let mut target_lib_name = None;
                                         for (lib_name, _) in &state.library_latest {
@@ -1708,17 +1691,33 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                         if let Some(lib_name) = target_lib_name {
                                             if let Some(lib) = state.libraries.iter().find(|l| l.name == lib_name).cloned() {
+                                                state.open_library_browser(lib.id.clone(), lib.name.clone());
                                                 state.loading = true;
                                                 state.loading_msg = tf("status.loading", &lib.name);
                                                 let tx = bg_tx.clone();
                                                 let client = state.client.clone();
                                                 let library_id = lib.id.clone();
+                                                let sort_by = "DateCreated".to_string();
+                                                let sort_order = "Descending".to_string();
                                                 tokio::spawn(async move {
                                                     let timeout = std::time::Duration::from_secs(120);
-                                                    let result = tokio::time::timeout(timeout, client.get_items(&library_id, 0, 200)).await;
+                                                    let result = tokio::time::timeout(timeout, async {
+                                                        let (items_result, genres_result, tags_result, studios_result, folders_result) = tokio::join!(
+                                                            client.get_items_filtered(&library_id, 0, 50, &sort_by, &sort_order, None, None, None, None),
+                                                            client.get_genres(&library_id),
+                                                            client.get_tags(&library_id),
+                                                            client.get_studios(&library_id),
+                                                            client.get_folders(&library_id),
+                                                        );
+                                                        let items = items_result.unwrap_or_else(|_| crate::emby::PageResult { items: vec![], total: 0 });
+                                                        let genres = genres_result.unwrap_or_default();
+                                                        let tags = tags_result.unwrap_or_default();
+                                                        let studios = studios_result.unwrap_or_default();
+                                                        let folders = folders_result.unwrap_or_default();
+                                                        (items.items, library_id, items.total, genres, tags, studios, folders)
+                                                    }).await;
                                                     match result {
-                                                        Ok(Ok(r)) => { let _ = tx.send(BackgroundResult::FolderLoaded(r.items, library_id, r.total)); }
-                                                        Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
+                                                        Ok(r) => { let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(r.0, r.1, r.2, r.3, r.4, r.5, r.6)); }
                                                         Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
                                                     }
                                                 });
