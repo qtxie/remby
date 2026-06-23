@@ -268,7 +268,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
         items.push(ListItem::new(Line::from(vec![
             Span::raw(prefix),
             Span::styled(icon, Style::default().fg(theme.accent)),
-            Span::raw("  "),
+            Span::raw(" "),
             Span::styled(&lib.name, style),
         ])));
     }
