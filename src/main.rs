@@ -1593,56 +1593,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                     Ok(Ok(r)) => { let _ = tx.send(BackgroundResult::HomeSectionLoaded(r.items, r.total, label)); }
                                                     Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Failed to load: {}", e))); }
                                                     Err(_) => { let _ = tx.send(BackgroundResult::Timeout(label)); }
-                                            }
-                                        });
-                                    } else if state.view == app::View::Libraries && state.selected == 0 {
-                                        // "媒体库" header — open first library items
-                                        if let Some(lib) = state.libraries.first().cloned() {
-                                            state.loading = true;
-                                            state.loading_msg = tf("status.loading", &lib.name);
-                                            let tx = bg_tx.clone();
-                                            let client = state.client.clone();
-                                            let library_id = lib.id.clone();
-                                            tokio::spawn(async move {
-                                                let timeout = std::time::Duration::from_secs(120);
-                                                let result = tokio::time::timeout(timeout, client.get_items(&library_id, 0, 200)).await;
-                                                match result {
-                                                    Ok(Ok(r)) => { let _ = tx.send(BackgroundResult::FolderLoaded(r.items, library_id, r.total)); }
-                                                    Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
-                                                    Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
                                                 }
                                             });
-                                    } else if state.view == app::View::Libraries {
-                                        // Section header — find which library and load its items
-                                        let mut section_idx = state.selected - 1 - state.libraries.len();
-                                        let mut target_lib_name = None;
-                                        for (lib_name, _) in &state.library_latest {
-                                            if section_idx == 0 {
-                                                target_lib_name = Some(lib_name.clone());
-                                                break;
-                                            }
-                                            section_idx -= 1;
+                                            continue;
                                         }
-                                        if let Some(lib_name) = target_lib_name {
-                                            if let Some(lib) = state.libraries.iter().find(|l| l.name == lib_name).cloned() {
-                                                state.loading = true;
-                                                state.loading_msg = tf("status.loading", &lib.name);
-                                                let tx = bg_tx.clone();
-                                                let client = state.client.clone();
-                                                let library_id = lib.id.clone();
-                                                tokio::spawn(async move {
-                                                    let timeout = std::time::Duration::from_secs(120);
-                                                    let result = tokio::time::timeout(timeout, client.get_items(&library_id, 0, 200)).await;
-                                                    match result {
-                                                        Ok(Ok(r)) => { let _ = tx.send(BackgroundResult::FolderLoaded(r.items, library_id, r.total)); }
-                                                        Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
-                                                        Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    }
-                                }
                                         if item.is_video() {
                                             state.loading = true;
                                             state.loading_msg = tf("status.loading", &item.display_name());
@@ -1704,12 +1658,72 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 (items.items, library_id, items.total, genres, tags, studios, folders)
                                             }).await;
                                             match result {
-                                                Ok((items, lib_id, total, genres, tags, studios, folders)) => {
-                                                    let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres, tags, studios, folders));
+                                                 Ok((items, lib_id, total, genres, tags, studios, folders)) => {
+                                                     let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(items, lib_id, total, genres, tags, studios, folders));
+                                                 }
+                                                 Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
+                                             }
+                                         });
+                                    } else if state.view == app::View::Libraries && state.selected == 0 {
+                                        // "媒体库" header — load all items from all libraries
+                                        let libs = state.libraries.clone();
+                                        state.loading = true;
+                                        state.loading_msg = t("status.loading_libraries").to_string();
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        tokio::spawn(async move {
+                                            let timeout = std::time::Duration::from_secs(120);
+                                            let result = tokio::time::timeout(timeout, async {
+                                                let futures: Vec<_> = libs.iter().map(|lib| {
+                                                    let client = client.clone();
+                                                    let id = lib.id.clone();
+                                                    async move { client.get_items(&id, 0, 200).await }
+                                                }).collect();
+                                                let results = futures::future::join_all(futures).await;
+                                                let mut all_items = Vec::new();
+                                                let mut total = 0;
+                                                for r in results {
+                                                    if let Ok(page) = r {
+                                                        all_items.extend(page.items);
+                                                        total += page.total;
+                                                    }
                                                 }
-                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
+                                                (all_items, total)
+                                            }).await;
+                                            match result {
+                                                Ok((items, total)) => { let _ = tx.send(BackgroundResult::FolderLoaded(items, String::new(), total)); }
+                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Libraries".to_string())); }
                                             }
                                         });
+                                    } else if state.view == app::View::Libraries {
+                                        // Section header — load all items from that library
+                                        let mut section_idx = state.selected - 1 - state.libraries.len();
+                                        let mut target_lib_name = None;
+                                        for (lib_name, _) in &state.library_latest {
+                                            if section_idx == 0 {
+                                                target_lib_name = Some(lib_name.clone());
+                                                break;
+                                            }
+                                            section_idx -= 1;
+                                        }
+                                        if let Some(lib_name) = target_lib_name {
+                                            if let Some(lib) = state.libraries.iter().find(|l| l.name == lib_name).cloned() {
+                                                state.loading = true;
+                                                state.loading_msg = tf("status.loading", &lib.name);
+                                                let tx = bg_tx.clone();
+                                                let client = state.client.clone();
+                                                let library_id = lib.id.clone();
+                                                tokio::spawn(async move {
+                                                    let timeout = std::time::Duration::from_secs(120);
+                                                    let result = tokio::time::timeout(timeout, client.get_items(&library_id, 0, 200)).await;
+                                                    match result {
+                                                        Ok(Ok(r)) => { let _ = tx.send(BackgroundResult::FolderLoaded(r.items, library_id, r.total)); }
+                                                        Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
+                                                        Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
+                                                    }
+                                                });
+                                            }
+                                        }
                                     }
                                 }
                                 KeyCode::Backspace => {
