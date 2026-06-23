@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod crypto;
 mod emby;
+mod help;
 mod i18n;
 mod mpv;
 mod theme;
@@ -472,7 +473,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         .filter(|i| i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false))
                         .count();
                     let follow_count = state.favorites.len() - fav_count;
-                    state.status_msg = Some(app::Message::info(format!("★ {} ▶ {}", fav_count, follow_count)));
+                    state.status_msg = Some(app::Message::info(format!("★ {} ⊕ {}", fav_count, follow_count)));
                 }
                 BackgroundResult::SeriesMarkedWatched(series_id, count) => {
                     state.favorites.retain(|item| item.id != series_id);
