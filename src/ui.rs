@@ -234,24 +234,22 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
 }
 
 fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(1),
-        ])
-        .split(area);
-
-    // Libraries header (not part of list)
-    let header = Paragraph::new(Line::from(Span::styled(
-        format!("  {}", t("section.libraries")),
-        Style::default().fg(theme.accent),
-    )));
-    f.render_widget(header, layout[0]);
-
     let mut items: Vec<ListItem> = Vec::new();
 
-    // Library items (selectable from index 0)
+    // Libraries header (selectable at index 0)
+    let selected = state.selected == 0;
+    let prefix = if selected { "▸ " } else { "  " };
+    let style = if selected {
+        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.accent)
+    };
+    items.push(ListItem::new(Line::from(vec![
+        Span::raw(prefix),
+        Span::styled(t("section.libraries"), style),
+    ])));
+
+    // Library items (selectable from index 1)
     for (i, lib) in state.libraries.iter().enumerate() {
         let icon = match lib.collection_type.as_deref() {
             Some("movies") => " ",
@@ -260,7 +258,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
             Some("books") => " ",
             _ => " ",
         };
-        let selected = state.view == View::Libraries && state.selected == i;
+        let selected = state.selected == i + 1;
         let prefix = if selected { "▸ " } else { "  " };
         let style = if selected {
             Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
@@ -276,9 +274,9 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
     }
 
     // Latest items sections
-    let mut idx = state.libraries.len();
+    let mut idx = 1 + state.libraries.len();
     for (lib_name, latest_items) in &state.library_latest {
-        let selected = state.view == View::Libraries && state.selected == idx;
+        let selected = state.selected == idx;
         let prefix = if selected { "▸ " } else { "  " };
         let style = if selected {
             Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
@@ -300,7 +298,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
                 String::new()
             };
             let icon = " ";
-            let selected = state.view == View::Libraries && state.selected == idx;
+            let selected = state.selected == idx;
             let prefix = if selected { "▸ " } else { "  " };
             let style = if selected {
                 Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
@@ -323,7 +321,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
 
     let mut state_list = ListState::default();
     state_list.select(Some(state.selected));
-    f.render_stateful_widget(list, layout[1], &mut state_list);
+    f.render_stateful_widget(list, area, &mut state_list);
 }
 
 fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {

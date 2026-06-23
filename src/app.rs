@@ -753,8 +753,14 @@ impl AppState {
             }
             View::ContinueWatching | View::LatestItems => self.home_items.get(self.selected),
             View::Libraries => {
-                // Combined list: libraries + section headers + latest items
+                // Combined list: header(0) + libraries(1..) + section headers + items
                 let mut idx = self.selected;
+
+                // Header at index 0
+                if idx == 0 {
+                    return None;
+                }
+                idx -= 1;
 
                 // Check libraries
                 if idx < self.libraries.len() {
@@ -794,8 +800,8 @@ impl AppState {
 
     pub fn selected_library(&self) -> Option<&Library> {
         if self.view == View::Libraries {
-            let idx = self.selected;
-            // Libraries are at index 0..n (header is not selectable)
+            // Header at 0, libraries start at 1
+            let idx = self.selected.saturating_sub(1);
             return self.libraries.get(idx);
         }
         None
@@ -1633,9 +1639,9 @@ impl AppState {
             View::Home => self.following_items_count() + self.home_items.len(),
             View::ContinueWatching | View::LatestItems => self.home_items.len(),
             View::Libraries => {
-                let mut count = self.libraries.len();
+                let mut count = 1 + self.libraries.len();
                 for (_, items) in &self.library_latest {
-                    count += 1 + items.len(); // +1 for section header
+                    count += 1 + items.len();
                 }
                 count
             }
