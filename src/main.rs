@@ -1664,6 +1664,24 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
                                             }
                                         });
+                                    } else if state.view == app::View::Libraries && state.selected == 0 {
+                                        // Header selected — open first library items
+                                        if let Some(lib) = state.libraries.first().cloned() {
+                                            state.loading = true;
+                                            state.loading_msg = tf("status.loading", &lib.name);
+                                            let tx = bg_tx.clone();
+                                            let client = state.client.clone();
+                                            let library_id = lib.id.clone();
+                                            tokio::spawn(async move {
+                                                let timeout = std::time::Duration::from_secs(120);
+                                                let result = tokio::time::timeout(timeout, client.get_items(&library_id, 0, 200)).await;
+                                                match result {
+                                                    Ok(Ok(r)) => { let _ = tx.send(BackgroundResult::FolderLoaded(r.items, library_id, r.total)); }
+                                                    Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
+                                                    Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
+                                                }
+                                            });
+                                        }
                                     }
                                 }
                                 KeyCode::Backspace => {
