@@ -91,6 +91,7 @@ pub struct AppState {
     pub bg_tx: Option<tokio::sync::mpsc::UnboundedSender<BackgroundResult>>,
     pub settings_state: SettingsState,
     pub config: RembyConfig,
+    pub theme: crate::theme::Theme,
     pub library_browser_state: LibraryBrowserState,
     pub favorites: Vec<MediaItem>,
     pub total_favorites: usize,
@@ -165,6 +166,7 @@ pub struct SettingsState {
     pub section: SettingsSection,
     pub mpv_path: String,
     pub language: String,
+    pub theme: String,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -172,6 +174,7 @@ pub enum SettingsSection {
     Libraries,
     MpvPath,
     Language,
+    Theme,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -211,6 +214,7 @@ impl Default for SettingsState {
             section: SettingsSection::Libraries,
             mpv_path: String::new(),
             language: String::new(),
+            theme: String::new(),
         }
     }
 }
@@ -495,6 +499,8 @@ impl AppState {
             (EmbyClient::new(String::new(), String::new()), String::new())
         };
 
+        let theme = crate::theme::Theme::by_name(&config.theme);
+
         Ok(Self {
             client,
             server,
@@ -535,6 +541,7 @@ impl AppState {
             bg_tx: None,
             settings_state: SettingsState::default(),
             config,
+            theme,
             library_browser_state: LibraryBrowserState::default(),
             favorites: Vec::new(),
             total_favorites: 0,
@@ -984,6 +991,7 @@ impl AppState {
             section: SettingsSection::Libraries,
             mpv_path: mpv,
             language: lang,
+            theme: self.config.theme.clone(),
         };
         self.navigate_to(View::Settings);
     }
@@ -1048,6 +1056,7 @@ impl AppState {
         let mpv = self.settings_state.mpv_path.trim().to_string();
         self.config.mpv_path = if mpv.is_empty() { "mpv".to_string() } else { mpv };
         self.config.language = self.settings_state.language.clone();
+        self.config.theme = self.settings_state.theme.clone();
         crate::i18n::init(&self.config.language);
         if let Err(e) = crate::config::save_config(&self.config) {
             self.status_msg = Some(Message::error(format!("Save error: {e}")));
@@ -1070,7 +1079,8 @@ impl AppState {
         self.settings_state.section = match self.settings_state.section {
             SettingsSection::Libraries => SettingsSection::MpvPath,
             SettingsSection::MpvPath => SettingsSection::Language,
-            SettingsSection::Language => SettingsSection::Libraries,
+            SettingsSection::Language => SettingsSection::Theme,
+            SettingsSection::Theme => SettingsSection::Libraries,
         };
         self.settings_state.selected = 0;
     }
@@ -1094,6 +1104,20 @@ impl AppState {
             } else {
                 "zh".to_string()
             };
+        }
+    }
+
+    pub fn settings_cycle_theme(&mut self, forward: bool) {
+        if self.settings_state.section == SettingsSection::Theme {
+            let names = crate::theme::THEME_NAMES;
+            let idx = names.iter().position(|n| *n == self.settings_state.theme).unwrap_or(0);
+            let new_idx = if forward {
+                (idx + 1) % names.len()
+            } else {
+                (idx + names.len() - 1) % names.len()
+            };
+            self.settings_state.theme = names[new_idx].to_string();
+            self.theme = crate::theme::Theme::by_name(&self.settings_state.theme);
         }
     }
 

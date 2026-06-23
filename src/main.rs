@@ -4,6 +4,7 @@ mod crypto;
 mod emby;
 mod i18n;
 mod mpv;
+mod theme;
 mod ui;
 
 use anyhow::Result;
@@ -569,6 +570,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::Settings => {
                             let in_mpv = state.settings_state.section == app::SettingsSection::MpvPath;
                             let in_lang = state.settings_state.section == app::SettingsSection::Language;
+                            let in_theme = state.settings_state.section == app::SettingsSection::Theme;
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => state.settings_cancel(),
@@ -576,14 +578,15 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char(c) if in_mpv => state.settings_mpv_input(c),
                                 KeyCode::Backspace if in_mpv => state.settings_mpv_backspace(),
                                 KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') if in_lang => state.settings_toggle_language(),
-                                KeyCode::Up if !in_mpv && !in_lang && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
-                                KeyCode::Down if !in_mpv && !in_lang && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
-                                KeyCode::Up | KeyCode::Char('k') if !in_mpv && !in_lang => state.settings_select_prev(),
-                                KeyCode::Down | KeyCode::Char('j') if !in_mpv && !in_lang => state.settings_select_next(),
-                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') if !in_mpv && !in_lang => state.settings_switch_column(),
-                                KeyCode::Char(' ') if !in_mpv && !in_lang => state.settings_toggle(),
-                                KeyCode::Char('K') if !in_mpv && !in_lang => state.settings_move_up(),
-                                KeyCode::Char('J') if !in_mpv && !in_lang => state.settings_move_down(),
+                                KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') if in_theme => state.settings_cycle_theme(key.code == KeyCode::Right || key.code == KeyCode::Char('l')),
+                                KeyCode::Up if !in_mpv && !in_lang && !in_theme && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
+                                KeyCode::Down if !in_mpv && !in_lang && !in_theme && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
+                                KeyCode::Up | KeyCode::Char('k') if !in_mpv && !in_lang && !in_theme => state.settings_select_prev(),
+                                KeyCode::Down | KeyCode::Char('j') if !in_mpv && !in_lang && !in_theme => state.settings_select_next(),
+                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') if !in_mpv && !in_lang && !in_theme => state.settings_switch_column(),
+                                KeyCode::Char(' ') if !in_mpv && !in_lang && !in_theme => state.settings_toggle(),
+                                KeyCode::Char('K') if !in_mpv && !in_lang && !in_theme => state.settings_move_up(),
+                                KeyCode::Char('J') if !in_mpv && !in_lang && !in_theme => state.settings_move_down(),
                                 KeyCode::Enter => {
                                     state.settings_save();
                                     state.loading_msg = t("status.loading_libraries").to_string();

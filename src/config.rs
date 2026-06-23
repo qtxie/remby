@@ -16,6 +16,8 @@ pub struct RembyConfig {
     pub mpv_path: String,
     #[serde(default = "default_language")]
     pub language: String,
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 fn default_mpv_path() -> String {
@@ -24,6 +26,10 @@ fn default_mpv_path() -> String {
 
 fn default_language() -> String {
     crate::i18n::detect_system_lang().to_string()
+}
+
+fn default_theme() -> String {
+    "default".to_string()
 }
 
 impl RembyConfig {

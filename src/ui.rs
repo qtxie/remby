@@ -13,6 +13,7 @@ fn rounded_block() -> Block<'static> {
 
 pub fn render(f: &mut Frame, state: &AppState) {
     let area = f.area();
+    let theme = &state.theme;
 
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -23,31 +24,31 @@ pub fn render(f: &mut Frame, state: &AppState) {
         ])
         .split(area);
 
-    render_header(f, state, layout[0]);
+    render_header(f, state, layout[0], theme);
 
     match state.view {
-        View::Home => render_home(f, state, layout[1]),
-        View::Libraries => render_libraries(f, state, layout[1]),
-        View::Items => render_items(f, state, layout[1]),
-        View::SearchResults => render_items(f, state, layout[1]),
-        View::Favorites => render_items(f, state, layout[1]),
-        View::SourceSelect => render_source_select(f, state, layout[1]),
-        View::TrackSelect => render_track_select(f, state, layout[1]),
-        View::Episodes => render_episodes(f, state, layout[1]),
-        View::SeriesInfo => render_series_info(f, state, layout[1]),
-        View::Playing => render_playing(f, state, layout[1]),
-        View::Settings => render_settings(f, state, layout[1]),
-        View::LibraryBrowser => render_library_browser(f, state, layout[1]),
-        View::ContinueWatching | View::LatestItems => render_home(f, state, layout[1]),
-        View::AccountManager => render_account_manager(f, state, layout[1]),
-        View::Wizard => render_wizard(f, state, layout[1]),
-        View::MpvPrompt => render_mpv_prompt(f, state, layout[1]),
+        View::Home => render_home(f, state, layout[1], theme),
+        View::Libraries => render_libraries(f, state, layout[1], theme),
+        View::Items => render_items(f, state, layout[1], theme),
+        View::SearchResults => render_items(f, state, layout[1], theme),
+        View::Favorites => render_items(f, state, layout[1], theme),
+        View::SourceSelect => render_source_select(f, state, layout[1], theme),
+        View::TrackSelect => render_track_select(f, state, layout[1], theme),
+        View::Episodes => render_episodes(f, state, layout[1], theme),
+        View::SeriesInfo => render_series_info(f, state, layout[1], theme),
+        View::Playing => render_playing(f, state, layout[1], theme),
+        View::Settings => render_settings(f, state, layout[1], theme),
+        View::LibraryBrowser => render_library_browser(f, state, layout[1], theme),
+        View::ContinueWatching | View::LatestItems => render_home(f, state, layout[1], theme),
+        View::AccountManager => render_account_manager(f, state, layout[1], theme),
+        View::Wizard => render_wizard(f, state, layout[1], theme),
+        View::MpvPrompt => render_mpv_prompt(f, state, layout[1], theme),
     }
 
-    render_footer(f, state, layout[2]);
+    render_footer(f, state, layout[2], theme);
 }
 
-fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let title = if state.searching {
         format!("/ {}", state.search_query)
     } else {
@@ -125,11 +126,11 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(theme.accent))
         .title(Span::styled(
             format!(" {title} "),
             Style::default()
-                .fg(Color::White)
+                .fg(theme.text)
                 .add_modifier(Modifier::BOLD),
         ))
         .title_alignment(Alignment::Center);
@@ -141,12 +142,12 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
     if let Some(ref msg) = state.status_msg {
         let status = match msg {
             crate::app::Message::Loading(spinner, text) => Line::from(vec![
-                Span::styled(format!("{} ", spinner), Style::default().fg(Color::Cyan)),
-                Span::styled(text.as_str(), Style::default().fg(Color::White)),
+                Span::styled(format!("{} ", spinner), Style::default().fg(theme.accent)),
+                Span::styled(text.as_str(), Style::default().fg(theme.text)),
             ]),
-            crate::app::Message::Info(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::White))),
-            crate::app::Message::Success(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Green))),
-            crate::app::Message::Error(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(Color::Red))),
+            crate::app::Message::Info(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(theme.text))),
+            crate::app::Message::Success(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(theme.success))),
+            crate::app::Message::Error(s) => Line::from(Span::styled(s.as_str(), Style::default().fg(theme.error))),
         };
         f.render_widget(Paragraph::new(status), Rect {
             x: inner.x + 1,
@@ -157,7 +158,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect) {
     }
 }
 
-fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let mut combined: Vec<crate::emby::MediaItem> = Vec::new();
 
     for (series_name, episodes) in &state.following_updates {
@@ -179,7 +180,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
                 ListItem::new(Line::from(Span::styled(
                     format!("  {}", item.name),
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
                 )))
             } else {
@@ -194,7 +195,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
                 };
                 let style = if i == state.selected {
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme.accent)
                         .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
@@ -211,11 +212,11 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
                 };
 
                 let mut spans = vec![
-                    Span::styled(star, Style::default().fg(Color::Yellow)),
+                    Span::styled(star, Style::default().fg(theme.warning)),
                     Span::styled(format!("{name}{dur}"), style),
                 ];
                 if !bar.is_empty() {
-                    spans.push(Span::styled(bar, Style::default().fg(Color::DarkGray)));
+                    spans.push(Span::styled(bar, Style::default().fg(theme.muted)));
                 }
                 ListItem::new(Line::from(spans))
             }
@@ -224,7 +225,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
 
     let list = List::new(items)
         .block(rounded_block().title(format!(" {} ", t("section.home"))))
-        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
     let mut state_list = ListState::default();
@@ -232,13 +233,13 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let mut items: Vec<ListItem> = Vec::new();
 
     // Libraries header (not selectable)
     items.push(ListItem::new(Line::from(Span::styled(
         format!("  {}", t("section.libraries")),
-        Style::default().fg(Color::Cyan),
+        Style::default().fg(theme.accent),
     ))));
 
     // Library items (selectable from index 0)
@@ -253,13 +254,13 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
         let selected = state.view == View::Libraries && state.selected == i;
         let prefix = if selected { "▸ " } else { "  " };
         let style = if selected {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
         items.push(ListItem::new(Line::from(vec![
             Span::raw(prefix),
-            Span::styled(icon, Style::default().fg(Color::Cyan)),
+            Span::styled(icon, Style::default().fg(theme.accent)),
             Span::raw("  "),
             Span::styled(&lib.name, style),
         ])));
@@ -271,9 +272,9 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
         let selected = state.view == View::Libraries && state.selected == idx;
         let prefix = if selected { "▸ " } else { "  " };
         let style = if selected {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Yellow)
+            Style::default().fg(theme.warning)
         };
         items.push(ListItem::new(Line::from(Span::styled(
             format!("{}最新 {}", prefix, lib_name),
@@ -293,16 +294,16 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
             let selected = state.view == View::Libraries && state.selected == idx;
             let prefix = if selected { "▸ " } else { "  " };
             let style = if selected {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
             items.push(ListItem::new(Line::from(vec![
                 Span::raw(prefix),
-                Span::styled(icon, Style::default().fg(Color::Cyan)),
+                Span::styled(icon, Style::default().fg(theme.accent)),
                 Span::raw("  "),
                 Span::styled(name, style),
-                Span::styled(dur, Style::default().fg(Color::DarkGray)),
+                Span::styled(dur, Style::default().fg(theme.muted)),
             ])));
             idx += 1;
         }
@@ -316,7 +317,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let items_source = match state.view {
         View::Items => &state.items,
         View::SearchResults => &state.search_results,
@@ -355,10 +356,10 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
                 String::new()
             };
             ListItem::new(Line::from(vec![
-                Span::styled(star, Style::default().fg(Color::Yellow)),
-                Span::styled(follow_mark.to_string(), Style::default().fg(Color::Green)),
+                Span::styled(star, Style::default().fg(theme.warning)),
+                Span::styled(follow_mark.to_string(), Style::default().fg(theme.success)),
                 Span::raw(name),
-                Span::styled(dur, Style::default().fg(Color::DarkGray)),
+                Span::styled(dur, Style::default().fg(theme.muted)),
             ]))
         })
         .collect();
@@ -373,7 +374,7 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
                 }
             ),
         )
-        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
     let mut state_list = ListState::default();
@@ -381,15 +382,15 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_source_select(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_source_select(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ss = &state.source_state;
     let item_name = ss.item.as_ref().map(|i| i.display_name()).unwrap_or_default();
 
     let block = rounded_block()
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(theme.accent))
         .title(Span::styled(
             format!(" {item_name} - Select Source "),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ))
         .title_alignment(Alignment::Center);
     let inner = block.inner(area);
@@ -407,7 +408,7 @@ fn render_source_select(f: &mut Frame, state: &AppState, area: Rect) {
         let spans = if selected {
             Line::from(Span::styled(
                 format!("{prefix}{label}"),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
             ))
         } else {
             Line::from(vec![
@@ -419,7 +420,7 @@ fn render_source_select(f: &mut Frame, state: &AppState, area: Rect) {
     }
 }
 
-fn render_episodes(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_episodes(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let items: Vec<ListItem> = state.episodes.iter().map(|item| {
         let name = item.display_name();
         let duration = item.duration_str().unwrap_or_default();
@@ -430,7 +431,7 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect) {
         };
         ListItem::new(Line::from(vec![
             Span::raw(name),
-            Span::styled(dur, Style::default().fg(Color::DarkGray)),
+            Span::styled(dur, Style::default().fg(theme.muted)),
         ]))
     }).collect();
 
@@ -441,7 +442,7 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect) {
     };
     let list = List::new(items)
         .block(rounded_block().title(title))
-        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
     let mut state_list = ListState::default();
@@ -449,7 +450,7 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ss = &state.series_state;
 
     let layout = Layout::default()
@@ -496,8 +497,8 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
 
     for (i, (label, items, section)) in tabs.iter().enumerate() {
         let active = ss.section == *section;
-        let border_color = if active { Color::Cyan } else { Color::DarkGray };
-        let title_color = if active { Color::Cyan } else { Color::DarkGray };
+        let border_color = if active { theme.accent } else { theme.muted };
+        let title_color = if active { theme.accent } else { theme.muted };
 
         let tab_items: Vec<ListItem> = items.iter().map(|item| {
             let name = item.display_name();
@@ -515,7 +516,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
                         Style::default().fg(title_color).add_modifier(Modifier::BOLD),
                     ))
             )
-            .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
             .highlight_symbol("▸ ");
 
         let mut state_list = ListState::default();
@@ -531,7 +532,7 @@ fn display_width(s: &str) -> usize {
     s.chars().map(|c| c.width().unwrap_or(0)).sum()
 }
 
-fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
+fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, theme: &crate::theme::Theme) {
     let mut lines: Vec<Line> = Vec::new();
 
     if let Some(ref source) = ps.media_source {
@@ -596,8 +597,8 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
             if !lang.is_empty() { sub_info = format!("{} ({})", sub_info, lang); }
         }
 
-        let dg = Color::DarkGray;
-        let wc = Color::White;
+        let dg = theme.muted;
+        let wc = theme.text;
         let lw = 14;
         let vw = 18;
 
@@ -623,15 +624,15 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
         ]));
     } else {
         lines.push(Line::from(vec![
-            Span::styled(format!("  {}:  ", t("track.video")), Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  {}:  ", t("track.video")), Style::default().fg(theme.muted)),
             Span::raw(&ps.video_track),
         ]));
         lines.push(Line::from(vec![
-            Span::styled(format!("  {}:  ", t("track.audio")), Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  {}:  ", t("track.audio")), Style::default().fg(theme.muted)),
             Span::raw(&ps.audio_track),
         ]));
         lines.push(Line::from(vec![
-            Span::styled(format!("  {}:    ", t("track.sub")), Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("  {}:    ", t("track.sub")), Style::default().fg(theme.muted)),
             Span::raw(&ps.subtitle_track),
         ]));
     }
@@ -640,7 +641,7 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
     f.render_widget(Paragraph::new(lines), area);
 }
 
-fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ps = &state.playing_state;
     let has_resume = ps.resume_position.is_some() && !ps.playing;
 
@@ -676,13 +677,13 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     // Title
     let title = Paragraph::new(Span::styled(
         &ps.item_name,
-        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
     )).alignment(Alignment::Center);
     f.render_widget(Clear, top[0]);
     f.render_widget(title, top[0]);
 
     // Media info
-    render_media_info(f, ps, top[2]);
+    render_media_info(f, ps, top[2], theme);
 
     // Playing indicator
     if ps.playing {
@@ -693,7 +694,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             .as_millis() / 100) as usize % spinner.len();
         let playing_text = Paragraph::new(Span::styled(
             format!("{} {}", spinner[idx], t("playing.in_mpv")),
-            Style::default().fg(Color::Cyan),
+            Style::default().fg(theme.accent),
         )).alignment(Alignment::Center);
         f.render_widget(Clear, top[3]);
         f.render_widget(playing_text, top[3]);
@@ -748,13 +749,13 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let options = vec![
             Line::from(Span::styled(
                 center(&prompt, dw_prompt),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(theme.warning),
             )),
             Line::from(""),
             Line::from(Span::styled(
                 center(&opt1_padded, opt_maxdw),
                 if ps.option_selected == 0 {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(theme.accent)
                 } else {
                     Style::default()
                 },
@@ -762,7 +763,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             Line::from(Span::styled(
                 center(&opt2_padded, opt_maxdw),
                 if ps.option_selected == 1 {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(theme.accent)
                 } else {
                     Style::default()
                 },
@@ -774,7 +775,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     } else if !ps.playing {
         // Play button when no resume and not playing
         let play_text = format!("\u{25b8} {} {}", t("playing.play"), t("playing.press_enter"));
-        let play_btn = Paragraph::new(Line::from(Span::styled(play_text, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))))
+        let play_btn = Paragraph::new(Line::from(Span::styled(play_text, Style::default().fg(theme.success).add_modifier(Modifier::BOLD))))
             .alignment(Alignment::Center);
         f.render_widget(Clear, top[4]);
         f.render_widget(play_btn, top[4]);
@@ -792,9 +793,9 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let start = end.saturating_sub(visible_height);
         let visible: Vec<Line> = state.mpv_output[start..end].iter().map(|(line, level)| {
             let style = match level.as_str() {
-                "error" | "fatal" => Style::default().fg(Color::Red),
-                "warn" => Style::default().fg(Color::Yellow),
-                "info" => Style::default().fg(Color::DarkGray),
+                "error" | "fatal" => Style::default().fg(theme.error),
+                "warn" => Style::default().fg(theme.warning),
+                "info" => Style::default().fg(theme.muted),
                 _ => Style::default(),
             };
             Line::from(Span::styled(line.as_str(), style))
@@ -804,8 +805,8 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::DarkGray))
-            .title(Span::styled(title, Style::default().fg(Color::DarkGray)));
+            .border_style(Style::default().fg(theme.muted))
+            .title(Span::styled(title, Style::default().fg(theme.muted)));
         let paragraph = Paragraph::new(visible).block(block);
         f.render_widget(Clear, output_area);
         f.render_widget(paragraph, output_area);
@@ -813,14 +814,14 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::DarkGray))
+            .border_style(Style::default().fg(theme.muted))
             .title(format!(" {} ", t("section.mpv_output")));
         f.render_widget(Clear, output_area);
         f.render_widget(block, output_area);
     }
 }
 
-fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ss = &state.settings_state;
 
     let layout = Layout::default()
@@ -829,11 +830,12 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
             Constraint::Min(1),
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Length(3),
         ])
         .split(area);
 
     // Libraries section
-    let header_style = Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD);
+    let header_style = Style::default().fg(theme.accent).add_modifier(Modifier::BOLD);
     let name_col = 24;
 
     let mut items: Vec<ListItem> = Vec::new();
@@ -845,19 +847,19 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         Span::styled(header_name, header_style),
         Span::styled(
             enabled_header,
-            if ss.column == SettingsColumn::Enabled { header_style } else { Style::default().fg(Color::DarkGray) },
+            if ss.column == SettingsColumn::Enabled { header_style } else { Style::default().fg(theme.muted) },
         ),
         Span::raw("  "),
         Span::styled(
             latest_header,
-            if ss.column == SettingsColumn::Latest { header_style } else { Style::default().fg(Color::DarkGray) },
+            if ss.column == SettingsColumn::Latest { header_style } else { Style::default().fg(theme.muted) },
         ),
     ])));
 
     for (i, lib) in ss.libraries.iter().enumerate() {
         let selected = i == ss.selected && ss.section == SettingsSection::Libraries;
         let name_style = if selected {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -866,19 +868,19 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         let latest_mark = if lib.fetch_latest { "[x]" } else { "[ ]" };
 
         let enabled_style = if selected && ss.column == SettingsColumn::Enabled {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else if lib.enabled {
-            Style::default().fg(Color::Green)
+            Style::default().fg(theme.success)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.muted)
         };
 
         let latest_style = if selected && ss.column == SettingsColumn::Latest {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else if lib.fetch_latest {
-            Style::default().fg(Color::Green)
+            Style::default().fg(theme.success)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.muted)
         };
 
         let marker = if selected { ">" } else { " " };
@@ -898,7 +900,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
         ])));
     }
 
-    let lib_border = if ss.section == SettingsSection::Libraries { Color::Cyan } else { Color::DarkGray };
+    let lib_border = if ss.section == SettingsSection::Libraries { theme.accent } else { theme.muted };
     let list = List::new(items)
         .block(
             Block::default()
@@ -907,7 +909,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
                 .border_style(Style::default().fg(lib_border))
                 .title(Span::styled(
                     format!(" {} ", t("settings.library_prefs")),
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
                 ))
                 .title_alignment(Alignment::Center),
         );
@@ -917,11 +919,11 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
     // MPV path section
     let mpv_active = ss.section == SettingsSection::MpvPath;
-    let mpv_border = if mpv_active { Color::Cyan } else { Color::DarkGray };
+    let mpv_border = if mpv_active { theme.accent } else { theme.muted };
     let cursor = if mpv_active { "█" } else { "" };
     let mpv_text = format!("  {}: {}{}", t("settings.mpv_path"), ss.mpv_path, cursor);
     let mpv_style = if mpv_active {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
@@ -931,24 +933,41 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect) {
 
     // Language section
     let lang_active = ss.section == SettingsSection::Language;
-    let lang_border = if lang_active { Color::Cyan } else { Color::DarkGray };
+    let lang_border = if lang_active { theme.accent } else { theme.muted };
     let lang_label = if ss.language == "zh" { "中文" } else { "English" };
     let lang_text = format!("  Language: {}", lang_label);
     let lang_style = if lang_active {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
     let lang_hint = if lang_active { "  (←/→ to switch)" } else { "" };
     let lang_block = Paragraph::new(Line::from(vec![
         Span::styled(lang_text, lang_style),
-        Span::styled(lang_hint.to_string(), Style::default().fg(Color::DarkGray)),
+        Span::styled(lang_hint.to_string(), Style::default().fg(theme.muted)),
     ]))
         .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(lang_border)).title(" Language "));
     f.render_widget(lang_block, layout[2]);
+
+    // Theme section
+    let theme_active = ss.section == SettingsSection::Theme;
+    let theme_border = if theme_active { theme.accent } else { theme.muted };
+    let theme_style = if theme_active {
+        Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
+    let theme_hint = if theme_active { "  (←/→ to switch)" } else { "" };
+    let theme_text = format!("  Theme: {}", ss.theme);
+    let theme_block = Paragraph::new(Line::from(vec![
+        Span::styled(theme_text, theme_style),
+        Span::styled(theme_hint.to_string(), Style::default().fg(theme.muted)),
+    ]))
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(theme_border)).title(" Theme "));
+    f.render_widget(theme_block, layout[3]);
 }
 
-fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let help = match state.view {
         View::Home => t("footer.home"),
         View::ContinueWatching | View::LatestItems => t("footer.continue_watching"),
@@ -988,7 +1007,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect) {
     } else {
         help
     };
-    let line = Line::from(Span::styled(help, Style::default().fg(Color::DarkGray)))
+    let line = Line::from(Span::styled(help, Style::default().fg(theme.muted)))
         .alignment(Alignment::Center);
     f.render_widget(Clear, area);
     f.render_widget(Paragraph::new(line), area);
@@ -1026,7 +1045,7 @@ pub fn track_label(stream: &crate::emby::MediaStream) -> String {
     }
 }
 
-fn render_track_select(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_track_select(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ts = &state.track_state;
     let item_name = ts.item.as_ref().map(|i| i.name.as_str()).unwrap_or("");
 
@@ -1039,10 +1058,10 @@ fn render_track_select(f: &mut Frame, state: &AppState, area: Rect) {
         .split(area);
 
     let title_block = rounded_block()
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(theme.accent))
         .title(Span::styled(
             format!(" {item_name} "),
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ))
         .title_alignment(Alignment::Center);
     f.render_widget(Clear, layout[0]);
@@ -1057,24 +1076,25 @@ fn render_track_select(f: &mut Frame, state: &AppState, area: Rect) {
         ])
         .split(layout[1]);
 
-    render_track_section(f, state, sections_layout[0], t("section.video"), &ts.video_tracks, ts.selected_video, &ts.section, TrackSection::Video);
-    render_track_section(f, state, sections_layout[1], t("section.audio"), &ts.audio_tracks, ts.selected_audio, &ts.section, TrackSection::Audio);
-    render_track_section(f, state, sections_layout[2], t("section.subtitle"), &ts.subtitle_tracks, ts.selected_subtitle, &ts.section, TrackSection::Subtitle);
+    render_track_section(f, state, sections_layout[0], t("section.video"), &ts.video_tracks, ts.selected_video, &ts.section, TrackSection::Video, theme);
+    render_track_section(f, state, sections_layout[1], t("section.audio"), &ts.audio_tracks, ts.selected_audio, &ts.section, TrackSection::Audio, theme);
+    render_track_section(f, state, sections_layout[2], t("section.subtitle"), &ts.subtitle_tracks, ts.selected_subtitle, &ts.section, TrackSection::Subtitle, theme);
 }
 
 fn render_track_section(
     f: &mut Frame, _state: &AppState, area: Rect,
     title: &str, tracks: &[crate::emby::MediaStream],
     selected: usize, current_section: &TrackSection, section: TrackSection,
+    theme: &crate::theme::Theme,
 ) {
     let active = *current_section == section;
-    let border_color = if active { Color::Cyan } else { Color::DarkGray };
+    let border_color = if active { theme.accent } else { theme.muted };
 
     let items: Vec<ListItem> = tracks.iter().enumerate().map(|(i, track)| {
         let label = track_label(track);
         let marker = if i == selected { "▸ " } else { "  " };
         let style = if i == selected && active {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -1089,7 +1109,7 @@ fn render_track_section(
                 .border_style(Style::default().fg(border_color))
                 .title(Span::styled(
                     format!(" {title} ({}) ", tracks.len()),
-                    Style::default().fg(if active { Color::Cyan } else { Color::DarkGray }).add_modifier(Modifier::BOLD),
+                    Style::default().fg(if active { theme.accent } else { theme.muted }).add_modifier(Modifier::BOLD),
                 ))
         );
 
@@ -1097,7 +1117,7 @@ fn render_track_section(
     f.render_widget(list, area);
 }
 
-fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let bs = &state.library_browser_state;
 
     let items: Vec<ListItem> = bs.items.iter().map(|item| {
@@ -1108,7 +1128,7 @@ fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect) {
 
     let list = List::new(items)
         .block(rounded_block().title(format!(" {} ", bs.library_name)))
-        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
         .highlight_symbol("▸ ");
 
     let mut state_list = ListState::default();
@@ -1116,13 +1136,13 @@ fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_stateful_widget(list, area, &mut state_list);
 
     match bs.panel {
-        BrowserPanel::Sort => render_sort_panel(f, state, area),
-        BrowserPanel::Filter => render_filter_panel(f, state, area),
+        BrowserPanel::Sort => render_sort_panel(f, state, area, theme),
+        BrowserPanel::Filter => render_filter_panel(f, state, area, theme),
         BrowserPanel::None => {}
     }
 }
 
-fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let bs = &state.library_browser_state;
     let order_label = match bs.sort_order {
         SortOrder::Asc => "Order: Ascending",
@@ -1144,9 +1164,9 @@ fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
         };
 
         let style = if selected {
-            Style::default().fg(Color::Black).bg(Color::Cyan)
+            Style::default().fg(theme.selection_fg).bg(theme.accent)
         } else if current {
-            Style::default().fg(Color::Cyan)
+            Style::default().fg(theme.accent)
         } else {
             Style::default()
         };
@@ -1163,7 +1183,7 @@ fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(list, popup);
 }
 
-fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let bs = &state.library_browser_state;
 
     let mut items: Vec<ListItem> = Vec::new();
@@ -1178,7 +1198,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
     };
     items.push(ListItem::new(Line::from(Span::styled(
         format!("── {} ──", section_title),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.muted),
     ))));
 
     match bs.filter_section {
@@ -1188,9 +1208,9 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
                 let active = bs.filter_genre.as_ref() == Some(genre);
 
                 let style = if selected {
-                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                    Style::default().fg(theme.selection_fg).bg(theme.accent)
                 } else if active {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(theme.accent)
                 } else {
                     Style::default()
                 };
@@ -1206,7 +1226,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
             if next_selected {
                 items.push(ListItem::new(Line::from(Span::styled(
                     "  → Tag",
-                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                    Style::default().fg(theme.selection_fg).bg(theme.accent),
                 ))));
             } else {
                 items.push(ListItem::new(Line::from(Span::raw("  → Tag"))));
@@ -1218,9 +1238,9 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
                 let active = bs.filter_tag.as_ref() == Some(tag);
 
                 let style = if selected {
-                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                    Style::default().fg(theme.selection_fg).bg(theme.accent)
                 } else if active {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(theme.accent)
                 } else {
                     Style::default()
                 };
@@ -1235,7 +1255,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
             if next_selected {
                 items.push(ListItem::new(Line::from(Span::styled(
                     "  → Studio",
-                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                    Style::default().fg(theme.selection_fg).bg(theme.accent),
                 ))));
             } else {
                 items.push(ListItem::new(Line::from(Span::raw("  → Studio"))));
@@ -1247,9 +1267,9 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
                 let active = bs.filter_studio.as_ref() == Some(studio);
 
                 let style = if selected {
-                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                    Style::default().fg(theme.selection_fg).bg(theme.accent)
                 } else if active {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(theme.accent)
                 } else {
                     Style::default()
                 };
@@ -1264,7 +1284,7 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
             if next_selected {
                 items.push(ListItem::new(Line::from(Span::styled(
                     "  → Year",
-                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                    Style::default().fg(theme.selection_fg).bg(theme.accent),
                 ))));
             } else {
                 items.push(ListItem::new(Line::from(Span::raw("  → Year"))));
@@ -1273,9 +1293,9 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
         FilterSection::Year => {
             let year_active = bs.filter_years.is_some() || bs.filter_year_field.is_some();
             let year_style = if bs.panel_selected == 0 {
-                Style::default().fg(Color::Black).bg(Color::Cyan)
+                Style::default().fg(theme.selection_fg).bg(theme.accent)
             } else if year_active {
-                Style::default().fg(Color::Cyan)
+                Style::default().fg(theme.accent)
             } else {
                 Style::default()
             };
@@ -1295,9 +1315,9 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect) {
                 let active = bs.filter_folder.as_ref() == Some(&folder.id);
 
                 let style = if selected {
-                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                    Style::default().fg(theme.selection_fg).bg(theme.accent)
                 } else if active {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(theme.accent)
                 } else {
                     Style::default()
                 };
@@ -1347,24 +1367,24 @@ fn centered_rect(percent_x: u16, height: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn render_account_manager(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_account_manager(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ams = &state.account_manager_state;
 
     match &ams.action {
         crate::app::AccountManagerAction::View => {
-            render_account_list(f, state, area);
+            render_account_list(f, state, area, theme);
         }
         crate::app::AccountManagerAction::Add | crate::app::AccountManagerAction::Edit(_) => {
-            render_account_form(f, state, area);
+            render_account_form(f, state, area, theme);
         }
         crate::app::AccountManagerAction::Delete(_) => {
-            render_account_list(f, state, area);
-            render_delete_confirm(f, state, area);
+            render_account_list(f, state, area, theme);
+            render_delete_confirm(f, state, area, theme);
         }
     }
 }
 
-fn render_account_list(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_account_list(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ams = &state.account_manager_state;
     let mut items: Vec<ListItem> = Vec::new();
 
@@ -1373,9 +1393,9 @@ fn render_account_list(f: &mut Frame, state: &AppState, area: Rect) {
         let marker = if i == ams.selected { "▸ " } else { "  " };
         let active_mark = if is_active { "● " } else { "  " };
         let style = if i == ams.selected {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else if is_active {
-            Style::default().fg(Color::Green)
+            Style::default().fg(theme.success)
         } else {
             Style::default()
         };
@@ -1386,9 +1406,9 @@ fn render_account_list(f: &mut Frame, state: &AppState, area: Rect) {
     let add_idx = ams.accounts.len();
     let add_marker = if add_idx == ams.selected { "▸ " } else { "  " };
     let add_style = if add_idx == ams.selected {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(theme.warning)
     };
     items.push(ListItem::new(Line::from(Span::styled(
         format!("{}{}", add_marker, t("account.add_new")),
@@ -1411,13 +1431,13 @@ fn render_account_list(f: &mut Frame, state: &AppState, area: Rect) {
             height: 1,
         };
         f.render_widget(
-            Paragraph::new(Span::styled(msg.as_str(), Style::default().fg(Color::Green))),
+            Paragraph::new(Span::styled(msg.as_str(), Style::default().fg(theme.success))),
             status_area,
         );
     }
 }
 
-fn render_account_form(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_account_form(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ams = &state.account_manager_state;
     let is_edit = matches!(ams.action, crate::app::AccountManagerAction::Edit(_));
     let title = if is_edit { "Edit Account" } else { "Add Account" };
@@ -1434,7 +1454,7 @@ fn render_account_form(f: &mut Frame, state: &AppState, area: Rect) {
         let active = ams.input_field == *field;
         let marker = if active { "▸ " } else { "  " };
         let field_style = if active {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -1456,7 +1476,7 @@ fn render_account_form(f: &mut Frame, state: &AppState, area: Rect) {
     items.push(ListItem::new(Line::from(Span::raw(""))));
     items.push(ListItem::new(Line::from(Span::styled(
         format!("  {}", t("account.form_hint")),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.muted),
     ))));
 
     let list = List::new(items)
@@ -1469,19 +1489,19 @@ fn render_account_form(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(list, popup);
 }
 
-fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ams = &state.account_manager_state;
     if let crate::app::AccountManagerAction::Delete(idx) = &ams.action {
         let name = ams.accounts.get(*idx).map(|a| a.label.as_str()).unwrap_or("?");
         let text = vec![
             Line::from(Span::styled(
                 tf("account.delete_confirm", name),
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.error).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(Span::styled(
                 t("account.confirm_delete"),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.muted),
             )),
         ];
         let popup = centered_rect(40, 6, area);
@@ -1495,12 +1515,12 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect) {
     }
 }
 
-fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ws = &state.wizard_state;
     let mut items: Vec<ListItem> = Vec::new();
     items.push(ListItem::new(Line::from(Span::styled(
         format!("  {}", t("wizard.welcome")),
-        Style::default().fg(Color::Yellow),
+        Style::default().fg(theme.warning),
     ))));
     items.push(ListItem::new(Line::from(Span::raw(""))));
 
@@ -1509,7 +1529,7 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
         let active = ws.step == WizardField::Language;
         let marker = if active { "▸ " } else { "  " };
         let field_style = if active {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -1518,8 +1538,8 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
         items.push(ListItem::new(Line::from(vec![
             Span::styled(format!("{}{:<14}", marker, "Language"), field_style),
             Span::raw(": "),
-            Span::styled(lang_label, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled(toggle_hint.to_string(), Style::default().fg(Color::DarkGray)),
+            Span::styled(lang_label, Style::default().fg(theme.success).add_modifier(Modifier::BOLD)),
+            Span::styled(toggle_hint.to_string(), Style::default().fg(theme.muted)),
         ])));
     }
 
@@ -1534,7 +1554,7 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
         let active = ws.step == *field;
         let marker = if active { "▸ " } else { "  " };
         let field_style = if active {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
@@ -1553,19 +1573,19 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
             Span::styled(format!("{}{:<14}", marker, label), field_style),
             Span::raw(": "),
             Span::raw(format!("{}{}", display_value, cursor)),
-            Span::styled(hint.to_string(), Style::default().fg(Color::DarkGray)),
+            Span::styled(hint.to_string(), Style::default().fg(theme.muted)),
         ])));
     }
     if let Some(ref msg) = ws.status_msg {
         items.push(ListItem::new(Line::from(Span::styled(
             format!("  {}", msg),
-            Style::default().fg(Color::Red),
+            Style::default().fg(theme.error),
         ))));
     }
     items.push(ListItem::new(Line::from(Span::raw(""))));
     items.push(ListItem::new(Line::from(Span::styled(
         format!("  {}", t("wizard.hint")),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.muted),
     ))));
     let list = List::new(items)
         .block(rounded_block().title(format!(" {} ", t("title.wizard"))))
@@ -1576,23 +1596,23 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(list, popup);
 }
 
-fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect) {
+fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ms = &state.mpv_prompt_state;
     let items: Vec<ListItem> = vec![
         ListItem::new(Line::from(Span::styled(
             format!("  {}", t("mpv_prompt.message")),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.warning),
         ))),
         ListItem::new(Line::from(Span::raw(""))),
         ListItem::new(Line::from(vec![
-            Span::styled(format!("  {}: ", t("settings.mpv_path")), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("  {}: ", t("settings.mpv_path")), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
             Span::raw(&ms.mpv_path),
             Span::raw("\u{2588}"),
         ])),
         ListItem::new(Line::from(Span::raw(""))),
         ListItem::new(Line::from(Span::styled(
             format!("  {}", t("mpv_prompt.hint")),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.muted),
         ))),
     ];
     let list = List::new(items)
