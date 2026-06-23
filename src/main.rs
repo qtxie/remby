@@ -1602,6 +1602,42 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             state.loading_msg = tf("status.loading", &item.display_name());
                                             spawn_item_detail(bg_tx.clone(), state.client.clone(), item.id.clone());
                                         } else if item.is_navigable() {
+                                            // If this is a library folder (from "媒体库"), open library browser
+                                            if state.view == app::View::Items && item.item_type == "Folder" {
+                                                if let Some(lib) = state.libraries.iter().find(|l| l.id == item.id).cloned() {
+                                                    state.open_library_browser(lib.id.clone(), lib.name.clone());
+                                                    state.loading = true;
+                                                    state.loading_msg = tf("status.loading", &lib.name);
+                                                    let tx = bg_tx.clone();
+                                                    let client = state.client.clone();
+                                                    let library_id = lib.id.clone();
+                                                    let sort_by = "DateCreated".to_string();
+                                                    let sort_order = "Descending".to_string();
+                                                    tokio::spawn(async move {
+                                                        let timeout = std::time::Duration::from_secs(120);
+                                                        let result = tokio::time::timeout(timeout, async {
+                                                            let (items_result, genres_result, tags_result, studios_result, folders_result) = tokio::join!(
+                                                                client.get_items_filtered(&library_id, 0, 50, &sort_by, &sort_order, None, None, None, None),
+                                                                client.get_genres(&library_id),
+                                                                client.get_tags(&library_id),
+                                                                client.get_studios(&library_id),
+                                                                client.get_folders(&library_id),
+                                                            );
+                                                            let items = items_result.unwrap_or_else(|_| crate::emby::PageResult { items: vec![], total: 0 });
+                                                            let genres = genres_result.unwrap_or_default();
+                                                            let tags = tags_result.unwrap_or_default();
+                                                            let studios = studios_result.unwrap_or_default();
+                                                            let folders = folders_result.unwrap_or_default();
+                                                            (items.items, library_id, items.total, genres, tags, studios, folders)
+                                                        }).await;
+                                                        match result {
+                                                            Ok(r) => { let _ = tx.send(BackgroundResult::LibraryBrowserLoaded(r.0, r.1, r.2, r.3, r.4, r.5, r.6)); }
+                                                            Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Library".to_string())); }
+                                                        }
+                                                    });
+                                                    continue;
+                                                }
+                                            }
                                             state.loading = true;
                                             state.loading_msg = tf("status.loading", &item.display_name());
                                             let tx = bg_tx.clone();
@@ -1667,16 +1703,26 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     } else if state.view == app::View::Libraries && state.selected == 0 {
                                         // "媒体库" header — show all libraries as folder entries
                                         let libs = state.libraries.clone();
-                                        let items: Vec<_> = libs.iter().map(|lib| {
-                                            let mut item = crate::emby::MediaItem::separator("");
-                                            item.id = lib.id.clone();
-                                            item.name = lib.name.clone();
-                                            item.item_type = "Folder".to_string();
-                                            item
+                                        let items: Vec<_> = libs.into_iter().map(|lib| {
+                                            crate::emby::MediaItem {
+                                                id: lib.id.clone(),
+                                                name: lib.name.clone(),
+                                                item_type: "Folder".to_string(),
+                                                media_type: None,
+                                                series_name: None,
+                                                index_number: None,
+                                                parent_index_number: None,
+                                                runtime_ticks: None,
+                                                series_id: None,
+                                                overview: None,
+                                                child_count: None,
+                                                media_sources: Vec::new(),
+                                                user_data: None,
+                                            }
                                         }).collect();
                                         state.navigate_to(app::View::Items);
                                         state.items = items;
-                                        state.total_items = libs.len();
+                                        state.total_items = state.items.len();
                                         state.loading = false;
                                     } else if state.view == app::View::Libraries {
                                         // Section header — open library browser for that library
