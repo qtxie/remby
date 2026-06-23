@@ -141,6 +141,7 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
 
     // Footer hints
     "footer.home" => "l: libraries | /: search | f: follow | F: favorites | u: accounts | Ctrl+F: refresh | q: quit",
+    "footer.libraries" => "Enter: open | ↑/↓: navigate",
     "footer.continue_watching" => "/: search",
     "footer.items" => "f: follow | /: search",
     "footer.search_results" => "f: follow",
@@ -271,6 +272,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
 
     // Footer hints
     "footer.home" => "l: 媒体库 | /: 搜索 | f: 追剧 | F: 收藏夹 | u: 账户 | Ctrl+F: 刷新 | q: 退出",
+    "footer.libraries" => "Enter: 打开 | ↑/↓: 导航",
     "footer.continue_watching" => "/: 搜索",
     "footer.items" => "f: 追剧 | /: 搜索",
     "footer.search_results" => "f: 追剧",

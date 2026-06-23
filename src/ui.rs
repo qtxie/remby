@@ -342,7 +342,7 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::them
                 .count();
             let follow_count = state.favorites.len() - fav_count;
             if follow_count > 0 {
-                format!("{} (★ {} ▶ {})", t("title.favorites"), fav_count, follow_count)
+                    format!("{} (★ {} ⊕ {})", t("title.favorites"), fav_count, follow_count)
             } else {
                 format!("{} ({})", t("title.favorites"), fav_count)
             }
@@ -360,7 +360,7 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::them
             let (star, follow_mark) = if is_favorite {
                 ("★ ", "")
             } else if is_following {
-                ("", "▶ ")
+                ("", "⊕ ")
             } else {
                 ("", "")
             };
@@ -987,7 +987,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
     let help = match state.view {
         View::Home => t("footer.home"),
         View::ContinueWatching | View::LatestItems => t("footer.continue_watching"),
-        View::Libraries => "",
+        View::Libraries => t("footer.libraries"),
         View::Items => t("footer.items"),
         View::SearchResults => t("footer.search_results"),
         View::TrackSelect => t("footer.track_select"),
