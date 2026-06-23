@@ -177,8 +177,10 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
         .enumerate()
         .map(|(i, item)| {
             if item.is_separator() {
+                let selected = i == state.selected;
+                let prefix = if selected { "▸ " } else { "  " };
                 ListItem::new(Line::from(Span::styled(
-                    item.name.as_str(),
+                    format!("{}{}", prefix, item.name),
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD),
@@ -193,7 +195,8 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
                 } else {
                     String::new()
                 };
-                let style = if i == state.selected {
+                let selected = i == state.selected;
+                let style = if selected {
                     Style::default()
                         .fg(theme.accent)
                         .add_modifier(Modifier::BOLD)
@@ -211,8 +214,9 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
                     String::new()
                 };
 
+                let indent = if selected { "  ▸ " } else { "    " };
                 let mut spans = vec![
-                    Span::raw("  "),
+                    Span::raw(indent),
                     Span::styled(star, Style::default().fg(theme.warning)),
                     Span::styled(format!("{name}{dur}"), style),
                 ];
@@ -227,7 +231,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
     let list = List::new(items)
         .block(rounded_block().title(format!(" {} ", t("section.home"))))
         .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
-        .highlight_symbol("▸ ");
+        .highlight_symbol("");
 
     let mut state_list = ListState::default();
     state_list.select(Some(state.selected));
