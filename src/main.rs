@@ -153,22 +153,33 @@ async fn main() -> Result<()> {
                 ])
                 .split(area);
 
-            let logo_lines = vec![
-                Line::from("      ________       "),
-                Line::from("   __/        \\__    "),
-                Line::from("  /   ________   \\   "),
-                Line::from(" |   /        \\   |  "),
-                Line::from(" |  |   ▶▶▶▶   |  |  "),
-                Line::from("  \\  \\________/  /   "),
-                Line::from("   \\__        __/    "),
-                Line::from("      \\______/       "),
+            let logo_raw = vec![
+                "██████╗ ███████╗███╗   ███╗██████╗ ██╗   ██╗",
+                "██╔══██╗██╔════╝████╗ ████║██╔══██╗╚██╗ ██╔╝",
+                "██████╔╝█████╗  ██╔████╔██║██████╔╝ ╚████╔╝",
+                "██╔══██╗██╔══╝  ██║╚██╔╝██║██╔══██╗  ╚██╔╝",
+                "██║  ██║███████╗██║ ╚═╝ ██║██████╔╝   ██║",
+                "╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═════╝    ╚═╝",
+                "",
+                "     ◁◁  ▐▐  ▷  ▷▷      [00:42/24:11]",
             ];
+            let green = Style::default().fg(Color::Green);
+            let area_width = f.area().width as usize;
+            let logo_width = unicode_width::UnicodeWidthStr::width(logo_raw[0]);
+            let left_pad = area_width.saturating_sub(logo_width) / 2;
+            let pad = " ".repeat(left_pad);
+            let centered: Vec<Line> = logo_raw.iter().enumerate().map(|(i, s)| {
+                if s.is_empty() { Line::from("") } else {
+                    let style = if i == 7 { Style::default().fg(Color::Gray) } else { green };
+                    Line::from(Span::styled(format!("{}{}", pad, s), style))
+                }
+            }).collect();
             f.render_widget(Clear, area);
-            f.render_widget(Paragraph::new(logo_lines).alignment(Alignment::Center), vertical[1]);
+            f.render_widget(Paragraph::new(centered), vertical[1]);
 
             let frame = SPINNER[i % SPINNER.len()];
             f.render_widget(
-                Paragraph::new(Span::styled(
+                Paragraph::new(                Span::styled(
                     format!("{} {}", frame, t("status.connecting")),
                     Style::default().fg(Color::Yellow),
                 ))
