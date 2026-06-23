@@ -335,11 +335,19 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::them
         _ => &state.items,
     };
     let title = match state.view {
-        View::SearchResults => t("title.search"),
+        View::SearchResults => t("title.search").to_string(),
         View::Favorites => {
-            t("title.favorites")
+            let fav_count = state.favorites.iter()
+                .filter(|i| i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false))
+                .count();
+            let follow_count = state.favorites.len() - fav_count;
+            if follow_count > 0 {
+                format!("{} (★ {} ▶ {})", t("title.favorites"), fav_count, follow_count)
+            } else {
+                format!("{} ({})", t("title.favorites"), fav_count)
+            }
         }
-        _ => "Items",
+        _ => "Items".to_string(),
     };
 
     let items: Vec<ListItem> = items_source
