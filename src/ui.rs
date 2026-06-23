@@ -59,7 +59,7 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
         format!("/ {}", state.search_query)
     } else {
         match state.view {
-            View::Home => t("title.home").to_string(),
+            View::Home => format!("Remby v{}", env!("CARGO_PKG_VERSION")),
             View::ContinueWatching | View::LatestItems => {
                 let label = match state.view {
                     View::ContinueWatching => t("title.continue_watching"),
