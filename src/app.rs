@@ -801,10 +801,7 @@ impl AppState {
     pub fn selected_library(&self) -> Option<&Library> {
         if self.view == View::Libraries {
             // Header at 0, libraries start at 1
-            if self.selected == 0 {
-                return None;
-            }
-            let idx = self.selected - 1;
+            let idx = self.selected.saturating_sub(1);
             return self.libraries.get(idx);
         }
         None
