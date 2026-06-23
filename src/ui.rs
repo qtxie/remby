@@ -995,7 +995,7 @@ fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
         crate::app::View::Home => "Home",
         crate::app::View::Libraries => "Libraries",
         crate::app::View::Items => "Items",
-        crate::app::View::SearchResults => "Search",
+        crate::app::View::SearchResults => "Items",
         crate::app::View::Episodes => "Episodes",
         crate::app::View::SeriesInfo => "SeriesInfo",
         crate::app::View::Playing => "Playing",
@@ -1003,16 +1003,17 @@ fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
         crate::app::View::Favorites => "Favorites",
         crate::app::View::Settings => "Settings",
         crate::app::View::ContinueWatching | crate::app::View::LatestItems => "Home",
-        _ => "Help",
+        _ => "Home",
     };
 
     let bindings = crate::help::bindings_for_view(view_name);
-    let label = crate::help::view_label(view_name);
+    let label_key = crate::help::view_label_key(view_name);
+    let label = t(label_key);
 
     let items: Vec<ListItem> = bindings.iter().map(|b| {
         ListItem::new(Line::from(vec![
-            Span::styled(format!("  {:<12}", b.keys), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-            Span::raw(b.description),
+            Span::styled(format!("  {:<16}", b.keys), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+            Span::raw(t(b.description)),
         ]))
     }).collect();
 
