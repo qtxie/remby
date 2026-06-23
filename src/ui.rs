@@ -201,7 +201,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
                     Style::default()
                 };
 
-                // Progress bar for continue watching items
+                // Progress for continue watching items
                 let pos = item.resume_position_ticks().unwrap_or(0);
                 let total = item.runtime_ticks.unwrap_or(0);
                 let bar = if pos > 0 && total > 0 {
@@ -259,7 +259,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
             _ => " ",
         };
         let selected = state.selected == i + 1;
-        let prefix = if selected { "▸ " } else { "  " };
+        let prefix = if selected { "  ▸" } else { "   " };
         let style = if selected {
             Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
         } else {
@@ -268,7 +268,6 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
         items.push(ListItem::new(Line::from(vec![
             Span::raw(prefix),
             Span::styled(icon, Style::default().fg(theme.accent)),
-            Span::raw(" "),
             Span::styled(&lib.name, style),
         ])));
     }
@@ -299,7 +298,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
             };
             let icon = " ";
             let selected = state.selected == idx;
-            let prefix = if selected { "▸ " } else { "  " };
+            let prefix = if selected { "  ▸" } else { "   " };
             let style = if selected {
                 Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
             } else {
@@ -308,7 +307,6 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
             items.push(ListItem::new(Line::from(vec![
                 Span::raw(prefix),
                 Span::styled(icon, Style::default().fg(theme.accent)),
-                Span::raw("  "),
                 Span::styled(name, style),
                 Span::styled(dur, Style::default().fg(theme.muted)),
             ])));
