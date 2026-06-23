@@ -185,7 +185,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
                 )))
             } else {
                 let is_favorite = item.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false);
-                let star = if is_favorite { "★ " } else { "  " };
+                let star = if is_favorite { "★ " } else { "" };
                 let name = item.display_name();
                 let duration = item.duration_str().unwrap_or_default();
                 let dur = if !duration.is_empty() {
