@@ -337,8 +337,6 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::them
     let title = match state.view {
         View::SearchResults => t("title.search"),
         View::Favorites => {
-            let _fav_count = state.favorites.iter().filter(|i| i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
-            let _follow_count = state.favorites.iter().filter(|i| i.item_type == "Series" && state.config.following_series.contains(&i.id) && !i.user_data.as_ref().map(|ud| ud.is_favorite).unwrap_or(false)).count();
             t("title.favorites")
         }
         _ => "Items",
@@ -895,9 +893,9 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
 
         let marker = if selected { ">" } else { " " };
         let name_with_marker = format!("{}{}", marker, lib.name);
-        let display_width: usize = name_with_marker.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum();
-        let padded_name = if display_width < name_col {
-            format!("{}{}", name_with_marker, " ".repeat(name_col - display_width))
+        let dw = display_width(&name_with_marker);
+        let padded_name = if dw < name_col {
+            format!("{}{}", name_with_marker, " ".repeat(name_col - dw))
         } else {
             name_with_marker
         };
