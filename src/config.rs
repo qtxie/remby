@@ -1,8 +1,10 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::emby::Library;
+use crate::theme::ThemeColors;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RembyConfig {
@@ -122,4 +124,15 @@ pub fn save_accounts(config: &AccountsConfig) -> Result<()> {
     let data = serde_json::to_string_pretty(config)?;
     std::fs::write(&path, data)?;
     Ok(())
+}
+
+pub fn load_themes() -> HashMap<String, ThemeColors> {
+    let dir = dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("remby");
+    let path = dir.join("theme.json");
+    match std::fs::read_to_string(&path) {
+        Ok(data) => serde_json::from_str(&data).unwrap_or_default(),
+        Err(_) => HashMap::new(),
+    }
 }

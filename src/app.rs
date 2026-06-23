@@ -90,8 +90,9 @@ pub struct AppState {
     pub playback_started_at: Option<std::time::Instant>,
     pub bg_tx: Option<tokio::sync::mpsc::UnboundedSender<BackgroundResult>>,
     pub settings_state: SettingsState,
-    pub config: RembyConfig,
     pub theme: crate::theme::Theme,
+    pub themes: std::collections::HashMap<String, crate::theme::ThemeColors>,
+    pub config: RembyConfig,
     pub library_browser_state: LibraryBrowserState,
     pub favorites: Vec<MediaItem>,
     pub total_favorites: usize,
@@ -499,7 +500,8 @@ impl AppState {
             (EmbyClient::new(String::new(), String::new()), String::new())
         };
 
-        let theme = crate::theme::Theme::by_name(&config.theme);
+        let themes = crate::config::load_themes();
+        let theme = crate::theme::Theme::by_name(&config.theme, &themes);
 
         Ok(Self {
             client,
@@ -542,6 +544,7 @@ impl AppState {
             settings_state: SettingsState::default(),
             config,
             theme,
+            themes,
             library_browser_state: LibraryBrowserState::default(),
             favorites: Vec::new(),
             total_favorites: 0,
@@ -1109,15 +1112,15 @@ impl AppState {
 
     pub fn settings_cycle_theme(&mut self, forward: bool) {
         if self.settings_state.section == SettingsSection::Theme {
-            let names = crate::theme::THEME_NAMES;
-            let idx = names.iter().position(|n| *n == self.settings_state.theme).unwrap_or(0);
+            let names = crate::theme::all_theme_names(&self.themes);
+            let idx = names.iter().position(|n| n == &self.settings_state.theme).unwrap_or(0);
             let new_idx = if forward {
                 (idx + 1) % names.len()
             } else {
                 (idx + names.len() - 1) % names.len()
             };
-            self.settings_state.theme = names[new_idx].to_string();
-            self.theme = crate::theme::Theme::by_name(&self.settings_state.theme);
+            self.settings_state.theme = names[new_idx].clone();
+            self.theme = crate::theme::Theme::by_name(&self.settings_state.theme, &self.themes);
         }
     }
 
