@@ -3,6 +3,7 @@ use ratatui::widgets::*;
 
 use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
 use crate::i18n::{t, tf};
+use unicode_width::UnicodeWidthChar;
 
 fn rounded_block() -> Block<'static> {
     Block::default()
@@ -526,23 +527,117 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect) {
     }
 }
 
-fn render_track_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
-    let track_info = vec![
-        Line::from(vec![
+fn display_width(s: &str) -> usize {
+    s.chars().map(|c| c.width().unwrap_or(0)).sum()
+}
+
+fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect) {
+    let mut lines: Vec<Line> = Vec::new();
+
+    if let Some(ref source) = ps.media_source {
+        let container = if source.container.is_empty() { "?" } else { &source.container };
+        let size_str = if source.size > 1_073_741_824 {
+            format!("{:.1} GB", source.size as f64 / 1_073_741_824.0)
+        } else if source.size > 1_048_576 {
+            format!("{:.0} MB", source.size as f64 / 1_048_576.0)
+        } else {
+            String::new()
+        };
+
+        let video_streams: Vec<_> = source.media_streams.iter().filter(|s| s.stream_type == "Video").collect();
+        let audio_streams: Vec<_> = source.media_streams.iter().filter(|s| s.stream_type == "Audio").collect();
+        let sub_streams: Vec<_> = source.media_streams.iter().filter(|s| s.stream_type == "Subtitle").collect();
+
+        let video = video_streams.get(ps.selected_video).or_else(|| video_streams.first());
+        let audio = audio_streams.get(ps.selected_audio).or_else(|| audio_streams.first());
+        let sub = sub_streams.get(ps.selected_subtitle).or_else(|| sub_streams.first());
+
+        let mut vid_codec = String::new();
+        let mut vid_detail = String::new();
+        if let Some(v) = video {
+            let mut parts = Vec::new();
+            parts.push(v.codec.to_uppercase());
+            if let Some(ref profile) = v.profile {
+                if profile != "Main" { parts.push(profile.clone()); }
+            }
+            if let Some(ref range) = v.video_range {
+                if range != "SDR" { parts.push(range.to_uppercase()); }
+            }
+            vid_codec = parts.join(" ");
+
+            let mut details = Vec::new();
+            if let (Some(w), Some(h)) = (v.width, v.height) {
+                details.push(format!("{}x{}", w, h));
+            }
+            if let Some(fps) = v.avg_frame_rate {
+                details.push(format!("{}fps", fps as i32));
+            }
+            if let Some(depth) = v.bit_depth {
+                if depth > 8 { details.push(format!("{}bit", depth)); }
+            }
+            vid_detail = details.join(" ");
+        }
+
+        let mut aud_info = String::new();
+        if let Some(a) = audio {
+            let codec = a.codec.to_uppercase();
+            let layout = a.channel_layout.as_deref().unwrap_or("");
+            let lang = if a.language.is_empty() { "" } else { &a.language };
+            aud_info = codec;
+            if !layout.is_empty() { aud_info = format!("{} {}", aud_info, layout); }
+            if !lang.is_empty() { aud_info = format!("{} ({})", aud_info, lang); }
+        }
+
+        let mut sub_info = String::new();
+        if let Some(s) = sub {
+            let codec = s.codec.to_uppercase();
+            let lang = if s.language.is_empty() { "" } else { &s.language };
+            sub_info = codec;
+            if !lang.is_empty() { sub_info = format!("{} ({})", sub_info, lang); }
+        }
+
+        let dg = Color::DarkGray;
+        let wc = Color::White;
+        let lw = 14;
+        let vw = 18;
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<w$}", "Container:", w = lw), Style::default().fg(dg)),
+            Span::styled(format!("{:<w$}", container.to_uppercase(), w = vw), Style::default().fg(wc)),
+            Span::styled(format!("{:<w$}", "Size:", w = lw), Style::default().fg(dg)),
+            Span::styled(format!("{:<w$}", size_str, w = vw), Style::default().fg(wc)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<w$}", "Video:", w = lw), Style::default().fg(dg)),
+            Span::styled(format!("{:<w$}", vid_codec, w = vw), Style::default().fg(wc)),
+            Span::styled(format!("{:<w$}", "Resolution:", w = lw), Style::default().fg(dg)),
+            Span::styled(format!("{:<w$}", vid_detail, w = vw), Style::default().fg(wc)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<w$}", "Audio:", w = lw), Style::default().fg(dg)),
+            Span::styled(format!("{:<w$}", aud_info, w = vw), Style::default().fg(wc)),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<w$}", "Subtitle:", w = lw), Style::default().fg(dg)),
+            Span::styled(format!("{:<w$}", sub_info, w = vw), Style::default().fg(wc)),
+        ]));
+    } else {
+        lines.push(Line::from(vec![
             Span::styled(format!("  {}:  ", t("track.video")), Style::default().fg(Color::DarkGray)),
             Span::raw(&ps.video_track),
-        ]),
-        Line::from(vec![
+        ]));
+        lines.push(Line::from(vec![
             Span::styled(format!("  {}:  ", t("track.audio")), Style::default().fg(Color::DarkGray)),
             Span::raw(&ps.audio_track),
-        ]),
-        Line::from(vec![
+        ]));
+        lines.push(Line::from(vec![
             Span::styled(format!("  {}:    ", t("track.sub")), Style::default().fg(Color::DarkGray)),
             Span::raw(&ps.subtitle_track),
-        ]),
-    ];
+        ]));
+    }
+
     f.render_widget(Clear, area);
-    f.render_widget(Paragraph::new(track_info), area);
+    f.render_widget(Paragraph::new(lines), area);
 }
 
 fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
@@ -560,9 +655,8 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             .constraints([
                 Constraint::Length(1),
                 Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(2),
+                Constraint::Length(5),
+                Constraint::Length(4),
                 Constraint::Min(1),
             ])
             .split(halves[0])
@@ -572,8 +666,8 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             .constraints([
                 Constraint::Length(1),
                 Constraint::Length(1),
+                Constraint::Length(5),
                 Constraint::Length(1),
-                Constraint::Length(2),
                 Constraint::Min(1),
             ])
             .split(halves[0])
@@ -587,7 +681,10 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(Clear, top[0]);
     f.render_widget(title, top[0]);
 
-    // Playing indicator or resume prompt
+    // Media info
+    render_media_info(f, ps, top[2]);
+
+    // Playing indicator
     if ps.playing {
         let spinner = ["\u{28f8}", "\u{28fd}", "\u{28fb}", "\u{28bf}", "\u{28ff}", "\u{28fe}", "\u{287f}", "\u{287b}"];
         let idx = (std::time::SystemTime::now()
@@ -598,19 +695,9 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
             format!("{} {}", spinner[idx], t("playing.in_mpv")),
             Style::default().fg(Color::Cyan),
         )).alignment(Alignment::Center);
-        f.render_widget(Clear, top[1]);
-        f.render_widget(playing_text, top[1]);
-    } else {
-        let prompt = Paragraph::new(Span::styled(
-            t("playing.choose_option"),
-            Style::default().fg(Color::Yellow),
-        )).alignment(Alignment::Center);
-        f.render_widget(Clear, top[1]);
-        f.render_widget(prompt, top[1]);
+        f.render_widget(Clear, top[3]);
+        f.render_widget(playing_text, top[3]);
     }
-
-    // Track info
-    render_track_info(f, ps, top[2]);
 
     // Resume choice
     if has_resume {
@@ -620,49 +707,77 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect) {
         let s = secs % 60;
         let resume_time = format!("{}:{:02}", m, s);
 
+        let prompt = format!("  {}", t("playing.choose_option"));
+        let resume_label = format!("{} {}", t("playing.resume_from"), resume_time);
+        let start_label = t("playing.play_from_start").to_string();
+
+        let marker = "\u{25b8} ";
+        let dw_marker = display_width(marker);
+
+        let opt1 = if ps.option_selected == 0 {
+            format!("{}{}", marker, resume_label)
+        } else {
+            format!("{}{}", " ".repeat(dw_marker), resume_label)
+        };
+        let opt2 = if ps.option_selected == 1 {
+            format!("{}{}", marker, start_label)
+        } else {
+            format!("{}{}", " ".repeat(dw_marker), start_label)
+        };
+
+        let dw_prompt = display_width(&prompt);
+        let dw_opt1 = display_width(&opt1);
+        let dw_opt2 = display_width(&opt2);
+        let opt_maxdw = dw_opt1.max(dw_opt2);
+        let maxdw = dw_prompt.max(opt_maxdw);
+
+        let pad_right = |s: &str, dw: usize, target: usize| -> String {
+            let pad = target.saturating_sub(dw);
+            format!("{}{}", s, " ".repeat(pad))
+        };
+
+        let center = |s: &str, dw: usize| -> String {
+            let pad = maxdw.saturating_sub(dw);
+            let left = pad / 2;
+            format!("{}{}", " ".repeat(left), s)
+        };
+
+        let opt1_padded = pad_right(&opt1, dw_opt1, opt_maxdw);
+        let opt2_padded = pad_right(&opt2, dw_opt2, opt_maxdw);
+
         let options = vec![
-            Line::from(vec![
-                Span::styled("  ", Style::default()),
-                Span::styled(
-                    if ps.option_selected == 0 { "\u{25b8} " } else { "  " },
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::styled(
-                    format!("{} {}", t("playing.resume_from"), resume_time),
-                    if ps.option_selected == 0 {
-                        Style::default().fg(Color::Cyan)
-                    } else {
-                        Style::default()
-                    },
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("  ", Style::default()),
-                Span::styled(
-                    if ps.option_selected == 1 { "\u{25b8} " } else { "  " },
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::styled(
-                    t("playing.play_from_start"),
-                    if ps.option_selected == 1 {
-                        Style::default().fg(Color::Cyan)
-                    } else {
-                        Style::default()
-                    },
-                ),
-            ]),
+            Line::from(Span::styled(
+                center(&prompt, dw_prompt),
+                Style::default().fg(Color::Yellow),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                center(&opt1_padded, opt_maxdw),
+                if ps.option_selected == 0 {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                },
+            )),
+            Line::from(Span::styled(
+                center(&opt2_padded, opt_maxdw),
+                if ps.option_selected == 1 {
+                    Style::default().fg(Color::Cyan)
+                } else {
+                    Style::default()
+                },
+            )),
         ];
         let options_widget = Paragraph::new(options);
-        f.render_widget(Clear, top[4]);
-        f.render_widget(options_widget, top[4]);
-    } else {
-        // Play button when no resume
-        let play_btn = Paragraph::new(Line::from(vec![
-            Span::styled(format!("  \u{25b8} {} ", t("playing.play")), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("  {}", t("playing.press_enter")), Style::default().fg(Color::DarkGray)),
-        ])).alignment(Alignment::Center);
         f.render_widget(Clear, top[3]);
-        f.render_widget(play_btn, top[3]);
+        f.render_widget(options_widget, top[3]);
+    } else if !ps.playing {
+        // Play button when no resume and not playing
+        let play_text = format!("\u{25b8} {} {}", t("playing.play"), t("playing.press_enter"));
+        let play_btn = Paragraph::new(Line::from(Span::styled(play_text, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))))
+            .alignment(Alignment::Center);
+        f.render_widget(Clear, top[4]);
+        f.render_widget(play_btn, top[4]);
     }
 
     // Bottom half: mpv output panel

@@ -264,7 +264,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     // Playing view
     "playing.in_mpv" => "正在 mpv 中播放...",
     "playing.choose_option" => "选择播放方式:",
-    "playing.resume_from" => "从 {} 继续播放",
+    "playing.resume_from" => "继续播放",
     "playing.play_from_start" => "从头播放",
     "playing.play" => "播放",
     "playing.press_enter" => "(回车)",

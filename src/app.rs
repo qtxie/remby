@@ -140,6 +140,10 @@ pub struct PlayingState {
     pub video_track: String,
     pub audio_track: String,
     pub subtitle_track: String,
+    pub selected_video: usize,
+    pub selected_audio: usize,
+    pub selected_subtitle: usize,
+    pub media_source: Option<crate::emby::MediaSource>,
     pub url: String,
     pub resume_position: Option<i64>,
     pub option_selected: usize,
@@ -186,6 +190,10 @@ impl Default for PlayingState {
             video_track: String::new(),
             audio_track: String::new(),
             subtitle_track: String::new(),
+            selected_video: 0,
+            selected_audio: 0,
+            selected_subtitle: 0,
+            media_source: None,
             url: String::new(),
             resume_position: None,
             option_selected: 0,
@@ -1097,11 +1105,11 @@ impl AppState {
         } else {
             let url = self.client.stream_url_for_source(item, source);
             let resume = item.resume_position_ticks();
-            self.open_playing(&item.display_name(), &item.id, &source.id, item.runtime_ticks, &url, "", "", "", resume);
+            self.open_playing(&item.display_name(), &item.id, &source.id, item.runtime_ticks, &url, "", "", "", resume, Some(source.clone()), 0, 0, 0);
         }
     }
 
-    pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>) {
+    pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<crate::emby::MediaSource>, selected_video: usize, selected_audio: usize, selected_subtitle: usize) {
         self.playing_state = PlayingState {
             item_name: item_name.to_string(),
             item_id: item_id.to_string(),
@@ -1111,6 +1119,10 @@ impl AppState {
             video_track: video.to_string(),
             audio_track: audio.to_string(),
             subtitle_track: subtitle.to_string(),
+            selected_video,
+            selected_audio,
+            selected_subtitle,
+            media_source,
             resume_position: resume_ticks,
             option_selected: 0,
             playing: false,

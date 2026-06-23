@@ -668,7 +668,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let item_id = item.id.clone();
                                             let source_id = source.id.clone();
                                             let runtime = item.runtime_ticks;
-                                            state.open_playing(&item.display_name(), &item_id, &source_id, runtime, &url, &video_label, &audio_label, &sub_label, resume_ticks);
+                                            state.open_playing(&item.display_name(), &item_id, &source_id, runtime, &url, &video_label, &audio_label, &sub_label, resume_ticks, Some(source.clone()), state.track_state.selected_video, state.track_state.selected_audio, state.track_state.selected_subtitle);
                                         }
                                     }
                                 }
