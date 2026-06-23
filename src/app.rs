@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::time::Instant;
+use ratatui_textarea::TextArea;
 
 use crate::config::RembyConfig;
 use crate::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
@@ -227,6 +228,7 @@ pub enum AccountManagerAction {
     Add,
     Edit(usize),
     Delete(usize),
+    ConfirmUpdate(usize),
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -247,25 +249,27 @@ pub struct AccountManagerState {
     pub last_account_id: Option<String>,
     pub selected: usize,
     pub action: AccountManagerAction,
-    pub input_server: String,
-    pub input_username: String,
-    pub input_password: String,
-    pub input_label: String,
+    pub input_server: TextArea<'static>,
+    pub input_username: TextArea<'static>,
+    pub input_password: TextArea<'static>,
+    pub input_label: TextArea<'static>,
     pub input_field: AccountInputField,
     pub status_msg: Option<String>,
 }
 
 impl Default for AccountManagerState {
     fn default() -> Self {
+        let mut password = TextArea::default();
+        password.set_mask_char('\u{2022}');
         Self {
             accounts: Vec::new(),
             last_account_id: None,
             selected: 0,
             action: AccountManagerAction::View,
-            input_server: String::new(),
-            input_username: String::new(),
-            input_password: String::new(),
-            input_label: String::new(),
+            input_server: TextArea::default(),
+            input_username: TextArea::default(),
+            input_password: password,
+            input_label: TextArea::default(),
             input_field: AccountInputField::Label,
             status_msg: None,
         }
@@ -284,22 +288,32 @@ pub enum WizardField {
 pub struct WizardState {
     pub step: WizardField,
     pub language: String,
-    pub server: String,
-    pub username: String,
-    pub password: String,
-    pub mpv_path: String,
+    pub server: TextArea<'static>,
+    pub username: TextArea<'static>,
+    pub password: TextArea<'static>,
+    pub mpv_path: TextArea<'static>,
     pub status_msg: Option<String>,
 }
 
 impl Default for WizardState {
     fn default() -> Self {
+        let server = TextArea::default();
+        
+        let username = TextArea::default();
+        
+        let mut password = TextArea::default();
+        password.set_mask_char('\u{2022}');
+        
+        let mut mpv_path = TextArea::default();
+        mpv_path.insert_str("mpv");
+        
         Self {
             step: WizardField::Language,
             language: crate::i18n::detect_system_lang().to_string(),
-            server: String::new(),
-            username: String::new(),
-            password: String::new(),
-            mpv_path: "mpv".to_string(),
+            server,
+            username,
+            password,
+            mpv_path,
             status_msg: None,
         }
     }
@@ -1527,7 +1541,7 @@ impl AppState {
         let len = match self.account_manager_state.action {
             AccountManagerAction::View => self.account_manager_state.accounts.len() + 1,
             AccountManagerAction::Add | AccountManagerAction::Edit(_) => 4,
-            AccountManagerAction::Delete(_) => 2,
+            AccountManagerAction::Delete(_) | AccountManagerAction::ConfirmUpdate(_) => 0,
         };
         if len > 0 {
             self.account_manager_state.selected = (self.account_manager_state.selected + 1) % len;
@@ -1538,7 +1552,7 @@ impl AppState {
         let len = match self.account_manager_state.action {
             AccountManagerAction::View => self.account_manager_state.accounts.len() + 1,
             AccountManagerAction::Add | AccountManagerAction::Edit(_) => 4,
-            AccountManagerAction::Delete(_) => 2,
+            AccountManagerAction::Delete(_) | AccountManagerAction::ConfirmUpdate(_) => 0,
         };
         if len > 0 {
             self.account_manager_state.selected = (self.account_manager_state.selected + len - 1) % len;
@@ -1546,22 +1560,22 @@ impl AppState {
     }
 
     pub fn account_manager_input(&mut self, c: char) {
-        let field = &self.account_manager_state.input_field;
+        let field = &self.account_manager_state.input_field.clone();
         match field {
-            AccountInputField::Label => self.account_manager_state.input_label.push(c),
-            AccountInputField::Server => self.account_manager_state.input_server.push(c),
-            AccountInputField::Username => self.account_manager_state.input_username.push(c),
-            AccountInputField::Password => self.account_manager_state.input_password.push(c),
+            AccountInputField::Label => self.account_manager_state.input_label.insert_char(c),
+            AccountInputField::Server => self.account_manager_state.input_server.insert_char(c),
+            AccountInputField::Username => self.account_manager_state.input_username.insert_char(c),
+            AccountInputField::Password => self.account_manager_state.input_password.insert_char(c),
         }
     }
 
     pub fn account_manager_backspace(&mut self) {
-        let field = &self.account_manager_state.input_field;
+        let field = &self.account_manager_state.input_field.clone();
         match field {
-            AccountInputField::Label => { self.account_manager_state.input_label.pop(); }
-            AccountInputField::Server => { self.account_manager_state.input_server.pop(); }
-            AccountInputField::Username => { self.account_manager_state.input_username.pop(); }
-            AccountInputField::Password => { self.account_manager_state.input_password.pop(); }
+            AccountInputField::Label => { self.account_manager_state.input_label.delete_char(); }
+            AccountInputField::Server => { self.account_manager_state.input_server.delete_char(); }
+            AccountInputField::Username => { self.account_manager_state.input_username.delete_char(); }
+            AccountInputField::Password => { self.account_manager_state.input_password.delete_char(); }
         }
     }
 
@@ -1580,11 +1594,28 @@ impl AppState {
         };
     }
 
+    pub fn account_manager_prev_field(&mut self) {
+        self.account_manager_state.input_field = match self.account_manager_state.input_field {
+            AccountInputField::Label => AccountInputField::Password,
+            AccountInputField::Server => AccountInputField::Label,
+            AccountInputField::Username => AccountInputField::Server,
+            AccountInputField::Password => AccountInputField::Username,
+        };
+        self.account_manager_state.selected = match self.account_manager_state.input_field {
+            AccountInputField::Label => 0,
+            AccountInputField::Server => 1,
+            AccountInputField::Username => 2,
+            AccountInputField::Password => 3,
+        };
+    }
+
     // --- Wizard ---
     pub fn open_wizard(&mut self) {
-        let mpv = crate::mpv::find_mpv().unwrap_or_else(|| "mpv".to_string());
+        let mpv_str = crate::mpv::find_mpv().unwrap_or_else(|| "mpv".to_string());
+        let mut mpv_path = TextArea::default();
+        mpv_path.insert_str(&mpv_str);
         self.wizard_state = WizardState {
-            mpv_path: mpv,
+            mpv_path,
             ..Default::default()
         };
         self.view = View::Wizard;
@@ -1593,20 +1624,20 @@ impl AppState {
     pub fn wizard_input(&mut self, c: char) {
         match self.wizard_state.step {
             WizardField::Language => {} // Language uses toggle, not text input
-            WizardField::Server => self.wizard_state.server.push(c),
-            WizardField::Username => self.wizard_state.username.push(c),
-            WizardField::Password => self.wizard_state.password.push(c),
-            WizardField::MpvPath => self.wizard_state.mpv_path.push(c),
+            WizardField::Server => { self.wizard_state.server.insert_char(c); }
+            WizardField::Username => { self.wizard_state.username.insert_char(c); }
+            WizardField::Password => { self.wizard_state.password.insert_char(c); }
+            WizardField::MpvPath => { self.wizard_state.mpv_path.insert_char(c); }
         }
     }
 
     pub fn wizard_backspace(&mut self) {
         match self.wizard_state.step {
             WizardField::Language => {}
-            WizardField::Server => { self.wizard_state.server.pop(); }
-            WizardField::Username => { self.wizard_state.username.pop(); }
-            WizardField::Password => { self.wizard_state.password.pop(); }
-            WizardField::MpvPath => { self.wizard_state.mpv_path.pop(); }
+            WizardField::Server => { self.wizard_state.server.delete_char(); }
+            WizardField::Username => { self.wizard_state.username.delete_char(); }
+            WizardField::Password => { self.wizard_state.password.delete_char(); }
+            WizardField::MpvPath => { self.wizard_state.mpv_path.delete_char(); }
         }
     }
 
@@ -1628,7 +1659,8 @@ impl AppState {
                 WizardAction::None
             }
             WizardField::Server => {
-                if self.wizard_state.server.trim().is_empty() {
+                let server = self.wizard_state.server.lines().join("").trim().to_string();
+                if server.is_empty() {
                     self.wizard_state.status_msg = Some(crate::i18n::t("status.server_required").to_string());
                     return WizardAction::None;
                 }
@@ -1637,7 +1669,8 @@ impl AppState {
                 WizardAction::None
             }
             WizardField::Username => {
-                if self.wizard_state.username.trim().is_empty() {
+                let username = self.wizard_state.username.lines().join("").trim().to_string();
+                if username.is_empty() {
                     self.wizard_state.status_msg = Some(crate::i18n::t("status.username_required").to_string());
                     return WizardAction::None;
                 }
@@ -1646,7 +1679,8 @@ impl AppState {
                 WizardAction::None
             }
             WizardField::Password => {
-                if self.wizard_state.password.is_empty() {
+                let password = self.wizard_state.password.lines().join("");
+                if password.is_empty() {
                     self.wizard_state.status_msg = Some(crate::i18n::t("status.password_required").to_string());
                     return WizardAction::None;
                 }
@@ -1658,6 +1692,28 @@ impl AppState {
                 WizardAction::FinishWizard
             }
         }
+    }
+
+    pub fn wizard_prev_field(&mut self) {
+        self.wizard_state.step = match self.wizard_state.step {
+            WizardField::Language => WizardField::MpvPath,
+            WizardField::Server => WizardField::Language,
+            WizardField::Username => WizardField::Server,
+            WizardField::Password => WizardField::Username,
+            WizardField::MpvPath => WizardField::Password,
+        };
+        self.wizard_state.status_msg = None;
+    }
+
+    pub fn wizard_next_field(&mut self) {
+        self.wizard_state.step = match self.wizard_state.step {
+            WizardField::Language => WizardField::Server,
+            WizardField::Server => WizardField::Username,
+            WizardField::Username => WizardField::Password,
+            WizardField::Password => WizardField::MpvPath,
+            WizardField::MpvPath => WizardField::Language,
+        };
+        self.wizard_state.status_msg = None;
     }
 
     // --- MPV Prompt ---
@@ -1710,7 +1766,7 @@ impl AppState {
                 match ams.action {
                     AccountManagerAction::View => ams.accounts.len() + 1,
                     AccountManagerAction::Add | AccountManagerAction::Edit(_) => 4,
-                    AccountManagerAction::Delete(_) => 2,
+                    AccountManagerAction::Delete(_) | AccountManagerAction::ConfirmUpdate(_) => 0,
                 }
             }
             View::Wizard => 0,

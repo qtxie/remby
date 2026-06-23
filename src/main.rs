@@ -179,7 +179,7 @@ async fn main() -> Result<()> {
 
             let frame = SPINNER[i % SPINNER.len()];
             f.render_widget(
-                Paragraph::new(                Span::styled(
+                Paragraph::new(Span::styled(
                     format!("{} {}", frame, t("status.connecting")),
                     Style::default().fg(Color::Yellow),
                 ))
@@ -324,6 +324,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 }
                 BackgroundResult::SettingsLoaded(libs) => {
                     state.libraries = libs;
+                    // Don't set libraries_fetched_at so cache is invalid
+                    // This forces a fresh filtered load when entering library view
                     state.open_settings();
                     state.loading = false;
                     state.status_msg = None;
@@ -677,15 +679,15 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             let video_label = state.track_state.video_tracks
                                                 .get(state.track_state.selected_video)
                                                 .map(|t| ui::track_label(t))
-                                                .unwrap_or_else(|| "Default".to_string());
+                                                .unwrap_or_else(|| t("track.default").to_string());
                                             let audio_label = state.track_state.audio_tracks
                                                 .get(state.track_state.selected_audio)
                                                 .map(|t| ui::track_label(t))
-                                                .unwrap_or_else(|| "Default".to_string());
+                                                .unwrap_or_else(|| t("track.default").to_string());
                                             let sub_label = state.track_state.subtitle_tracks
                                                 .get(state.track_state.selected_subtitle)
                                                 .map(|t| ui::track_label(t))
-                                                .unwrap_or_else(|| "Off".to_string());
+                                                .unwrap_or_else(|| t("track.off").to_string());
                                             let resume_ticks = item.resume_position_ticks();
                                             let item_id = item.id.clone();
                                             let source_id = source.id.clone();
@@ -904,7 +906,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let query = state.search_query.clone();
                                         let lib_id = state.library_browser_state.library_id.clone();
                                         state.loading = true;
-                                        state.loading_msg = format!("Searching for \"{}\"...", query);
+                                        state.loading_msg = format!("{} \"{}\"...", t("status.searching"), query);
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
@@ -945,7 +947,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let item_id = item.id.clone();
                                         let item_type = item.item_type.clone();
                                         state.loading = true;
-                                        state.loading_msg = "Updating favorite...".to_string();
+                                        state.loading_msg = t("status.updating_favorite").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
@@ -1097,55 +1099,36 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         app::View::Wizard => {
                             match key.code {
                                 KeyCode::Esc => break,
-                                KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
-                                    if state.wizard_state.step == app::WizardField::Language {
-                                        state.wizard_toggle_language();
-                                    }
+                                KeyCode::Up  => state.wizard_prev_field(),
+                                KeyCode::Down => state.wizard_next_field(),
+                                KeyCode::Left | KeyCode::Right if state.wizard_state.step == app::WizardField::Language => {
+                                    state.wizard_toggle_language();
+                                }
+                                KeyCode::Char('h') | KeyCode::Char('l') if state.wizard_state.step == app::WizardField::Language => {
+                                    state.wizard_toggle_language();
                                 }
                                 KeyCode::Tab => {
-                                    if state.wizard_state.step == app::WizardField::Language {
-                                        // Tab on language = go to next step
+                                    if state.wizard_state.step == app::WizardField::MpvPath {
+                                        // On last field, wrap back to first field
+                                        state.wizard_state.step = app::WizardField::Language;
+                                    } else {
                                         state.wizard_next();
-                                    } else if state.wizard_state.step == app::WizardField::MpvPath {
-                                        state.wizard_state.mpv_path = "mpv".to_string();
-                                        let ws = &state.wizard_state;
-                                        let server = ws.server.trim().to_string();
-                                        let username = ws.username.trim().to_string();
-                                        let password = ws.password.clone();
-                                        state.loading = true;
-                                        state.loading_msg = t("status.connecting").to_string();
-                                        let tx = bg_tx.clone();
-                                        tokio::spawn(async move {
-                                            match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
-                                                Ok(client) => {
-                                                    let account = crate::config::Account {
-                                                        id: uuid::Uuid::new_v4().to_string(),
-                                                        label: format!("{}@{}", username, server),
-                                                        server,
-                                                        username,
-                                                        password_enc: crate::crypto::encrypt(&password),
-                                                    };
-                                                    let _ = tx.send(BackgroundResult::AccountLoginSuccess(account, client, String::new()));
-                                                }
-                                                Err(e) => { let _ = tx.send(BackgroundResult::AccountLoginFailed(format!("{}: {}", t("status.login_failed"), e))); }
-                                            }
-                                        });
                                     }
                                 }
                                 KeyCode::Enter => {
                                     match state.wizard_next() {
                                         app::WizardAction::None => {}
                                         app::WizardAction::FinishWizard => {
-                                            let mpv = state.wizard_state.mpv_path.trim().to_string();
+                                            let mpv = state.wizard_state.mpv_path.lines().join("").trim().to_string();
                                             let lang = state.wizard_state.language.clone();
                                             state.config.language = lang;
                                             if !mpv.is_empty() && mpv != "mpv" {
                                                 state.config.mpv_path = mpv;
                                             }
                                             let _ = crate::config::save_config(&state.config);
-                                            let server = state.wizard_state.server.trim().to_string();
-                                            let username = state.wizard_state.username.trim().to_string();
-                                            let password = state.wizard_state.password.clone();
+                                            let server = state.wizard_state.server.lines().join("").trim().to_string();
+                                            let username = state.wizard_state.username.lines().join("").trim().to_string();
+                                            let password = state.wizard_state.password.lines().join("");
                                             state.loading = true;
                                             state.loading_msg = t("status.connecting").to_string();
                                             let tx = bg_tx.clone();
@@ -1206,6 +1189,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             let ams = &state.account_manager_state;
                             let is_input = matches!(ams.action, app::AccountManagerAction::Add | app::AccountManagerAction::Edit(_));
                             let is_delete = matches!(ams.action, app::AccountManagerAction::Delete(_));
+                            let is_confirm_update = matches!(ams.action, app::AccountManagerAction::ConfirmUpdate(_));
 
                             if is_input {
                                 match key.code {
@@ -1214,21 +1198,23 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.account_manager_state.status_msg = None;
                                     }
                                     KeyCode::Tab => state.account_manager_next_field(),
+                                    KeyCode::Up => state.account_manager_prev_field(),
+                                    KeyCode::Down => state.account_manager_next_field(),
                                     KeyCode::Char(c) => state.account_manager_input(c),
                                     KeyCode::Backspace => state.account_manager_backspace(),
                                     KeyCode::Enter => {
                                         let ams = &state.account_manager_state;
-                                        let server = ams.input_server.trim().to_string();
-                                        let username = ams.input_username.trim().to_string();
-                                        let password = ams.input_password.clone();
-                                        let label = if ams.input_label.trim().is_empty() {
+                                        let server = ams.input_server.lines().join("").trim().to_string();
+                                        let username = ams.input_username.lines().join("").trim().to_string();
+                                        let password = ams.input_password.lines().join("");
+                                        let label = if ams.input_label.lines().join("").trim().is_empty() {
                                             format!("{}@{}", username, server)
                                         } else {
-                                            ams.input_label.trim().to_string()
+                                            ams.input_label.lines().join("").trim().to_string()
                                         };
 
                                         if server.is_empty() || username.is_empty() || password.is_empty() {
-                                            state.account_manager_state.status_msg = Some("Server, username and password are required".to_string());
+                                            state.account_manager_state.status_msg = Some(t("status.fields_required").to_string());
                                         } else {
                                             let password_enc = crate::crypto::encrypt(&password);
                                             let edit_idx = if let app::AccountManagerAction::Edit(idx) = ams.action { Some(idx) } else { None };
@@ -1245,24 +1231,41 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 password_enc,
                                             };
 
-                                            let mut accounts = ams.accounts.clone();
-                                            if let Some(idx) = edit_idx {
-                                                if idx < accounts.len() {
-                                                    accounts[idx] = account;
+                                            // Dedup: check for existing server+username (skip self in edit mode)
+                                            let dup_idx = ams.accounts.iter().position(|a| {
+                                                a.server == account.server && a.username == account.username
+                                                    && Some(&a.id) != edit_idx.and_then(|i| ams.accounts.get(i)).map(|a| &a.id)
+                                            });
+
+                                            if let Some(idx) = dup_idx {
+                                                let existing = &ams.accounts[idx];
+                                                let pw_changed = existing.password_enc != account.password_enc;
+                                                if pw_changed {
+                                                    state.account_manager_state.action = app::AccountManagerAction::ConfirmUpdate(idx);
+                                                    state.account_manager_state.status_msg = Some(t("status.account_pw_changed").to_string());
+                                                } else {
+                                                    state.account_manager_state.status_msg = Some(t("status.account_exists").to_string());
                                                 }
                                             } else {
-                                                accounts.push(account);
+                                                let mut accounts = ams.accounts.clone();
+                                                if let Some(idx) = edit_idx {
+                                                    if idx < accounts.len() {
+                                                        accounts[idx] = account;
+                                                    }
+                                                } else {
+                                                    accounts.push(account);
+                                                }
+
+                                                let accounts_cfg = crate::config::AccountsConfig {
+                                                    accounts: accounts.clone(),
+                                                    last_account_id: ams.last_account_id.clone(),
+                                                };
+                                                let _ = crate::config::save_accounts(&accounts_cfg);
+
+                                                state.account_manager_state.accounts = accounts;
+                                                state.account_manager_state.action = app::AccountManagerAction::View;
+                                                state.account_manager_state.status_msg = Some(t("status.account_saved").to_string());
                                             }
-
-                                            let accounts_cfg = crate::config::AccountsConfig {
-                                                accounts: accounts.clone(),
-                                                last_account_id: ams.last_account_id.clone(),
-                                            };
-                                            let _ = crate::config::save_accounts(&accounts_cfg);
-
-                                            state.account_manager_state.accounts = accounts;
-                                            state.account_manager_state.action = app::AccountManagerAction::View;
-                                            state.account_manager_state.status_msg = Some(t("status.account_saved").to_string());
                                         }
                                     }
                                     _ => {}
@@ -1286,6 +1289,46 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     }
                                     _ => {}
                                 }
+                            } else if is_confirm_update {
+                                match key.code {
+                                    KeyCode::Esc | KeyCode::Char('n') => {
+                                        state.account_manager_state.action = app::AccountManagerAction::Add;
+                                        state.account_manager_state.status_msg = None;
+                                    }
+                                    KeyCode::Char('y') | KeyCode::Enter => {
+                                        let ams = &state.account_manager_state;
+                                        let server = ams.input_server.lines().join("").trim().to_string();
+                                        let username = ams.input_username.lines().join("").trim().to_string();
+                                        let password = ams.input_password.lines().join("");
+                                        let label = if ams.input_label.lines().join("").trim().is_empty() {
+                                            format!("{}@{}", username, server)
+                                        } else {
+                                            ams.input_label.lines().join("").trim().to_string()
+                                        };
+                                        let password_enc = crate::crypto::encrypt(&password);
+                                        let idx = if let app::AccountManagerAction::ConfirmUpdate(i) = ams.action { i } else { 0 };
+                                        let account = crate::config::Account {
+                                            id: ams.accounts.get(idx).map(|a| a.id.clone()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                                            label,
+                                            server,
+                                            username,
+                                            password_enc,
+                                        };
+                                        let mut accounts = ams.accounts.clone();
+                                        if idx < accounts.len() {
+                                            accounts[idx] = account;
+                                        }
+                                        let accounts_cfg = crate::config::AccountsConfig {
+                                            accounts: accounts.clone(),
+                                            last_account_id: ams.last_account_id.clone(),
+                                        };
+                                        let _ = crate::config::save_accounts(&accounts_cfg);
+                                        state.account_manager_state.accounts = accounts;
+                                        state.account_manager_state.action = app::AccountManagerAction::View;
+                                        state.account_manager_state.status_msg = Some(t("status.account_saved").to_string());
+                                    }
+                                    _ => {}
+                                }
                             } else {
                                 match key.code {
                                     KeyCode::Esc | KeyCode::Char('u') => state.go_back(),
@@ -1294,10 +1337,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     KeyCode::Down | KeyCode::Char('j') => state.account_manager_select_next(),
                                     KeyCode::Char('a') => {
                                         state.account_manager_state.action = app::AccountManagerAction::Add;
-                                        state.account_manager_state.input_server.clear();
-                                        state.account_manager_state.input_username.clear();
-                                        state.account_manager_state.input_password.clear();
-                                        state.account_manager_state.input_label.clear();
+                                        let mut pw = ratatui_textarea::TextArea::default();
+                                        pw.set_mask_char('\u{2022}');
+                                        state.account_manager_state.input_server = ratatui_textarea::TextArea::default();
+                                        state.account_manager_state.input_username = ratatui_textarea::TextArea::default();
+                                        state.account_manager_state.input_password = pw;
+                                        state.account_manager_state.input_label = ratatui_textarea::TextArea::default();
                                         state.account_manager_state.input_field = app::AccountInputField::Label;
                                         state.account_manager_state.selected = 0;
                                         state.account_manager_state.status_msg = None;
@@ -1312,7 +1357,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 let username = acc.username.clone();
                                                 let account_id = acc.id.clone();
                                                 state.loading = true;
-                                                state.loading_msg = format!("Logging in as {}...", acc.username);
+                                                state.loading_msg = tf("status.logging_in", &acc.username);
                                                 let tx = bg_tx.clone();
                                                 tokio::spawn(async move {
                                                     match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
@@ -1327,10 +1372,12 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             }
                                         } else if sel == acc_count {
                                             state.account_manager_state.action = app::AccountManagerAction::Add;
-                                            state.account_manager_state.input_server.clear();
-                                            state.account_manager_state.input_username.clear();
-                                            state.account_manager_state.input_password.clear();
-                                            state.account_manager_state.input_label.clear();
+                                            let mut pw = ratatui_textarea::TextArea::default();
+                                            pw.set_mask_char('\u{2022}');
+                                            state.account_manager_state.input_server = ratatui_textarea::TextArea::default();
+                                            state.account_manager_state.input_username = ratatui_textarea::TextArea::default();
+                                            state.account_manager_state.input_password = pw;
+                                            state.account_manager_state.input_label = ratatui_textarea::TextArea::default();
                                             state.account_manager_state.input_field = app::AccountInputField::Label;
                                             state.account_manager_state.selected = 0;
                                             state.account_manager_state.status_msg = None;
@@ -1341,10 +1388,19 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if sel < state.account_manager_state.accounts.len() {
                                             if let Some(acc) = state.account_manager_state.accounts.get(sel).cloned() {
                                                 let password = crate::crypto::decrypt(&acc.password_enc).unwrap_or_default();
-                                                state.account_manager_state.input_label = acc.label;
-                                                state.account_manager_state.input_server = acc.server;
-                                                state.account_manager_state.input_username = acc.username;
-                                                state.account_manager_state.input_password = password;
+                                                let mut label_ta = ratatui_textarea::TextArea::default();
+                                                label_ta.insert_str(&acc.label);
+                                                let mut server_ta = ratatui_textarea::TextArea::default();
+                                                server_ta.insert_str(&acc.server);
+                                                let mut username_ta = ratatui_textarea::TextArea::default();
+                                                username_ta.insert_str(&acc.username);
+                                                let mut pw_ta = ratatui_textarea::TextArea::default();
+                                                pw_ta.set_mask_char('\u{2022}');
+                                                pw_ta.insert_str(&password);
+                                                state.account_manager_state.input_label = label_ta;
+                                                state.account_manager_state.input_server = server_ta;
+                                                state.account_manager_state.input_username = username_ta;
+                                                state.account_manager_state.input_password = pw_ta;
                                                 state.account_manager_state.input_field = app::AccountInputField::Label;
                                                 state.account_manager_state.selected = 0;
                                                 state.account_manager_state.action = app::AccountManagerAction::Edit(sel);
@@ -1390,7 +1446,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     let query = state.search_query.clone();
                                     let context = state.search_context.clone();
                                     state.loading = true;
-                                    state.loading_msg = format!("Searching for \"{}\"...", query);
+                                    state.loading_msg = format!("{} \"{}\"...", t("status.searching"), query);
                                     match &context {
                                         app::SearchContext::LocalHome => {
                                             let q = query.to_lowercase();
@@ -1527,7 +1583,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let item_id = item.id.clone();
                                         let item_type = item.item_type.clone();
                                         state.loading = true;
-                                        state.loading_msg = "Updating favorite...".to_string();
+                                        state.loading_msg = t("status.updating_favorite").to_string();
                                         let tx = bg_tx.clone();
                                         let client = state.client.clone();
                                         tokio::spawn(async move {
@@ -1730,18 +1786,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Char('s') => {
                                     if state.searching { continue; }
-                                    if state.libraries.is_empty() {
-                                        state.loading = true;
-                                        state.loading_msg = t("status.loading_libraries").to_string();
-                                        let tx = bg_tx.clone();
-                                        let client = state.client.clone();
-                                        tokio::spawn(async move {
-                                            let libs = client.get_libraries().await.unwrap_or_default();
-                                            let _ = tx.send(BackgroundResult::SettingsLoaded(libs));
-                                        });
-                                    } else {
-                                        state.open_settings();
-                                    }
+                                    state.loading = true;
+                                    state.loading_msg = t("status.loading_libraries").to_string();
+                                    let tx = bg_tx.clone();
+                                    let client = state.client.clone();
+                                    tokio::spawn(async move {
+                                        let libs = client.get_libraries().await.unwrap_or_default();
+                                        let _ = tx.send(BackgroundResult::SettingsLoaded(libs));
+                                    });
                                 }
                                 KeyCode::Char('u') => {
                                     if state.searching { continue; }
@@ -1761,7 +1813,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if let Some(item) = state.selected_item().cloned() {
                                             if item.item_type == "Series" {
                                                 state.loading = true;
-                                                state.loading_msg = format!("Marking {} as watched...", item.name);
+                                                state.loading_msg = tf("status.marking_watched", &item.name);
                                                 let tx = bg_tx.clone();
                                                 let client = state.client.clone();
                                                 let series_id = item.id.clone();
@@ -1794,15 +1846,54 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                                     if state.searching { continue; }
-                                    state.loading = true;
-                                    state.loading_msg = "Refreshing home...".to_string();
-                                    let tx = bg_tx.clone();
-                                    let client = state.client.clone();
-                                    spawn_home_load(tx, client);
-                                    let tx2 = bg_tx.clone();
-                                    let client2 = state.client.clone();
-                                    let following = state.config.following_series.clone();
-                                    spawn_following_load(tx2, client2, following);
+                                    if state.view == app::View::Libraries {
+                                        state.loading = true;
+                                        state.loading_msg = t("status.loading_libraries").to_string();
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        let config = state.config.clone();
+                                        tokio::spawn(async move {
+                                            let timeout = std::time::Duration::from_secs(120);
+                                            let result = tokio::time::timeout(timeout, async {
+                                                let all_libs = client.get_libraries().await.unwrap_or_default();
+                                                let libs = config.filter_and_sort_libraries(all_libs);
+
+                                                // Fetch latest for all eligible libraries in parallel
+                                                let futures: Vec<_> = libs.iter()
+                                                    .filter(|lib| config.latest_libraries.is_empty() || config.latest_libraries.contains(&lib.id))
+                                                    .map(|lib| {
+                                                        let client = client.clone();
+                                                        let lib_id = lib.id.clone();
+                                                        let lib_name = lib.name.clone();
+                                                        async move {
+                                                            match client.get_latest_for_library(&lib_id, 10).await {
+                                                                Ok(items) if !items.is_empty() => Some((lib_name, items)),
+                                                                _ => None,
+                                                            }
+                                                        }
+                                                    })
+                                                    .collect();
+                                                let results = futures::future::join_all(futures).await;
+                                                let latest: Vec<_> = results.into_iter().flatten().collect();
+
+                                                (libs, latest)
+                                            }).await;
+                                            match result {
+                                                Ok((libs, latest)) => { let _ = tx.send(BackgroundResult::LibrariesLoaded(libs, latest)); }
+                                                Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Libraries".to_string())); }
+                                            }
+                                        });
+                                    } else {
+                                        state.loading = true;
+                                        state.loading_msg = t("status.refreshing_home").to_string();
+                                        let tx = bg_tx.clone();
+                                        let client = state.client.clone();
+                                        spawn_home_load(tx, client);
+                                        let tx2 = bg_tx.clone();
+                                        let client2 = state.client.clone();
+                                        let following = state.config.following_series.clone();
+                                        spawn_following_load(tx2, client2, following);
+                                    }
                                 }
                                 _ => {}
                             }
@@ -1847,7 +1938,8 @@ fn spawn_item_detail(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate:
         let timeout = std::time::Duration::from_secs(60);
         match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
             Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
-            _ => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
+            Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(e.to_string())); }
+            Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }
         }
     });
 }

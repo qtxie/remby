@@ -70,6 +70,8 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "title.settings" => "Settings",
     "title.search" => "Search",
     "title.account_manager" => "Account Manager",
+    "title.account_add" => "Add Account",
+    "title.account_edit" => "Edit Account",
     "title.wizard" => "Setup Wizard",
     "title.mpv_prompt" => "Configure MPV Path",
     "title.track_select" => "Select Tracks",
@@ -96,7 +98,7 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "section.mpv" => "MPV",
 
     // Settings
-    "settings.library_prefs" => "Settings - Library Preferences",
+    "settings.library_prefs" => "Library Preferences",
     "settings.enabled" => "Enabled",
     "settings.latest" => "Latest",
     "settings.library" => "Library",
@@ -108,6 +110,7 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.loading_favorites" => "Loading favorites...",
     "status.loading_items" => "Loading more items...",
     "status.loading" => "Loading",
+    "status.refreshing_home" => "Refreshing home...",
     "status.searching" => "Searching for",
     "status.connecting" => "Connecting...",
     "status.launching_mpv" => "Launching mpv...",
@@ -115,6 +118,8 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.playback_started" => "Playback started",
     "status.settings_saved" => "Settings saved",
     "status.account_saved" => "Account saved",
+    "status.account_exists" => "Account already exists (same server + username)",
+    "status.account_pw_changed" => "Password changed, confirm update?",
     "status.account_deleted" => "Account deleted",
     "status.logged_in" => "Logged in as",
     "status.login_failed" => "Login failed",
@@ -130,6 +135,9 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.username_required" => "Username is required",
     "status.password_required" => "Password is required",
     "status.fields_required" => "Server, username and password are required",
+    "status.updating_favorite" => "Updating favorite...",
+    "status.logging_in" => "Logging in as {}...",
+    "status.marking_watched" => "Marking {} as watched...",
 
     // Playing view
     "playing.in_mpv" => "Playing in mpv...",
@@ -153,6 +161,8 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "footer.library_browser" => "Ctrl+s: Sort | Ctrl+f: Filter | /: search | e: info | ?: help",
     "footer.favorites" => "f: follow | z: unfavorite | m: mark watched | ?: help",
     "footer.account_manager" => "a: add | e: edit | d: delete | Enter: switch | Esc: back | ?: help",
+    "footer.account_manager_form" => "↑/↓: field | Tab: next | Enter: save | Esc: cancel",
+    "footer.account_confirm_update" => "y: confirm update | n: cancel",
     "footer.wizard" => "Tab: next field | Enter: continue | Esc: quit | ?: help",
     "footer.mpv_prompt" => "Enter: save & play | Esc: cancel | ?: help",
     "footer.search" => "Enter: search | Esc: cancel | ?: help",
@@ -165,7 +175,7 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "wizard.username" => "Username",
     "wizard.password" => "Password",
     "wizard.mpv_path" => "MPV Path",
-    "wizard.skip_hint" => "(Tab to skip)",
+    "wizard.skip_hint" => "(Tab to skip | Enter to login)",
     "wizard.hint" => "Enter: next | Tab: skip MPV | Esc: quit",
 
     // Account manager
@@ -173,6 +183,9 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "account.delete_confirm" => "Delete account '{}'?",
     "account.confirm_delete" => "y: confirm | n: cancel",
     "account.label" => "Label",
+    "account.server" => "Server",
+    "account.username" => "Username",
+    "account.password" => "Password",
     "account.form_hint" => "Tab: next field | Enter: save | Esc: cancel",
 
     // MPV prompt
@@ -183,6 +196,13 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "track.video" => "Video",
     "track.audio" => "Audio",
     "track.sub" => "Sub",
+    "track.default" => "Default",
+    "track.off" => "Off",
+
+    // Error messages
+    "error.item_not_found" => "Item not found (may have been deleted from server)",
+    "error.server_error" => "Server error: HTTP {}",
+    "error.item_detail_failed" => "Failed to fetch item detail",
 
     // Item display
     "item.following_update" => "Following Update",
@@ -245,6 +265,8 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "title.settings" => "设置",
     "title.search" => "搜索",
     "title.account_manager" => "账户管理",
+    "title.account_add" => "添加账户",
+    "title.account_edit" => "编辑账户",
     "title.wizard" => "设置向导",
     "title.mpv_prompt" => "配置 MPV 路径",
     "title.track_select" => "选择轨道",
@@ -271,7 +293,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "section.mpv" => "MPV",
 
     // Settings
-    "settings.library_prefs" => "设置 - 媒体库偏好",
+    "settings.library_prefs" => "媒体库偏好",
     "settings.enabled" => "启用",
     "settings.latest" => "最新",
     "settings.library" => "媒体库",
@@ -283,6 +305,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.loading_favorites" => "加载收藏...",
     "status.loading_items" => "加载更多...",
     "status.loading" => "加载中",
+    "status.refreshing_home" => "刷新首页...",
     "status.searching" => "搜索中",
     "status.connecting" => "连接中...",
     "status.launching_mpv" => "启动 mpv...",
@@ -290,6 +313,8 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.playback_started" => "播放已开始",
     "status.settings_saved" => "设置已保存",
     "status.account_saved" => "账户已保存",
+    "status.account_exists" => "账户已存在（相同服务器 + 用户名）",
+    "status.account_pw_changed" => "密码已变更，确认更新？",
     "status.account_deleted" => "账户已删除",
     "status.logged_in" => "已登录",
     "status.login_failed" => "登录失败",
@@ -305,6 +330,9 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.username_required" => "请输入用户名",
     "status.password_required" => "请输入密码",
     "status.fields_required" => "请填写服务器、用户名和密码",
+    "status.updating_favorite" => "正在更新收藏...",
+    "status.logging_in" => "正在登录 {}...",
+    "status.marking_watched" => "正在标记 {} 为已看...",
 
     // Playing view
     "playing.in_mpv" => "正在 mpv 中播放...",
@@ -328,6 +356,8 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "footer.library_browser" => "Ctrl+s: 排序 | Ctrl+f: 筛选 | /: 搜索 | e: 信息 | ?: 帮助",
     "footer.favorites" => "f: 追剧 | z: 取消收藏 | m: 标记已看 | ?: 帮助",
     "footer.account_manager" => "a: 添加 | e: 编辑 | d: 删除 | 回车: 切换 | Esc: 返回 | ?: 帮助",
+    "footer.account_manager_form" => "↑/↓: 字段 | Tab: 下一项 | 回车: 保存 | Esc: 取消",
+    "footer.account_confirm_update" => "y: 确认更新 | n: 取消",
     "footer.wizard" => "Tab: 下一项 | 回车: 继续 | Esc: 退出 | ?: 帮助",
     "footer.mpv_prompt" => "回车: 保存并播放 | Esc: 取消 | ?: 帮助",
     "footer.search" => "回车: 搜索 | Esc: 取消 | ?: 帮助",
@@ -340,7 +370,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "wizard.username" => "用户名",
     "wizard.password" => "密码",
     "wizard.mpv_path" => "MPV 路径",
-    "wizard.skip_hint" => "(Tab 跳过)",
+    "wizard.skip_hint" => "(Tab 跳过 | Enter 登录)",
     "wizard.hint" => "回车: 下一步 | Tab: 跳过 MPV | Esc: 退出",
 
     // Account manager
@@ -348,6 +378,9 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "account.delete_confirm" => "确定删除账户 '{}'？",
     "account.confirm_delete" => "y: 确认 | n: 取消",
     "account.label" => "标签",
+    "account.server" => "服务器",
+    "account.username" => "用户名",
+    "account.password" => "密码",
     "account.form_hint" => "Tab: 下一项 | 回车: 保存 | Esc: 取消",
 
     // MPV prompt
@@ -358,6 +391,13 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "track.video" => "视频",
     "track.audio" => "音频",
     "track.sub" => "字幕",
+    "track.default" => "默认",
+    "track.off" => "关闭",
+
+    // Error messages
+    "error.item_not_found" => "未找到该项目（可能已从服务器删除）",
+    "error.server_error" => "服务器错误：HTTP {}",
+    "error.item_detail_failed" => "获取项目详情失败",
 
     // Item display
     "item.following_update" => "追剧更新",

@@ -1,9 +1,10 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
+use ratatui_textarea::TextArea;
 
 use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
 use crate::i18n::{t, tf};
-use unicode_width::UnicodeWidthChar;
+use unicode_width::UnicodeWidthStr;
 
 fn rounded_block() -> Block<'static> {
     Block::default()
@@ -236,7 +237,10 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
         .collect();
 
     let list = List::new(items)
-        .block(rounded_block().title(format!(" {} ", t("section.home"))))
+        .block(
+            rounded_block()
+                .title(format!(" {} ", t("section.home")))
+        )
         .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
         .highlight_symbol("");
 
@@ -247,6 +251,21 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
 
 fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let mut items: Vec<ListItem> = Vec::new();
+
+    // If loading and no libraries yet, show loading indicator
+    if state.loading {
+        let list = List::new(vec![
+            ListItem::new(Line::from(Span::styled(
+                format!("  {}", t("status.loading")),
+                Style::default().fg(theme.muted),
+            ))),
+        ])
+        .block(rounded_block().title(format!(" {} ", t("section.libraries"))));
+
+        let mut state_list = ListState::default();
+        f.render_stateful_widget(list, area, &mut state_list);
+        return;
+    }
 
     // Libraries header (selectable at index 0)
     let selected = state.selected == 0;
@@ -552,7 +571,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &crate
 }
 
 fn display_width(s: &str) -> usize {
-    s.chars().map(|c| c.width().unwrap_or(0)).sum()
+    s.width()
 }
 
 fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, theme: &crate::theme::Theme) {
@@ -859,13 +878,19 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
 
     // Libraries section
     let header_style = Style::default().fg(theme.accent).add_modifier(Modifier::BOLD);
-    let name_col = 24;
+    let name_col = 36;
 
     let mut items: Vec<ListItem> = Vec::new();
 
     let enabled_header = if ss.column == SettingsColumn::Enabled { format!(">{}", t("settings.enabled")) } else { format!(" {}", t("settings.enabled")) };
     let latest_header = if ss.column == SettingsColumn::Latest { format!(">{}", t("settings.latest")) } else { format!(" {}", t("settings.latest")) };
-    let header_name = format!("{:<width$}", format!(" {}", t("settings.library")), width = name_col);
+    let raw_header = format!(" {}", t("settings.library"));
+    let hdw = display_width(&raw_header);
+    let header_name = if hdw < name_col {
+        format!("{}{}", raw_header, " ".repeat(name_col - hdw))
+    } else {
+        raw_header
+    };
     items.push(ListItem::new(Line::from(vec![
         Span::styled(header_name, header_style),
         Span::styled(
@@ -910,7 +935,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
         let name_with_marker = format!("{}{}", marker, lib.name);
         let dw = display_width(&name_with_marker);
         let padded_name = if dw < name_col {
-            format!("{}{}", name_with_marker, " ".repeat(name_col - dw))
+            format!("{}{}", name_with_marker, " ".repeat(name_col - dw + 1))
         } else {
             name_with_marker
         };
@@ -918,7 +943,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
         items.push(ListItem::new(Line::from(vec![
             Span::styled(padded_name, name_style),
             Span::styled(enabled_mark, enabled_style),
-            Span::raw("   "),
+            Span::raw("    "),
             Span::styled(latest_mark, latest_style),
         ])));
     }
@@ -932,33 +957,37 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
                 .border_style(Style::default().fg(lib_border))
                 .title(Span::styled(
                     format!(" {} ", t("settings.library_prefs")),
-                    Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
+                    Style::default().fg(lib_border).add_modifier(Modifier::BOLD),
                 ))
                 .title_alignment(Alignment::Center),
         );
 
+    let mut state_list = ListState::default();
+    if ss.section == SettingsSection::Libraries {
+        state_list.select(Some(ss.selected));
+    }
     f.render_widget(Clear, area);
-    f.render_widget(list, layout[0]);
+    f.render_stateful_widget(list, layout[0], &mut state_list);
 
     // MPV path section
     let mpv_active = ss.section == SettingsSection::MpvPath;
     let mpv_border = if mpv_active { theme.accent } else { theme.muted };
     let cursor = if mpv_active { "█" } else { "" };
-    let mpv_text = format!("  {}: {}{}", t("settings.mpv_path"), ss.mpv_path, cursor);
+    let mpv_text = format!(" {}: {}{}", t("settings.mpv_path"), ss.mpv_path, cursor);
     let mpv_style = if mpv_active {
         Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
     let mpv_block = Paragraph::new(Span::styled(mpv_text, mpv_style))
-        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(mpv_border)).title(format!(" {} ", t("section.mpv"))));
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(mpv_border)).title(Span::styled(format!(" {} ", t("section.mpv")), Style::default().fg(mpv_border).add_modifier(Modifier::BOLD))));
     f.render_widget(mpv_block, layout[1]);
 
     // Language section
     let lang_active = ss.section == SettingsSection::Language;
     let lang_border = if lang_active { theme.accent } else { theme.muted };
     let lang_label = if ss.language == "zh" { "中文" } else { "English" };
-    let lang_text = format!("  Language: {}", lang_label);
+    let lang_text = format!(" Language: {}", lang_label);
     let lang_style = if lang_active {
         Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
     } else {
@@ -969,7 +998,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
         Span::styled(lang_text, lang_style),
         Span::styled(lang_hint.to_string(), Style::default().fg(theme.muted)),
     ]))
-        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(lang_border)).title(" Language "));
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(lang_border)).title(Span::styled(" Language ", Style::default().fg(lang_border).add_modifier(Modifier::BOLD))));
     f.render_widget(lang_block, layout[2]);
 
     // Theme section
@@ -981,12 +1010,12 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
         Style::default()
     };
     let theme_hint = if theme_active { "  (←/→ to switch)" } else { "" };
-    let theme_text = format!("  Theme: {}", ss.theme);
+    let theme_text = format!(" Theme: {}", ss.theme);
     let theme_block = Paragraph::new(Line::from(vec![
         Span::styled(theme_text, theme_style),
         Span::styled(theme_hint.to_string(), Style::default().fg(theme.muted)),
     ]))
-        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(theme_border)).title(" Theme "));
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(theme_border)).title(Span::styled(" Theme ", Style::default().fg(theme_border).add_modifier(Modifier::BOLD))));
     f.render_widget(theme_block, layout[3]);
 }
 
@@ -1063,7 +1092,15 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
             }
         },
         View::Favorites => t("footer.favorites"),
-        View::AccountManager => t("footer.account_manager"),
+        View::AccountManager => {
+            match state.account_manager_state.action {
+                crate::app::AccountManagerAction::Add | crate::app::AccountManagerAction::Edit(_) =>
+                    t("footer.account_manager_form"),
+                crate::app::AccountManagerAction::ConfirmUpdate(_) =>
+                    t("footer.account_confirm_update"),
+                _ => t("footer.account_manager"),
+            }
+        }
         View::Wizard => t("footer.wizard"),
         View::MpvPrompt => t("footer.mpv_prompt"),
         View::Help => "",
@@ -1443,6 +1480,10 @@ fn render_account_manager(f: &mut Frame, state: &AppState, area: Rect, theme: &c
         crate::app::AccountManagerAction::Add | crate::app::AccountManagerAction::Edit(_) => {
             render_account_form(f, state, area, theme);
         }
+        crate::app::AccountManagerAction::ConfirmUpdate(_) => {
+            render_account_form(f, state, area, theme);
+            render_confirm_update(f, state, area, theme);
+        }
         crate::app::AccountManagerAction::Delete(_) => {
             render_account_list(f, state, area, theme);
             render_delete_confirm(f, state, area, theme);
@@ -1506,17 +1547,34 @@ fn render_account_list(f: &mut Frame, state: &AppState, area: Rect, theme: &crat
 fn render_account_form(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ams = &state.account_manager_state;
     let is_edit = matches!(ams.action, crate::app::AccountManagerAction::Edit(_));
-    let title = if is_edit { "Edit Account" } else { "Add Account" };
+    let title = if is_edit { t("title.account_edit") } else { t("title.account_add") };
 
-    let fields = [
-        ("Label", &ams.input_label, crate::app::AccountInputField::Label),
-        ("Server", &ams.input_server, crate::app::AccountInputField::Server),
-        ("Username", &ams.input_username, crate::app::AccountInputField::Username),
-        ("Password", &ams.input_password, crate::app::AccountInputField::Password),
+    let popup = centered_rect(60, 10, area);
+    let block = rounded_block().title(format!(" {} ", title));
+    let inner = block.inner(popup);
+    f.render_widget(Clear, popup);
+    f.render_widget(block, popup);
+
+    let fields: [(&str, &TextArea<'static>, crate::app::AccountInputField); 4] = [
+        (t("account.label"), &ams.input_label, crate::app::AccountInputField::Label),
+        (t("account.server"), &ams.input_server, crate::app::AccountInputField::Server),
+        (t("account.username"), &ams.input_username, crate::app::AccountInputField::Username),
+        (t("account.password"), &ams.input_password, crate::app::AccountInputField::Password),
     ];
 
-    let mut items: Vec<ListItem> = Vec::new();
-    for (_i, (label, value, field)) in fields.iter().enumerate() {
+    let row_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(inner);
+
+    for (i, (label, textarea, field)) in fields.iter().enumerate() {
         let active = ams.input_field == *field;
         let marker = if active { "▸ " } else { "  " };
         let field_style = if active {
@@ -1525,34 +1583,53 @@ fn render_account_form(f: &mut Frame, state: &AppState, area: Rect, theme: &crat
             Style::default()
         };
 
-        let display_value = if *field == crate::app::AccountInputField::Password {
-            "*".repeat(value.len())
-        } else {
-            value.to_string()
-        };
+        let col_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(14),
+                Constraint::Min(0),
+            ])
+            .split(row_layout[i]);
 
-        let cursor = if active { "█" } else { "" };
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(format!("{}{:<12}", marker, label), field_style),
-            Span::raw(": "),
-            Span::raw(format!("{}{}", display_value, cursor)),
-        ])));
+        let label_str = format!("{}{}", marker, label);
+        let label_width = UnicodeWidthStr::width(label_str.as_str());
+        let padding = if label_width < 12 { " ".repeat(12 - label_width) } else { String::new() };
+        f.render_widget(
+            Paragraph::new(Span::styled(format!("{}{}: ", label_str, padding), field_style)),
+            col_layout[0],
+        );
+
+        if active {
+            f.render_widget(*textarea, col_layout[1]);
+        } else {
+            let text = textarea.lines().join("");
+            let is_placeholder = text.is_empty() && *field == crate::app::AccountInputField::Server;
+            let display = if *field == crate::app::AccountInputField::Password {
+                "\u{2022}".repeat(text.chars().count())
+            } else if is_placeholder {
+                "https://emby.example.com:443".to_string()
+            } else {
+                text
+            };
+            if !display.is_empty() {
+                let style = if is_placeholder {
+                    Style::default().fg(theme.muted)
+                } else {
+                    Style::default()
+                };
+                f.render_widget(
+                    Paragraph::new(Span::styled(display, style)),
+                    col_layout[1],
+                );
+            }
+        }
     }
 
-    items.push(ListItem::new(Line::from(Span::raw(""))));
-    items.push(ListItem::new(Line::from(Span::styled(
+    let hint = Paragraph::new(Span::styled(
         format!("  {}", t("account.form_hint")),
         Style::default().fg(theme.muted),
-    ))));
-
-    let list = List::new(items)
-        .block(rounded_block().title(format!(" {} ", title)))
-        .highlight_style(Style::default())
-        .highlight_symbol("");
-
-    let popup = centered_rect(60, 10, area);
-    f.render_widget(Clear, popup);
-    f.render_widget(list, popup);
+    ));
+    f.render_widget(hint, row_layout[5]);
 }
 
 fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
@@ -1581,16 +1658,65 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect, theme: &cr
     }
 }
 
+fn render_confirm_update(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+    let ams = &state.account_manager_state;
+    if let crate::app::AccountManagerAction::ConfirmUpdate(idx) = &ams.action {
+        let name = ams.accounts.get(*idx).map(|a| {
+            if a.label.is_empty() { format!("{}@{}", a.username, a.server) } else { a.label.clone() }
+        }).unwrap_or_else(|| "?".to_string());
+        let text = vec![
+            Line::from(Span::styled(
+                format!("{}: {}", name, t("status.account_pw_changed")),
+                Style::default().fg(theme.warning).add_modifier(Modifier::BOLD),
+            )),
+        ];
+        let popup = centered_rect(50, 4, area);
+        f.render_widget(Clear, popup);
+        f.render_widget(
+            Paragraph::new(text)
+                .block(rounded_block().title(format!(" {} ", t("section.confirm"))))
+                .alignment(Alignment::Center),
+            popup,
+        );
+    }
+}
+
 fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ws = &state.wizard_state;
-    let mut items: Vec<ListItem> = Vec::new();
-    items.push(ListItem::new(Line::from(Span::styled(
-        format!("  {}", t("wizard.welcome")),
-        Style::default().fg(theme.warning),
-    ))));
-    items.push(ListItem::new(Line::from(Span::raw(""))));
+    let popup = centered_rect(60, 16, area);
+    f.render_widget(Clear, popup);
 
-    // Language selection (special: toggle, not text input)
+    let block = rounded_block().title(format!(" {} ", t("title.wizard")));
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // blank line above welcome
+            Constraint::Length(1), // welcome
+            Constraint::Length(1), // spacer
+            Constraint::Length(1), // language
+            Constraint::Length(1), // server
+            Constraint::Length(1), // username
+            Constraint::Length(1), // password
+            Constraint::Length(1), // mpv_path
+            Constraint::Length(1), // hint line
+            Constraint::Length(1), // status msg
+            Constraint::Min(0),   // spacer
+        ])
+        .split(inner);
+
+    // Welcome
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            format!("  {}", t("wizard.welcome")),
+            Style::default().fg(theme.warning)
+        )),
+        layout[1],
+    );
+
+    // Language selection
     {
         let active = ws.step == WizardField::Language;
         let marker = if active { "▸ " } else { "  " };
@@ -1601,22 +1727,25 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
         };
         let lang_label = if ws.language == "zh" { "中文" } else { "English" };
         let toggle_hint = if active { "  (←/→ to switch)" } else { "" };
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(format!("{}{:<14}", marker, "Language"), field_style),
-            Span::raw(": "),
-            Span::styled(lang_label, Style::default().fg(theme.success).add_modifier(Modifier::BOLD)),
-            Span::styled(toggle_hint.to_string(), Style::default().fg(theme.muted)),
-        ])));
+        f.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(format!("{}{:<10}", marker, "Language"), field_style),
+                Span::raw(": "),
+                Span::styled(lang_label, Style::default().fg(theme.success).add_modifier(Modifier::BOLD)),
+                Span::styled(toggle_hint.to_string(), Style::default().fg(theme.muted)),
+            ])),
+            layout[3],
+        );
     }
 
-    // Text input fields
-    let fields = [
+    // Text input fields using TextArea widget
+    let fields: [(&str, &TextArea<'static>, WizardField); 4] = [
         (t("wizard.server"), &ws.server, WizardField::Server),
         (t("wizard.username"), &ws.username, WizardField::Username),
         (t("wizard.password"), &ws.password, WizardField::Password),
         (t("wizard.mpv_path"), &ws.mpv_path, WizardField::MpvPath),
     ];
-    for (label, value, field) in fields.iter() {
+    for (i, (label, textarea, field)) in fields.iter().enumerate() {
         let active = ws.step == *field;
         let marker = if active { "▸ " } else { "  " };
         let field_style = if active {
@@ -1624,42 +1753,78 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
         } else {
             Style::default()
         };
-        let display_value = if *field == WizardField::Password {
-            "*".repeat(value.len())
+
+        // Create a sub-layout for label + textarea
+        let field_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(14), // label width
+                Constraint::Min(0),    // textarea
+            ])
+            .split(layout[4 + i]);
+
+        // Label with proper Unicode width handling
+        let label_str = format!("{}{}", marker, label);
+        let label_width = UnicodeWidthStr::width(label_str.as_str());
+        let padding = if label_width < 12 { " ".repeat(12 - label_width) } else { String::new() };
+        f.render_widget(
+            Paragraph::new(Span::styled(format!("{}{}: ", label_str, padding), field_style)),
+            field_layout[0],
+        );
+
+        // Render TextArea or placeholder
+        let text = textarea.lines().join("");
+        if ws.step == *field {
+            // Active field: render TextArea with cursor
+            f.render_widget(*textarea, field_layout[1]);
+        } else if text.is_empty() {
+            // Empty and not active: show placeholder
+            let placeholders = [
+                (WizardField::Server, "https://emby.example.com:443"),
+                (WizardField::Username, ""),
+                (WizardField::Password, ""),
+                (WizardField::MpvPath, ""),
+            ];
+            if let Some((_, ph)) = placeholders.iter().find(|(f, _)| *f == *field) {
+                if !ph.is_empty() {
+                    f.render_widget(
+                        Paragraph::new(Span::styled(*ph, Style::default().fg(theme.muted))),
+                        field_layout[1],
+                    );
+                }
+            }
         } else {
-            value.to_string()
-        };
-        let cursor = if active { "█" } else { "" };
-        let hint = if *field == WizardField::MpvPath {
-            format!("  {}", t("wizard.skip_hint"))
-        } else {
-            String::new()
-        };
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled(format!("{}{:<14}", marker, label), field_style),
-            Span::raw(": "),
-            Span::raw(format!("{}{}", display_value, cursor)),
-            Span::styled(hint.to_string(), Style::default().fg(theme.muted)),
-        ])));
+            // Has text but not active: render as plain text without cursor
+            let display = if *field == WizardField::Password {
+                "\u{2022}".repeat(text.chars().count())
+            } else {
+                text
+            };
+            f.render_widget(
+                Paragraph::new(Span::raw(display)),
+                field_layout[1],
+            );
+        }
     }
+
+    // MpvPath hint
+    if ws.step == WizardField::MpvPath {
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                format!("  {}", t("wizard.skip_hint")),
+                Style::default().fg(theme.muted),
+            )),
+            layout[8],
+        );
+    }
+
+    // Status message
     if let Some(ref msg) = ws.status_msg {
-        items.push(ListItem::new(Line::from(Span::styled(
-            format!("  {}", msg),
-            Style::default().fg(theme.error),
-        ))));
+        f.render_widget(
+            Paragraph::new(Span::styled(format!("  {}", msg.as_str()), Style::default().fg(theme.error))),
+            layout[9],
+        );
     }
-    items.push(ListItem::new(Line::from(Span::raw(""))));
-    items.push(ListItem::new(Line::from(Span::styled(
-        format!("  {}", t("wizard.hint")),
-        Style::default().fg(theme.muted),
-    ))));
-    let list = List::new(items)
-        .block(rounded_block().title(format!(" {} ", t("title.wizard"))))
-        .highlight_style(Style::default())
-        .highlight_symbol("");
-    let popup = centered_rect(60, 14, area);
-    f.render_widget(Clear, popup);
-    f.render_widget(list, popup);
 }
 
 fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {

@@ -5,6 +5,8 @@ use serde_json::json;
 use std::sync::OnceLock;
 use url::Url;
 
+use crate::i18n::{t, tf};
+
 const CLIENT_NAME: &str = "Emby";
 const CLIENT_VERSION: &str = "4.8.0.80";
 const DEVICE_NAME: &str = "remby";
@@ -469,6 +471,13 @@ impl EmbyClient {
             .send()
             .await
             .context("Failed to fetch item detail")?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("{}", t("error.item_not_found"));
+        }
+        if !status.is_success() {
+            anyhow::bail!("{}", tf("error.server_error", &status.as_u16().to_string()));
+        }
         let item: MediaItem = resp.json().await.context("Invalid item detail response")?;
         Ok(item)
     }
