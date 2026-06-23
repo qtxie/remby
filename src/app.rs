@@ -1070,7 +1070,7 @@ impl AppState {
         self.libraries_fetched_at = None;
         self.library_latest.clear();
         self.library_latest_fetched_at = None;
-        self.navigate_to(View::Libraries);
+        self.go_back();
         self.loading = true;
     }
 
