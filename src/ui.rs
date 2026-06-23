@@ -212,6 +212,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
                 };
 
                 let mut spans = vec![
+                    Span::raw("  "),
                     Span::styled(star, Style::default().fg(theme.warning)),
                     Span::styled(format!("{name}{dur}"), style),
                 ];
