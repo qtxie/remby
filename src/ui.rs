@@ -1221,7 +1221,7 @@ fn render_track_section(
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(border_color))
                 .title(Span::styled(
-                    format!(" {title} ({}) ", tracks.len()),
+                    format!(" {title} ({}) ", tracks.len().saturating_sub(1)),
                     Style::default().fg(if active { theme.accent } else { theme.muted }).add_modifier(Modifier::BOLD),
                 ))
         );

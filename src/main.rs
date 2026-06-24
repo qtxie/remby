@@ -520,6 +520,16 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                     state.status_msg = Some(app::Message::success(if is_favorite { t("status.added_favorites").to_string() } else { t("status.removed_favorites").to_string() }));
                 }
+                BackgroundResult::ItemRemovedFromContinue(item_id) => {
+                    state.home_items.retain(|item| item.id != item_id);
+                    if state.view == app::View::ContinueWatching {
+                        if state.selected >= state.home_items.len() && state.selected > 0 {
+                            state.selected -= 1;
+                        }
+                    }
+                    state.loading = false;
+                    state.status_msg = Some(app::Message::success(t("status.removed_from_continue").to_string()));
+                }
             }
         }
 
@@ -1847,6 +1857,26 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 tokio::spawn(async move {
                                                     match client.mark_series_watched(&series_id).await {
                                                         Ok(count) => { let _ = tx.send(BackgroundResult::SeriesMarkedWatched(series_id, count)); }
+                                                        Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                KeyCode::Char('d') => {
+                                    if state.searching { continue; }
+                                    if matches!(state.view, app::View::Home | app::View::ContinueWatching | app::View::LatestItems) {
+                                        if let Some(item) = state.selected_item().cloned() {
+                                            if !item.is_separator() {
+                                                state.loading = true;
+                                                state.loading_msg = tf("status.removing_from_continue", &item.display_name());
+                                                let tx = bg_tx.clone();
+                                                let client = state.client.clone();
+                                                let item_id = item.id.clone();
+                                                tokio::spawn(async move {
+                                                    match client.mark_unplayed(&item_id).await {
+                                                        Ok(()) => { let _ = tx.send(BackgroundResult::ItemRemovedFromContinue(item_id)); }
                                                         Err(e) => { let _ = tx.send(BackgroundResult::Error(format!("Failed: {}", e))); }
                                                     }
                                                 });

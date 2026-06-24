@@ -627,6 +627,18 @@ impl EmbyClient {
         Ok(count)
     }
 
+    pub async fn mark_unplayed(&self, item_id: &str) -> Result<()> {
+        let url = self.api_url(&format!("/Users/{}/PlayedItems/{}", self.user_id, item_id));
+        let resp = self.authed_delete(&url)
+            .send()
+            .await
+            .context("Failed to mark unplayed")?;
+        if !resp.status().is_success() {
+            anyhow::bail!("MarkUnplayed API error: {}", resp.status());
+        }
+        Ok(())
+    }
+
     pub async fn get_similar(&self, item_id: &str) -> Result<Vec<MediaItem>> {
         let url = self.api_url(&format!("/Items/{}/Similar", item_id));
         let resp = self.authed_get(&url)

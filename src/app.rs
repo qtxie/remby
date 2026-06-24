@@ -26,6 +26,7 @@ pub enum BackgroundResult {
     FavoritesLoaded(Vec<MediaItem>, usize),
     SeriesMarkedWatched(String, usize),
     FavoriteToggled(String, bool, String),
+    ItemRemovedFromContinue(String),
     AccountLoginSuccess(crate::config::Account, EmbyClient, String),
     AccountLoginFailed(String),
     Error(String),

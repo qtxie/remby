@@ -161,6 +161,8 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.updating_favorite" => "Updating favorite...",
     "status.logging_in" => "Logging in as {}...",
     "status.marking_watched" => "Marking {} as watched...",
+    "status.removing_from_continue" => "Removing {} from Continue Watching...",
+    "status.removed_from_continue" => "Removed from Continue Watching",
 
     // Playing view
     "playing.in_mpv" => "Playing in mpv...",
@@ -171,9 +173,9 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "playing.press_enter" => "(Enter)",
 
     // Footer hints
-    "footer.home" => "l: libraries | /: search | u: accounts | s: settings | ?: help | q: quit",
+    "footer.home" => "d: remove | l: libraries | /: search | u: accounts | s: settings | ?: help | q: quit",
     "footer.libraries" => "Enter: open | ↑/↓: navigate | ?: help",
-    "footer.continue_watching" => "/: search | ?: help",
+    "footer.continue_watching" => "d: remove | /: search | ?: help",
     "footer.items" => "f: follow | /: search | ?: help",
     "footer.search_results" => "f: follow | ?: help",
     "footer.track_select" => "←/→: section | Enter: play | ?: help",
@@ -379,6 +381,8 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "status.updating_favorite" => "正在更新收藏...",
     "status.logging_in" => "正在登录 {}...",
     "status.marking_watched" => "正在标记 {} 为已看...",
+    "status.removing_from_continue" => "正在从继续观看中移除 {}...",
+    "status.removed_from_continue" => "已从继续观看中移除",
 
     // Playing view
     "playing.in_mpv" => "正在 mpv 中播放...",
@@ -389,9 +393,9 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "playing.press_enter" => "(回车)",
 
     // Footer hints
-    "footer.home" => "l: 媒体库 | /: 搜索 | u: 账户 | s: 设置 | ?: 帮助 | q: 退出",
+    "footer.home" => "d: 移除 | l: 媒体库 | /: 搜索 | u: 账户 | s: 设置 | ?: 帮助 | q: 退出",
     "footer.libraries" => "Enter: 打开 | ↑/↓: 导航 | ?: 帮助",
-    "footer.continue_watching" => "/: 搜索 | ?: 帮助",
+    "footer.continue_watching" => "d: 移除 | /: 搜索 | ?: 帮助",
     "footer.items" => "f: 追剧 | /: 搜索 | ?: 帮助",
     "footer.search_results" => "f: 追剧 | ?: 帮助",
     "footer.track_select" => "←/→: 分区 | 回车: 播放 | ?: 帮助",
