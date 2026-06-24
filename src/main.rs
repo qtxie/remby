@@ -72,7 +72,7 @@ fn spawn_following_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: cra
 }
 
 #[derive(Parser)]
-#[command(name = "remby", version, about = "Lightweight Emby client with mpv playback")]
+#[command(name = "remby", version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")"), about = "Lightweight Emby client with mpv playback")]
 struct Cli {
     #[arg(short, long, env = "EMBY_SERVER")]
     server: Option<String>,
