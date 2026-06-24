@@ -833,12 +833,12 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::th
     let output_area = halves[1];
     if !state.mpv_output.is_empty() {
         let output_len = state.mpv_output.len();
-        let visible_height = output_area.height as usize;
-        let max_scroll = output_len.saturating_sub(visible_height);
+        let inner_height = (output_area.height as usize).saturating_sub(2);
+        let max_scroll = output_len.saturating_sub(inner_height);
         let scroll = state.mpv_output_scroll.min(max_scroll);
 
         let end = state.mpv_output.len().saturating_sub(scroll);
-        let start = end.saturating_sub(visible_height);
+        let start = end.saturating_sub(inner_height);
         let visible: Vec<Line> = state.mpv_output[start..end].iter().map(|(line, level)| {
             let style = match level.as_str() {
                 "error" | "fatal" => Style::default().fg(theme.error),

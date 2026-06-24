@@ -464,10 +464,50 @@ impl EmbyClient {
         Ok(items)
     }
 
+    pub async fn get_playback_info(&self, item_id: &str) -> Result<Vec<MediaSource>> {
+        let url = self.api_url(&format!("/Items/{}/PlaybackInfo", item_id));
+        let resp = self.authed_post(&url)
+            .json(&serde_json::json!({
+                "UserId": self.user_id,
+                "DeviceProfile": {
+                    "Name": "remby",
+                    "MaxStaticBitrate": 100000000,
+                    "MaxStreamingBitrate": 100000000,
+                    "DirectPlayProfiles": [
+                        {"Type": "Video", "VideoCodec": "h264,hevc,vp9,av1"},
+                        {"Type": "Audio"}
+                    ],
+                    "TranscodingProfiles": [
+                        {"Type": "Video", "Container": "ts", "VideoCodec": "h264", "AudioCodec": "aac,mp3"},
+                        {"Type": "Audio"}
+                    ],
+                    "SubtitleProfiles": [
+                        {"Format": "srt", "Method": "Embed"},
+                        {"Format": "ass", "Method": "Embed"},
+                        {"Format": "sub", "Method": "Embed"},
+                        {"Format": "pgssub", "Method": "Embed"},
+                        {"Format": "dvdsub", "Method": "Embed"}
+                    ]
+                }
+            }))
+            .send()
+            .await
+            .context("Failed to fetch playback info")?;
+        if !resp.status().is_success() {
+            anyhow::bail!("PlaybackInfo failed: {}", resp.status());
+        }
+        #[derive(Deserialize)]
+        struct PlaybackInfoResponse {
+            #[serde(default, rename = "MediaSources")]
+            media_sources: Vec<MediaSource>,
+        }
+        let info: PlaybackInfoResponse = resp.json().await.context("Invalid PlaybackInfo response")?;
+        Ok(info.media_sources)
+    }
+
     pub async fn get_item_detail(&self, item_id: &str) -> Result<MediaItem> {
         let url = self.api_url(&format!("/Users/{}/Items/{}", self.user_id, item_id));
         let resp = self.authed_get(&url)
-            .query(&[("Fields", "MediaSources")])
             .send()
             .await
             .context("Failed to fetch item detail")?;

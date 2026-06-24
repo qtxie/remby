@@ -719,7 +719,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Up | KeyCode::Char('k') => {
                                     if state.playing_state.playing && mpv_has_output {
-                                        state.mpv_output_scroll = state.mpv_output_scroll.saturating_add(1);
+                                        let max_scroll = state.mpv_output.len().saturating_sub(1);
+                                        if state.mpv_output_scroll < max_scroll {
+                                            state.mpv_output_scroll += 1;
+                                        }
                                     } else if state.playing_state.resume_position.is_some() {
                                         state.playing_state.option_selected = 0;
                                     }
@@ -733,7 +736,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::PageUp => {
                                     if mpv_has_output {
-                                        state.mpv_output_scroll = state.mpv_output_scroll.saturating_add(10);
+                                        let max_scroll = state.mpv_output.len().saturating_sub(1);
+                                        let target = state.mpv_output_scroll.saturating_add(10);
+                                        state.mpv_output_scroll = target.min(max_scroll);
                                     }
                                 }
                                 KeyCode::PageDown => {
@@ -756,7 +761,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         } else {
                                             None
                                         };
-                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
+                                        let vid = if !ps.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Video")).unwrap_or(false) { None } else { Some(ps.selected_video as i32) };
+                                        let aid = if !ps.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Audio")).unwrap_or(false) { None } else { Some(ps.selected_audio as i32) };
+                                        let sid = if !ps.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Subtitle")).unwrap_or(false) { None } else { Some(ps.selected_subtitle as i32) };
+                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
                                             state.mpv_child = Some(child);
                                             state.mpv_rx = Some(rx);
                                             state.mpv_output.clear();
@@ -1170,7 +1178,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let _ = crate::config::save_config(&state.config);
                                         let ps = &state.mpv_prompt_state;
                                         let start_secs = ps.resume_position.map(|t| t as f64 / 10_000_000.0);
-                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, None, None, None, start_secs) {
+                                        let vs = &state.playing_state;
+                                        let vid = if !vs.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Video")).unwrap_or(false) { None } else { Some(vs.selected_video as i32) };
+                                        let aid = if !vs.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Audio")).unwrap_or(false) { None } else { Some(vs.selected_audio as i32) };
+                                        let sid = if !vs.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Subtitle")).unwrap_or(false) { None } else { Some(vs.selected_subtitle as i32) };
+                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
                                             state.mpv_child = Some(child);
                                             state.mpv_rx = Some(rx);
                                             state.mpv_output.clear();
@@ -1936,7 +1948,27 @@ fn spawn_load_favorites(tx: mpsc::UnboundedSender<BackgroundResult>, client: cra
 fn spawn_item_detail(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, item_id: String) {
     tokio::spawn(async move {
         let timeout = std::time::Duration::from_secs(60);
-        match tokio::time::timeout(timeout, client.get_item_detail(&item_id)).await {
+        let result = tokio::time::timeout(timeout, async {
+            let mut detail = client.get_item_detail(&item_id).await?;
+            if detail.media_sources.is_empty() {
+                if let Ok(sources) = client.get_playback_info(&item_id).await {
+                    detail.media_sources = sources;
+                }
+            } else {
+                for source in &mut detail.media_sources {
+                    if source.media_streams.is_empty() {
+                        if let Ok(sources) = client.get_playback_info(&item_id).await {
+                            if let Some(full) = sources.iter().find(|s| s.id == source.id) {
+                                source.media_streams = full.media_streams.clone();
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            Ok::<_, anyhow::Error>(detail)
+        }).await;
+        match result {
             Ok(Ok(detail)) => { let _ = tx.send(BackgroundResult::ItemDetailLoaded(detail)); }
             Ok(Err(e)) => { let _ = tx.send(BackgroundResult::Error(e.to_string())); }
             Err(_) => { let _ = tx.send(BackgroundResult::Timeout("Item detail".to_string())); }

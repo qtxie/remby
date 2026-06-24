@@ -1190,14 +1190,7 @@ impl AppState {
 
     // --- Playing ---
     pub fn open_track_select_or_playing(&mut self, item: &MediaItem, source: &MediaSource) {
-        let has_tracks = source.media_streams.iter().any(|s| s.stream_type == "Video" || s.stream_type == "Audio");
-        if has_tracks {
-            self.open_track_select(item, source);
-        } else {
-            let url = self.client.stream_url_for_source(item, source);
-            let resume = item.resume_position_ticks();
-            self.open_playing(&item.display_name(), &item.id, &source.id, item.runtime_ticks, &url, "", "", "", resume, Some(source.clone()), 0, 0, 0);
-        }
+        self.open_track_select(item, source);
     }
 
     pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<crate::emby::MediaSource>, selected_video: usize, selected_audio: usize, selected_subtitle: usize) {
