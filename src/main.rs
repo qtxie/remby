@@ -326,7 +326,6 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.libraries = libs;
                     // Don't set libraries_fetched_at so cache is invalid
                     // This forces a fresh filtered load when entering library view
-                    state.open_settings();
                     state.loading = false;
                     state.status_msg = None;
                 }
@@ -602,6 +601,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             let in_mpv = state.settings_state.section == app::SettingsSection::MpvPath;
                             let in_lang = state.settings_state.section == app::SettingsSection::Language;
                             let in_theme = state.settings_state.section == app::SettingsSection::Theme;
+                            let in_track_prefs = state.settings_state.section == app::SettingsSection::TrackPreferences;
+                            let in_non_lib = in_mpv || in_lang || in_theme || in_track_prefs;
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => state.settings_cancel(),
@@ -610,14 +611,31 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Backspace if in_mpv => state.settings_mpv_backspace(),
                                 KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') if in_lang => state.settings_toggle_language(),
                                 KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') if in_theme => state.settings_cycle_theme(key.code == KeyCode::Right || key.code == KeyCode::Char('l')),
-                                KeyCode::Up if !in_mpv && !in_lang && !in_theme && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
-                                KeyCode::Down if !in_mpv && !in_lang && !in_theme && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
-                                KeyCode::Up | KeyCode::Char('k') if !in_mpv && !in_lang && !in_theme => state.settings_select_prev(),
-                                KeyCode::Down | KeyCode::Char('j') if !in_mpv && !in_lang && !in_theme => state.settings_select_next(),
-                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') if !in_mpv && !in_lang && !in_theme => state.settings_switch_column(),
-                                KeyCode::Char(' ') if !in_mpv && !in_lang && !in_theme => state.settings_toggle(),
-                                KeyCode::Char('K') if !in_mpv && !in_lang && !in_theme => state.settings_move_up(),
-                                KeyCode::Char('J') if !in_mpv && !in_lang && !in_theme => state.settings_move_down(),
+                                KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') if in_track_prefs => {
+                                    let forward = key.code == KeyCode::Right || key.code == KeyCode::Char('l');
+                                    match state.settings_state.selected {
+                                        0 => state.settings_cycle_resolution(forward),
+                                        1 => state.settings_cycle_audio_language(forward),
+                                        2 => state.settings_cycle_subtitle_language(forward),
+                                        _ => {}
+                                    }
+                                }
+                                KeyCode::Up | KeyCode::Char('k') if in_track_prefs => {
+                                    state.settings_state.selected = state.settings_state.selected.saturating_sub(1);
+                                }
+                                KeyCode::Down | KeyCode::Char('j') if in_track_prefs => {
+                                    if state.settings_state.selected < 2 {
+                                        state.settings_state.selected += 1;
+                                    }
+                                }
+                                KeyCode::Up if !in_non_lib && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
+                                KeyCode::Down if !in_non_lib && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
+                                KeyCode::Up | KeyCode::Char('k') if !in_non_lib => state.settings_select_prev(),
+                                KeyCode::Down | KeyCode::Char('j') if !in_non_lib => state.settings_select_next(),
+                                KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') if !in_non_lib => state.settings_switch_column(),
+                                KeyCode::Char(' ') if !in_non_lib => state.settings_toggle(),
+                                KeyCode::Char('K') if !in_non_lib => state.settings_move_up(),
+                                KeyCode::Char('J') if !in_non_lib => state.settings_move_down(),
                                 KeyCode::Enter => {
                                     state.settings_save();
                                     state.loading_msg = t("status.loading_libraries").to_string();
@@ -1823,6 +1841,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 }
                                 KeyCode::Char('s') => {
                                     if state.searching { continue; }
+                                    state.open_settings();
                                     state.loading = true;
                                     state.loading_msg = t("status.loading_libraries").to_string();
                                     let tx = bg_tx.clone();

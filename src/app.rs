@@ -7,6 +7,73 @@ use crate::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
 
 const CACHE_TTL_SECS: u64 = 300; // 5 minutes
 
+pub fn language_name_to_code(name: &str) -> Option<&'static str> {
+    match name {
+        "English" => Some("eng"),
+        "中文" => Some("chi"),
+        "日本語" => Some("jpn"),
+        "한국어" => Some("kor"),
+        "Français" => Some("fre"),
+        "Deutsch" => Some("ger"),
+        "Español" => Some("spa"),
+        "Italiano" => Some("ita"),
+        "Português" => Some("por"),
+        "Русский" => Some("rus"),
+        "العربية" => Some("ara"),
+        "ไทย" => Some("tha"),
+        "Tiếng Việt" => Some("vie"),
+        "Bahasa Indonesia" => Some("ind"),
+        "Bahasa Melayu" => Some("msa"),
+        "Polski" => Some("pol"),
+        "Nederlands" => Some("dut"),
+        "Svenska" => Some("swe"),
+        "Norsk" => Some("nor"),
+        "Dansk" => Some("dan"),
+        "Suomi" => Some("fin"),
+        "Čeština" => Some("cze"),
+        "Română" => Some("rum"),
+        "Magyar" => Some("hun"),
+        "Ελληνικά" => Some("gre"),
+        "Türkçe" => Some("tur"),
+        "हिन्दी" => Some("hin"),
+        "বাংলা" => Some("ben"),
+        "Українська" => Some("ukr"),
+        _ => None,
+    }
+}
+
+pub const LANGUAGE_OPTIONS: &[&str] = &[
+    "",
+    "English", "中文", "日本語", "한국어",
+    "Français", "Deutsch", "Español", "Italiano", "Português",
+    "Русский", "العربية", "ไทย", "Tiếng Việt", "Bahasa Indonesia",
+    "Bahasa Melayu", "Polski", "Nederlands", "Svenska", "Norsk",
+    "Dansk", "Suomi", "Čeština", "Română", "Magyar",
+    "Ελληνικά", "Türkçe", "हिन्दी", "বাংলা", "Українська",
+];
+
+pub const RESOLUTION_OPTIONS: &[&str] = &["", "720p", "1080p", "1440p", "4K", "8K"];
+
+pub fn resolution_to_height(label: &str) -> i32 {
+    match label {
+        "720p" => 720,
+        "1080p" => 1080,
+        "1440p" => 1440,
+        "4K" => 2160,
+        "8K" => 4320,
+        _ => 0,
+    }
+}
+
+pub fn cycle_option(current: &str, options: &[&str], forward: bool) -> String {
+    let idx = options.iter().position(|&o| o == current).unwrap_or(0);
+    if forward {
+        options[(idx + 1) % options.len()].to_string()
+    } else {
+        options[(idx + options.len() - 1) % options.len()].to_string()
+    }
+}
+
 pub enum BackgroundResult {
     HomeSectionLoaded(Vec<MediaItem>, usize, String),
     MoreHomeItemsLoaded(Vec<MediaItem>),
@@ -171,6 +238,9 @@ pub struct SettingsState {
     pub mpv_path: String,
     pub language: String,
     pub theme: String,
+    pub preferred_resolution: String,
+    pub preferred_audio_language: String,
+    pub preferred_subtitle_language: String,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -179,6 +249,7 @@ pub enum SettingsSection {
     MpvPath,
     Language,
     Theme,
+    TrackPreferences,
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -219,6 +290,9 @@ impl Default for SettingsState {
             mpv_path: String::new(),
             language: String::new(),
             theme: String::new(),
+            preferred_resolution: String::new(),
+            preferred_audio_language: String::new(),
+            preferred_subtitle_language: String::new(),
         }
     }
 }
@@ -945,15 +1019,58 @@ impl AppState {
         if !audio_tracks.is_empty() { audio_tracks.insert(0, none_stream.clone()); }
         let has_subs = !subtitle_tracks.is_empty();
         if has_subs { subtitle_tracks.insert(0, none_stream); }
+
+        let mut selected_video = 1;
+        let mut selected_audio = 1;
+        let mut selected_subtitle = if has_subs { 1 } else { 0 };
+
+        let config = &self.config;
+
+        // Auto-select video by resolution preference
+        if !config.preferred_resolution.is_empty() {
+            let target_height = resolution_to_height(&config.preferred_resolution);
+            if target_height > 0 {
+                if let Some(idx) = video_tracks.iter().skip(1).position(|t| {
+                    t.height.map(|h| (h - target_height).unsigned_abs() < 100).unwrap_or(false)
+                }) {
+                    selected_video = idx + 1;
+                }
+            }
+        }
+
+        // Auto-select audio by language preference
+        if !config.preferred_audio_language.is_empty() {
+            if let Some(code) = language_name_to_code(&config.preferred_audio_language) {
+                if let Some(idx) = audio_tracks.iter().skip(1).position(|t| t.language == code) {
+                    selected_audio = idx + 1;
+                }
+            }
+        }
+
+        // Auto-select subtitle by language preference
+        if has_subs {
+            match config.preferred_subtitle_language.as_str() {
+                s if s == crate::i18n::t("settings.language.off") => selected_subtitle = 0,
+                s if !s.is_empty() => {
+                    if let Some(code) = language_name_to_code(s) {
+                        if let Some(idx) = subtitle_tracks.iter().skip(1).position(|t| t.language == code) {
+                            selected_subtitle = idx + 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
         self.track_state = TrackState {
             item: Some(item.clone()),
             media_source: Some(source.clone()),
             video_tracks,
             audio_tracks,
             subtitle_tracks,
-            selected_video: 1,
-            selected_audio: 1,
-            selected_subtitle: if has_subs { 1 } else { 0 },
+            selected_video,
+            selected_audio,
+            selected_subtitle,
             section: TrackSection::Video,
         };
         self.navigate_to(View::TrackSelect);
@@ -1070,6 +1187,9 @@ impl AppState {
             mpv_path: mpv,
             language: lang,
             theme: self.config.theme.clone(),
+            preferred_resolution: self.config.preferred_resolution.clone(),
+            preferred_audio_language: self.config.preferred_audio_language.clone(),
+            preferred_subtitle_language: self.config.preferred_subtitle_language.clone(),
         };
         self.navigate_to(View::Settings);
     }
@@ -1135,6 +1255,9 @@ impl AppState {
         self.config.mpv_path = if mpv.is_empty() { "mpv".to_string() } else { mpv };
         self.config.language = self.settings_state.language.clone();
         self.config.theme = self.settings_state.theme.clone();
+        self.config.preferred_resolution = self.settings_state.preferred_resolution.clone();
+        self.config.preferred_audio_language = self.settings_state.preferred_audio_language.clone();
+        self.config.preferred_subtitle_language = self.settings_state.preferred_subtitle_language.clone();
         crate::i18n::init(&self.config.language);
         if let Err(e) = crate::config::save_config(&self.config) {
             self.status_msg = Some(Message::error(format!("Save error: {e}")));
@@ -1169,7 +1292,8 @@ impl AppState {
             SettingsSection::Libraries => SettingsSection::MpvPath,
             SettingsSection::MpvPath => SettingsSection::Language,
             SettingsSection::Language => SettingsSection::Theme,
-            SettingsSection::Theme => SettingsSection::Libraries,
+            SettingsSection::Theme => SettingsSection::TrackPreferences,
+            SettingsSection::TrackPreferences => SettingsSection::Libraries,
         };
         self.settings_state.selected = 0;
     }
@@ -1207,6 +1331,33 @@ impl AppState {
             };
             self.settings_state.theme = names[new_idx].clone();
             self.theme = crate::theme::Theme::by_name(&self.settings_state.theme, &self.themes);
+        }
+    }
+
+    pub fn settings_cycle_resolution(&mut self, forward: bool) {
+        if self.settings_state.section == SettingsSection::TrackPreferences {
+            self.settings_state.preferred_resolution = cycle_option(&self.settings_state.preferred_resolution, RESOLUTION_OPTIONS, forward);
+        }
+    }
+
+    pub fn settings_cycle_audio_language(&mut self, forward: bool) {
+        if self.settings_state.section == SettingsSection::TrackPreferences {
+            self.settings_state.preferred_audio_language = cycle_option(&self.settings_state.preferred_audio_language, LANGUAGE_OPTIONS, forward);
+        }
+    }
+
+    pub fn settings_cycle_subtitle_language(&mut self, forward: bool) {
+        if self.settings_state.section == SettingsSection::TrackPreferences {
+            let options: &[&str] = &[
+                "", "关闭",
+                "English", "中文", "日本語", "한국어",
+                "Français", "Deutsch", "Español", "Italiano", "Português",
+                "Русский", "العربية", "ไทย", "Tiếng Việt", "Bahasa Indonesia",
+                "Bahasa Melayu", "Polski", "Nederlands", "Svenska", "Norsk",
+                "Dansk", "Suomi", "Čeština", "Română", "Magyar",
+                "Ελληνικά", "Türkçe", "हिन्दी", "বাংলা", "Українська",
+            ];
+            self.settings_state.preferred_subtitle_language = cycle_option(&self.settings_state.preferred_subtitle_language, options, forward);
         }
     }
 

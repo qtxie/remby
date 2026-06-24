@@ -872,13 +872,15 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::th
 fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let ss = &state.settings_state;
 
+    let lib_h = area.height.saturating_sub(14).max(3);
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(1),
+            Constraint::Length(lib_h),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Length(5),
         ])
         .split(area);
 
@@ -1023,6 +1025,41 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
     ]))
         .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(theme_border)).title(Span::styled(format!(" {} ", t("settings.theme")), Style::default().fg(theme_border).add_modifier(Modifier::BOLD))));
     f.render_widget(theme_block, layout[3]);
+
+    // Track Preferences section
+    let tp_active = ss.section == SettingsSection::TrackPreferences;
+    let tp_border = if tp_active { theme.accent } else { theme.muted };
+    let tp_hint = if tp_active { format!("  {}", t("hint.toggle")) } else { String::new() };
+
+    let res_display = if ss.preferred_resolution.is_empty() { t("settings.language.any").to_string() } else { ss.preferred_resolution.clone() };
+    let audio_display = if ss.preferred_audio_language.is_empty() { t("settings.language.any").to_string() } else { ss.preferred_audio_language.clone() };
+    let sub_display = if ss.preferred_subtitle_language.is_empty() { t("settings.language.any").to_string() }
+        else if ss.preferred_subtitle_language == t("settings.language.off") { t("settings.language.off").to_string() }
+        else { ss.preferred_subtitle_language.clone() };
+
+    let tp_fields = [
+        (t("settings.resolution"), res_display),
+        (t("settings.audio_language"), audio_display),
+        (t("settings.subtitle_language"), sub_display),
+    ];
+    let tp_lines: Vec<Line> = tp_fields.iter().enumerate().map(|(i, (label, value))| {
+        let row_active = tp_active && ss.selected == i;
+        let row_style = if row_active {
+            Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
+        } else if tp_active {
+            Style::default()
+        } else {
+            Style::default()
+        };
+        let marker = if row_active { "▸ " } else { "  " };
+        Line::from(vec![
+            Span::styled(format!("{}{}: {}", marker, label, value), row_style),
+            Span::styled(tp_hint.clone(), Style::default().fg(theme.muted)),
+        ])
+    }).collect();
+    let tp_block = Paragraph::new(tp_lines)
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(tp_border)).title(Span::styled(format!(" {} ", t("settings.track_preferences")), Style::default().fg(tp_border).add_modifier(Modifier::BOLD))));
+    f.render_widget(tp_block, layout[4]);
 }
 
 fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {

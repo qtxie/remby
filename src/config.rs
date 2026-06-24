@@ -20,6 +20,12 @@ pub struct RembyConfig {
     pub language: String,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default)]
+    pub preferred_resolution: String,
+    #[serde(default)]
+    pub preferred_audio_language: String,
+    #[serde(default)]
+    pub preferred_subtitle_language: String,
 }
 
 fn default_mpv_path() -> String {
