@@ -87,14 +87,14 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
             View::AccountManager => t("title.account_manager").to_string(),
             View::Wizard => t("title.wizard").to_string(),
             View::MpvPrompt => t("title.mpv_prompt").to_string(),
-            View::Help => "Help".to_string(),
+            View::Help => t("title.help").to_string(),
             View::TrackSelect => t("title.track_select").to_string(),
             View::SourceSelect => t("title.source_select").to_string(),
             View::Episodes => format!("{} - {}", state.series_name, t("title.episodes")),
             View::SeriesInfo => {
                 state.series_state.item.as_ref()
                     .map(|i| i.name.clone())
-                    .unwrap_or_else(|| "Series".to_string())
+                    .unwrap_or_else(|| t("title.series").to_string())
             }
             View::Playing => t("title.playing").to_string(),
             View::Settings => t("title.settings").to_string(),
@@ -105,20 +105,21 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
                 } else {
                     bs.items.len().to_string()
                 };
-                let genre = bs.filter_genre.as_deref().unwrap_or("All");
-                let tag = bs.filter_tag.as_deref().unwrap_or("All");
-                let studio = bs.filter_studio.as_deref().unwrap_or("All");
+                let genre = bs.filter_genre.as_deref().unwrap_or_else(|| t("filter.all"));
+                let tag = bs.filter_tag.as_deref().unwrap_or_else(|| t("filter.all"));
+                let studio = bs.filter_studio.as_deref().unwrap_or_else(|| t("filter.all"));
                 let years = bs.filter_years
                     .map(|(s, e)| format!("{}-{}", s, e))
-                    .unwrap_or_else(|| "All".to_string());
-                let folder = bs.filter_folder.as_deref().unwrap_or("All");
+                    .unwrap_or_else(|| t("filter.all").to_string());
+                let folder = bs.filter_folder.as_deref().unwrap_or_else(|| t("filter.all"));
+                let all = t("filter.all");
                 let mut filters = Vec::new();
-                if genre != "All" { filters.push(format!("G:{}", genre)); }
-                if tag != "All" { filters.push(format!("T:{}", tag)); }
-                if studio != "All" { filters.push(format!("S:{}", studio)); }
-                if years != "All" { filters.push(format!("Y:{}", years)); }
-                if folder != "All" { filters.push(format!("F:{}", folder)); }
-                let filter_str = if filters.is_empty() { "All".to_string() } else { filters.join(",") };
+                if genre != all { filters.push(format!("G:{}", genre)); }
+                if tag != all { filters.push(format!("T:{}", tag)); }
+                if studio != all { filters.push(format!("S:{}", studio)); }
+                if years != all { filters.push(format!("Y:{}", years)); }
+                if folder != all { filters.push(format!("F:{}", folder)); }
+                let filter_str = if filters.is_empty() { all.to_string() } else { filters.join(",") };
                 format!(
                     "{} | Sort: {}{} | Filter: {} [{}]",
                     bs.library_name,
@@ -373,7 +374,7 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::them
                 format!("{} ({})", t("title.favorites"), fav_count)
             }
         }
-        _ => "Items".to_string(),
+        _ => t("title.items").to_string(),
     };
 
     let items: Vec<ListItem> = items_source
@@ -505,7 +506,7 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &crate
 
     // Overview panel
     let overview_text = if ss.overview.is_empty() {
-        "No overview available".to_string()
+        t("series.no_overview").to_string()
     } else if ss.overview.len() > 500 {
         let mut end = 500;
         while !ss.overview.is_char_boundary(end) {
@@ -572,6 +573,11 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &crate
 
 fn display_width(s: &str) -> usize {
     s.width()
+}
+
+fn pad_right(s: &str, target: usize) -> String {
+    let pad = target.saturating_sub(s.width());
+    format!("{}{}", s, " ".repeat(pad))
 }
 
 fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, theme: &crate::theme::Theme) {
@@ -645,24 +651,24 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, t
         let vw = 18;
 
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<w$}", "Container:", w = lw), Style::default().fg(dg)),
-            Span::styled(format!("{:<w$}", container.to_uppercase(), w = vw), Style::default().fg(wc)),
-            Span::styled(format!("{:<w$}", "Size:", w = lw), Style::default().fg(dg)),
-            Span::styled(format!("{:<w$}", size_str, w = vw), Style::default().fg(wc)),
+            Span::styled(format!("  {}", pad_right(t("media.container"), lw)), Style::default().fg(dg)),
+            Span::styled(pad_right(&container.to_uppercase(), vw), Style::default().fg(wc)),
+            Span::styled(pad_right(t("media.size"), lw), Style::default().fg(dg)),
+            Span::styled(pad_right(&size_str, vw), Style::default().fg(wc)),
         ]));
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<w$}", "Video:", w = lw), Style::default().fg(dg)),
-            Span::styled(format!("{:<w$}", vid_codec, w = vw), Style::default().fg(wc)),
-            Span::styled(format!("{:<w$}", "Resolution:", w = lw), Style::default().fg(dg)),
-            Span::styled(format!("{:<w$}", vid_detail, w = vw), Style::default().fg(wc)),
+            Span::styled(format!("  {}", pad_right(t("media.video"), lw)), Style::default().fg(dg)),
+            Span::styled(pad_right(&vid_codec, vw), Style::default().fg(wc)),
+            Span::styled(pad_right(t("media.resolution"), lw), Style::default().fg(dg)),
+            Span::styled(pad_right(&vid_detail, vw), Style::default().fg(wc)),
         ]));
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<w$}", "Audio:", w = lw), Style::default().fg(dg)),
-            Span::styled(format!("{:<w$}", aud_info, w = vw), Style::default().fg(wc)),
+            Span::styled(format!("  {}", pad_right(t("media.audio"), lw)), Style::default().fg(dg)),
+            Span::styled(pad_right(&aud_info, vw), Style::default().fg(wc)),
         ]));
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<w$}", "Subtitle:", w = lw), Style::default().fg(dg)),
-            Span::styled(format!("{:<w$}", sub_info, w = vw), Style::default().fg(wc)),
+            Span::styled(format!("  {}", pad_right(t("media.subtitle"), lw)), Style::default().fg(dg)),
+            Span::styled(pad_right(&sub_info, vw), Style::default().fg(wc)),
         ]));
     } else {
         lines.push(Line::from(vec![
@@ -987,18 +993,18 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
     let lang_active = ss.section == SettingsSection::Language;
     let lang_border = if lang_active { theme.accent } else { theme.muted };
     let lang_label = if ss.language == "zh" { "中文" } else { "English" };
-    let lang_text = format!(" Language: {}", lang_label);
+    let lang_text = format!(" {}: {}", t("settings.language"), lang_label);
     let lang_style = if lang_active {
         Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
-    let lang_hint = if lang_active { "  (←/→ to switch)" } else { "" };
+    let lang_hint = if lang_active { format!("  {}", t("hint.toggle")) } else { String::new() };
     let lang_block = Paragraph::new(Line::from(vec![
         Span::styled(lang_text, lang_style),
         Span::styled(lang_hint.to_string(), Style::default().fg(theme.muted)),
     ]))
-        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(lang_border)).title(Span::styled(" Language ", Style::default().fg(lang_border).add_modifier(Modifier::BOLD))));
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(lang_border)).title(Span::styled(format!(" {} ", t("settings.language")), Style::default().fg(lang_border).add_modifier(Modifier::BOLD))));
     f.render_widget(lang_block, layout[2]);
 
     // Theme section
@@ -1009,13 +1015,13 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
     } else {
         Style::default()
     };
-    let theme_hint = if theme_active { "  (←/→ to switch)" } else { "" };
-    let theme_text = format!(" Theme: {}", ss.theme);
+    let theme_hint = if theme_active { format!("  {}", t("hint.toggle")) } else { String::new() };
+    let theme_text = format!(" {}: {}", t("settings.theme"), ss.theme);
     let theme_block = Paragraph::new(Line::from(vec![
         Span::styled(theme_text, theme_style),
         Span::styled(theme_hint.to_string(), Style::default().fg(theme.muted)),
     ]))
-        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(theme_border)).title(Span::styled(" Theme ", Style::default().fg(theme_border).add_modifier(Modifier::BOLD))));
+        .block(Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(Style::default().fg(theme_border)).title(Span::styled(format!(" {} ", t("settings.theme")), Style::default().fg(theme_border).add_modifier(Modifier::BOLD))));
     f.render_widget(theme_block, layout[3]);
 }
 
@@ -1041,7 +1047,7 @@ fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
 
     let items: Vec<ListItem> = bindings.iter().map(|b| {
         ListItem::new(Line::from(vec![
-            Span::styled(format!("  {:<16}", b.keys), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("  {}", pad_right(b.keys, 16)), Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
             Span::raw(t(b.description)),
         ]))
     }).collect();
@@ -1052,7 +1058,7 @@ fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
     let block = rounded_block()
         .border_style(Style::default().fg(theme.accent))
         .title(Span::styled(
-            format!(" Help: {} ", label),
+            format!(" {} ", tf("title.help_label", &label)),
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ))
         .title_alignment(Alignment::Center);
@@ -1248,10 +1254,10 @@ fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect, theme: &c
 fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
     let bs = &state.library_browser_state;
     let order_label = match bs.sort_order {
-        SortOrder::Asc => "Order: Ascending",
-        SortOrder::Desc => "Order: Descending",
+        SortOrder::Asc => "↑",
+        SortOrder::Desc => "↓",
     };
-    let options = ["Name", "Year", "Rating", "Date Added", order_label];
+    let options = [t("sort.name"), t("sort.year"), t("sort.rating"), t("sort.date_added"), order_label];
 
     let items: Vec<ListItem> = options.iter().enumerate().map(|(i, opt)| {
         let selected = i == bs.panel_selected;
@@ -1293,11 +1299,11 @@ fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &crat
 
     // Section header
     let section_title = match bs.filter_section {
-        FilterSection::Genre => format!("Genre ({})", bs.available_genres.len()),
-        FilterSection::Tag => format!("Tag ({})", bs.available_tags.len()),
-        FilterSection::Studio => format!("Studio ({})", bs.available_studios.len()),
-        FilterSection::Year => "Year".to_string(),
-        FilterSection::Folder => format!("Folder ({})", bs.available_folders.len()),
+        FilterSection::Genre => format!("{} ({})", t("filter.genre"), bs.available_genres.len()),
+        FilterSection::Tag => format!("{} ({})", t("filter.tag"), bs.available_tags.len()),
+        FilterSection::Studio => format!("{} ({})", t("filter.studio"), bs.available_studios.len()),
+        FilterSection::Year => t("filter.year").to_string(),
+        FilterSection::Folder => format!("{} ({})", t("filter.folder"), bs.available_folders.len()),
     };
     items.push(ListItem::new(Line::from(Span::styled(
         format!("── {} ──", section_title),
@@ -1726,10 +1732,10 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
             Style::default()
         };
         let lang_label = if ws.language == "zh" { "中文" } else { "English" };
-        let toggle_hint = if active { "  (←/→ to switch)" } else { "" };
+        let toggle_hint = if active { format!("  {}", t("hint.toggle")) } else { String::new() };
         f.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(format!("{}{:<10}", marker, "Language"), field_style),
+                Span::styled(format!("{}{}", marker, pad_right(t("settings.language"), 10)), field_style),
                 Span::raw(": "),
                 Span::styled(lang_label, Style::default().fg(theme.success).add_modifier(Modifier::BOLD)),
                 Span::styled(toggle_hint.to_string(), Style::default().fg(theme.muted)),
