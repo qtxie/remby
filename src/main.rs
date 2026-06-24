@@ -676,23 +676,38 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if let Some(ref item) = state.track_state.item.clone() {
                                         if let Some(ref source) = state.track_state.media_source {
                                             let url = state.client.stream_url_for_source(item, source);
-                                            let video_label = state.track_state.video_tracks
-                                                .get(state.track_state.selected_video)
-                                                .map(|t| ui::track_label(t))
-                                                .unwrap_or_else(|| t("track.default").to_string());
-                                            let audio_label = state.track_state.audio_tracks
-                                                .get(state.track_state.selected_audio)
-                                                .map(|t| ui::track_label(t))
-                                                .unwrap_or_else(|| t("track.default").to_string());
-                                            let sub_label = state.track_state.subtitle_tracks
-                                                .get(state.track_state.selected_subtitle)
-                                                .map(|t| ui::track_label(t))
-                                                .unwrap_or_else(|| t("track.off").to_string());
+                                            let video_label = if state.track_state.selected_video == 0 {
+                                                t("track.off").to_string()
+                                            } else {
+                                                state.track_state.video_tracks
+                                                    .get(state.track_state.selected_video)
+                                                    .map(|t| ui::track_label(t))
+                                                    .unwrap_or_else(|| t("track.default").to_string())
+                                            };
+                                            let audio_label = if state.track_state.selected_audio == 0 {
+                                                t("track.off").to_string()
+                                            } else {
+                                                state.track_state.audio_tracks
+                                                    .get(state.track_state.selected_audio)
+                                                    .map(|t| ui::track_label(t))
+                                                    .unwrap_or_else(|| t("track.default").to_string())
+                                            };
+                                            let sub_label = if state.track_state.selected_subtitle == 0 {
+                                                t("track.off").to_string()
+                                            } else {
+                                                state.track_state.subtitle_tracks
+                                                    .get(state.track_state.selected_subtitle)
+                                                    .map(|t| ui::track_label(t))
+                                                    .unwrap_or_else(|| t("track.off").to_string())
+                                            };
                                             let resume_ticks = item.resume_position_ticks();
                                             let item_id = item.id.clone();
                                             let source_id = source.id.clone();
                                             let runtime = item.runtime_ticks;
-                                            state.open_playing(&item.display_name(), &item_id, &source_id, runtime, &url, &video_label, &audio_label, &sub_label, resume_ticks, Some(source.clone()), state.track_state.selected_video, state.track_state.selected_audio, state.track_state.selected_subtitle);
+                                            let vid = if state.track_state.selected_video == 0 { None } else { Some(state.track_state.selected_video - 1) };
+                                            let aid = if state.track_state.selected_audio == 0 { None } else { Some(state.track_state.selected_audio - 1) };
+                                            let sid = if state.track_state.selected_subtitle == 0 { None } else { Some(state.track_state.selected_subtitle - 1) };
+                                            state.open_playing(&item.display_name(), &item_id, &source_id, runtime, &url, &video_label, &audio_label, &sub_label, resume_ticks, Some(source.clone()), vid, aid, sid);
                                         }
                                     }
                                 }
@@ -761,9 +776,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         } else {
                                             None
                                         };
-                                        let vid = if !ps.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Video")).unwrap_or(false) { None } else { Some(ps.selected_video as i32) };
-                                        let aid = if !ps.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Audio")).unwrap_or(false) { None } else { Some(ps.selected_audio as i32) };
-                                        let sid = if !ps.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Subtitle")).unwrap_or(false) { None } else { Some(ps.selected_subtitle as i32) };
+                                        let vid = ps.selected_video.map(|v| v as i32);
+                                        let aid = ps.selected_audio.map(|a| a as i32);
+                                        let sid = ps.selected_subtitle.map(|s| s as i32);
                                         if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
                                             state.mpv_child = Some(child);
                                             state.mpv_rx = Some(rx);
@@ -1179,9 +1194,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let ps = &state.mpv_prompt_state;
                                         let start_secs = ps.resume_position.map(|t| t as f64 / 10_000_000.0);
                                         let vs = &state.playing_state;
-                                        let vid = if !vs.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Video")).unwrap_or(false) { None } else { Some(vs.selected_video as i32) };
-                                        let aid = if !vs.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Audio")).unwrap_or(false) { None } else { Some(vs.selected_audio as i32) };
-                                        let sid = if !vs.media_source.as_ref().map(|s| s.media_streams.iter().any(|s| s.stream_type == "Subtitle")).unwrap_or(false) { None } else { Some(vs.selected_subtitle as i32) };
+                                        let vid = vs.selected_video.map(|v| v as i32);
+                                        let aid = vs.selected_audio.map(|a| a as i32);
+                                        let sid = vs.selected_subtitle.map(|s| s as i32);
                                         if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
                                             state.mpv_child = Some(child);
                                             state.mpv_rx = Some(rx);

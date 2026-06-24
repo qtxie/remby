@@ -144,9 +144,9 @@ pub struct PlayingState {
     pub video_track: String,
     pub audio_track: String,
     pub subtitle_track: String,
-    pub selected_video: usize,
-    pub selected_audio: usize,
-    pub selected_subtitle: usize,
+    pub selected_video: Option<usize>,
+    pub selected_audio: Option<usize>,
+    pub selected_subtitle: Option<usize>,
     pub media_source: Option<crate::emby::MediaSource>,
     pub url: String,
     pub resume_position: Option<i64>,
@@ -196,9 +196,9 @@ impl Default for PlayingState {
             video_track: String::new(),
             audio_track: String::new(),
             subtitle_track: String::new(),
-            selected_video: 0,
-            selected_audio: 0,
-            selected_subtitle: 0,
+            selected_video: None,
+            selected_audio: None,
+            selected_subtitle: None,
             media_source: None,
             url: String::new(),
             resume_position: None,
@@ -917,21 +917,42 @@ impl AppState {
     }
 
     pub fn open_track_select(&mut self, item: &MediaItem, source: &MediaSource) {
+        let none_stream = crate::emby::MediaStream {
+            stream_type: String::new(),
+            codec: String::new(),
+            language: String::new(),
+            title: None,
+            display_title: None,
+            channel_layout: None,
+            profile: None,
+            video_range: None,
+            width: None,
+            height: None,
+            avg_frame_rate: None,
+            bit_depth: None,
+        };
+        let mut video_tracks: Vec<_> = source.media_streams.iter()
+            .filter(|s| s.stream_type == "Video")
+            .cloned().collect();
+        let mut audio_tracks: Vec<_> = source.media_streams.iter()
+            .filter(|s| s.stream_type == "Audio")
+            .cloned().collect();
+        let mut subtitle_tracks: Vec<_> = source.media_streams.iter()
+            .filter(|s| s.stream_type == "Subtitle")
+            .cloned().collect();
+        if !video_tracks.is_empty() { video_tracks.insert(0, none_stream.clone()); }
+        if !audio_tracks.is_empty() { audio_tracks.insert(0, none_stream.clone()); }
+        let has_subs = !subtitle_tracks.is_empty();
+        if has_subs { subtitle_tracks.insert(0, none_stream); }
         self.track_state = TrackState {
             item: Some(item.clone()),
             media_source: Some(source.clone()),
-            video_tracks: source.media_streams.iter()
-                .filter(|s| s.stream_type == "Video")
-                .cloned().collect(),
-            audio_tracks: source.media_streams.iter()
-                .filter(|s| s.stream_type == "Audio")
-                .cloned().collect(),
-            subtitle_tracks: source.media_streams.iter()
-                .filter(|s| s.stream_type == "Subtitle")
-                .cloned().collect(),
-            selected_video: 0,
-            selected_audio: 0,
-            selected_subtitle: 0,
+            video_tracks,
+            audio_tracks,
+            subtitle_tracks,
+            selected_video: 1,
+            selected_audio: 1,
+            selected_subtitle: if has_subs { 1 } else { 0 },
             section: TrackSection::Video,
         };
         self.navigate_to(View::TrackSelect);
@@ -1190,10 +1211,20 @@ impl AppState {
 
     // --- Playing ---
     pub fn open_track_select_or_playing(&mut self, item: &MediaItem, source: &MediaSource) {
-        self.open_track_select(item, source);
+        let videos: usize = source.media_streams.iter().filter(|s| s.stream_type == "Video").count();
+        let audios: usize = source.media_streams.iter().filter(|s| s.stream_type == "Audio").count();
+        let subs: usize = source.media_streams.iter().filter(|s| s.stream_type == "Subtitle").count();
+        let has_choice = videos > 1 || audios > 1 || subs > 0;
+        if has_choice {
+            self.open_track_select(item, source);
+        } else {
+            let url = self.client.stream_url_for_source(item, source);
+            let resume = item.resume_position_ticks();
+            self.open_playing(&item.display_name(), &item.id, &source.id, item.runtime_ticks, &url, "", "", "", resume, Some(source.clone()), None, None, None);
+        }
     }
 
-    pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<crate::emby::MediaSource>, selected_video: usize, selected_audio: usize, selected_subtitle: usize) {
+    pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<crate::emby::MediaSource>, selected_video: Option<usize>, selected_audio: Option<usize>, selected_subtitle: Option<usize>) {
         self.playing_state = PlayingState {
             item_name: item_name.to_string(),
             item_id: item_id.to_string(),

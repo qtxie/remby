@@ -597,9 +597,9 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, t
         let audio_streams: Vec<_> = source.media_streams.iter().filter(|s| s.stream_type == "Audio").collect();
         let sub_streams: Vec<_> = source.media_streams.iter().filter(|s| s.stream_type == "Subtitle").collect();
 
-        let video = video_streams.get(ps.selected_video).or_else(|| video_streams.first());
-        let audio = audio_streams.get(ps.selected_audio).or_else(|| audio_streams.first());
-        let sub = sub_streams.get(ps.selected_subtitle).or_else(|| sub_streams.first());
+        let video = ps.selected_video.and_then(|i| video_streams.get(i)).or_else(|| video_streams.first());
+        let audio = ps.selected_audio.and_then(|i| audio_streams.get(i)).or_else(|| audio_streams.first());
+        let sub = ps.selected_subtitle.and_then(|i| sub_streams.get(i)).or_else(|| sub_streams.first());
 
         let mut vid_codec = String::new();
         let mut vid_detail = String::new();
@@ -1200,7 +1200,11 @@ fn render_track_section(
     let border_color = if active { theme.accent } else { theme.muted };
 
     let items: Vec<ListItem> = tracks.iter().enumerate().map(|(i, track)| {
-        let label = track_label(track);
+        let label = if i == 0 && track.stream_type.is_empty() {
+            t("track.off").to_string()
+        } else {
+            track_label(track)
+        };
         let marker = if i == selected { "▸ " } else { "  " };
         let style = if i == selected && active {
             Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
