@@ -1,8 +1,10 @@
 use gpui::*;
+use gpui::prelude::FluentBuilder;
 use gpui_component::*;
 use gpui_component::scroll::ScrollableElement;
 
 use crate::app::RembyApp;
+use crate::views::components::badge::BadgeVariant;
 use crate::views::components::{LoadingIndicator, MediaCard};
 
 #[derive(IntoElement)]
@@ -119,12 +121,25 @@ fn horizontal_row(items: Vec<remby_core::emby::MediaItem>, poster_cache: std::co
                 .clone()
                 .or_else(|| item.media_type.clone())
                 .unwrap_or_default();
+            let badge_text: Option<&str> = match item.item_type.as_str() {
+                "Movie" => Some("Movie"),
+                "Series" => Some("Series"),
+                "Episode" => Some("Ep"),
+                _ => None,
+            };
+            let progress = item.user_data.as_ref().and_then(|u| {
+                let pos = u.playback_position_ticks?;
+                let dur = item.runtime_ticks?;
+                if dur > 0 { Some((pos as f32) / (dur as f32)) } else { None }
+            });
             let item_id = item.id.clone();
             let app = app.clone();
             MediaCard::new(&item.id)
                 .title(&item.name)
                 .subtitle(subtitle)
                 .poster_image(poster_cache.get(&item.id).cloned())
+                .when_some(badge_text, |card, text| card.badge(text, BadgeVariant::Default))
+                .when_some(progress, |card, p| card.progress(p))
                 .on_click(move |_window, cx| {
                     if let Some(app) = app.upgrade() {
                         cx.update_entity(&app, |app, cx| {

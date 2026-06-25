@@ -7,6 +7,7 @@ use gpui_component::scroll::ScrollableElement;
 
 use crate::app::RembyApp;
 use crate::state::{SortField, SortOrder};
+use crate::views::components::badge::BadgeVariant;
 use crate::views::components::{LoadingIndicator, MediaCard};
 
 #[derive(IntoElement)]
@@ -23,16 +24,22 @@ impl BrowserView {
 
 impl RenderOnce for BrowserView {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, items, total, library_name, sort_field, sort_order, show_filters, filters, genres, tags, studios, poster_cache) = self
+        let (loading, items, total, library_name, sort_field, sort_order, show_filters, filters, genres, tags, studios, poster_cache, _search_query) = self
             .app
             .upgrade()
             .map(|app| {
                 cx.read_entity(&app, |state, _| {
+                    let search_query = state.state.search_query.clone();
+                    let (items, total, library_name) = if !search_query.is_empty() {
+                        (state.state.search_results.clone(), state.state.search_results.len(), format!("Search: {}", search_query))
+                    } else {
+                        (state.state.browser_items.clone(), state.state.browser_total, state.state.browser_library_name.clone())
+                    };
                     (
                         state.state.loading,
-                        state.state.browser_items.clone(),
-                        state.state.browser_total,
-                        state.state.browser_library_name.clone(),
+                        items,
+                        total,
+                        library_name,
                         state.state.browser_sort_field,
                         state.state.browser_sort_order,
                         state.state.browser_show_filters,
@@ -41,10 +48,11 @@ impl RenderOnce for BrowserView {
                         state.state.browser_available_tags.clone(),
                         state.state.browser_available_studios.clone(),
                         state.state.poster_cache.clone(),
+                        search_query,
                     )
                 })
             })
-            .unwrap_or((false, vec![], 0, String::new(), SortField::Name, SortOrder::Ascending, false, Default::default(), vec![], vec![], vec![], Default::default()));
+            .unwrap_or((false, vec![], 0, String::new(), SortField::Name, SortOrder::Ascending, false, Default::default(), vec![], vec![], vec![], Default::default(), String::new()));
 
         let _app_weak = self.app.clone();
         let app_weak2 = self.app.clone();
@@ -252,10 +260,23 @@ impl RenderOnce for BrowserView {
                                     .clone()
                                     .or_else(|| item.media_type.clone())
                                     .unwrap_or_default();
+                                let badge_text: Option<&str> = match item.item_type.as_str() {
+                                    "Movie" => Some("Movie"),
+                                    "Series" => Some("Series"),
+                                    "Episode" => Some("Ep"),
+                                    _ => None,
+                                };
+                                let progress = item.user_data.as_ref().and_then(|u| {
+                                    let pos = u.playback_position_ticks?;
+                                    let dur = item.runtime_ticks?;
+                                    if dur > 0 { Some((pos as f32) / (dur as f32)) } else { None }
+                                });
                                 MediaCard::new(&item.id)
                                     .title(&item.name)
                                     .subtitle(subtitle)
                                     .poster_image(poster_cache.get(&item.id).cloned())
+                                    .when_some(badge_text, |card, text| card.badge(text, BadgeVariant::Default))
+                                    .when_some(progress, |card, p| card.progress(p))
                             }));
                         grid_content.push(cards.into_any_element());
                     }

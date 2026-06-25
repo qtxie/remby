@@ -163,6 +163,10 @@ pub struct GuiState {
     pub browser_search_term: String,
     pub browser_loading_more: bool,
 
+    // Search
+    pub search_results: Vec<MediaItem>,
+    pub search_query: String,
+
     // Favorites
     pub favorites: Vec<MediaItem>,
 
@@ -247,6 +251,9 @@ impl GuiState {
             browser_available_studios: Vec::new(),
             browser_search_term: String::new(),
             browser_loading_more: false,
+
+            search_results: Vec::new(),
+            search_query: String::new(),
 
             favorites: Vec::new(),
 
