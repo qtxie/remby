@@ -82,7 +82,13 @@ impl RembyApp {
 
         crate::theme_adapter::apply_remby_theme(cx, &state.config.theme);
 
-        Self {
+        // Auto-login from saved accounts
+        let accounts_cfg = remby_core::config::load_accounts();
+        let last_account = accounts_cfg.last_account_id.and_then(|id| {
+            accounts_cfg.accounts.into_iter().find(|a| a.id == id)
+        });
+
+        let app = Self {
             state,
             server_input,
             username_input,
@@ -90,7 +96,33 @@ impl RembyApp {
             browser_search_input,
             mpv_path_input,
             player_stop_tx: None,
+        };
+
+        if let Some(account) = last_account {
+            let this = cx.entity();
+            let server = account.server.clone();
+            let username = account.username.clone();
+            let password = remby_core::crypto::decrypt(&account.password_enc).unwrap_or_default();
+            let server2 = server.clone();
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            crate::tokio_runtime().spawn(async move {
+                let result = remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await;
+                let _ = tx.send(result);
+            });
+            cx.spawn(async move |_window, cx| {
+                if let Ok(Ok(client)) = rx.await {
+                    cx.update_entity(&this, |app, cx| {
+                        app.state.client = Some(client);
+                        app.state.server = server2;
+                        app.state.navigate(View::Home);
+                        app.load_home_data(cx);
+                    });
+                }
+            })
+            .detach();
         }
+
+        app
     }
 
     pub fn handle_login(
@@ -104,6 +136,9 @@ impl RembyApp {
         self.state.server = server.clone();
 
         let this = cx.entity();
+        let server2 = server.clone();
+        let username2 = username.clone();
+        let password2 = password.clone();
         let (tx, rx) = tokio::sync::oneshot::channel();
         crate::tokio_runtime().spawn(async move {
             let result = remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await;
@@ -112,8 +147,29 @@ impl RembyApp {
         cx.spawn(async move |_window, cx| {
             match rx.await {
                 Ok(Ok(client)) => {
+                    // Save account to accounts.json
+                    let mut accounts_cfg = remby_core::config::load_accounts();
+                    let existing = accounts_cfg.accounts.iter().position(|a| a.server == server2 && a.username == username2);
+                    let account_id = if let Some(idx) = existing {
+                        accounts_cfg.accounts[idx].password_enc = remby_core::crypto::encrypt(&password2);
+                        accounts_cfg.accounts[idx].id.clone()
+                    } else {
+                        let id = uuid::Uuid::new_v4().to_string();
+                        accounts_cfg.accounts.push(remby_core::config::Account {
+                            id: id.clone(),
+                            label: format!("{}@{}", username2, server2),
+                            server: server2.clone(),
+                            username: username2.clone(),
+                            password_enc: remby_core::crypto::encrypt(&password2),
+                        });
+                        id
+                    };
+                    accounts_cfg.last_account_id = Some(account_id);
+                    let _ = remby_core::config::save_accounts(&accounts_cfg);
+
                     cx.update_entity(&this, |app, cx| {
                         app.state.client = Some(client);
+                        app.state.server = server2;
                         app.state.navigate(View::Home);
                         app.load_home_data(cx);
                     });
