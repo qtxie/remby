@@ -7,8 +7,12 @@ use gpui_component::scroll::ScrollableElement;
 
 use crate::app::RembyApp;
 use crate::state::{SortField, SortOrder};
-use crate::views::components::badge::BadgeVariant;
-use crate::views::components::{LoadingIndicator, MediaCard};
+use crate::views::components::LoadingIndicator;
+
+const POSTER_W: f32 = 160.;
+const POSTER_H: f32 = 220.;
+
+const TABS: &[&str] = &["电影", "最近", "合集", "类型风格", "喜欢", "文件夹"];
 
 #[derive(IntoElement)]
 pub struct BrowserView {
@@ -24,7 +28,7 @@ impl BrowserView {
 
 impl RenderOnce for BrowserView {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, items, total, library_name, sort_field, sort_order, show_filters, filters, genres, tags, studios, poster_cache, _search_query) = self
+        let (loading, items, total, library_name, sort_field, sort_order, show_filters, filters, genres, tags, studios, poster_cache, _search_query, browser_selected) = self
             .app
             .upgrade()
             .map(|app| {
@@ -49,10 +53,11 @@ impl RenderOnce for BrowserView {
                         state.state.browser_available_studios.clone(),
                         state.state.poster_cache.clone(),
                         search_query,
+                        state.state.browser_selected,
                     )
                 })
             })
-            .unwrap_or((false, vec![], 0, String::new(), SortField::Name, SortOrder::Ascending, false, Default::default(), vec![], vec![], vec![], Default::default(), String::new()));
+            .unwrap_or((false, vec![], 0, String::new(), SortField::Name, SortOrder::Ascending, false, Default::default(), vec![], vec![], vec![], Default::default(), String::new(), 0));
 
         let _app_weak = self.app.clone();
         let app_weak2 = self.app.clone();
@@ -62,65 +67,112 @@ impl RenderOnce for BrowserView {
         let app_weak6 = self.app.clone();
         let app_weak7 = self.app.clone();
 
+        let tab_bar = h_flex()
+            .items_center()
+            .gap_1()
+            .px_4()
+            .py_2()
+            .children(TABS.iter().enumerate().map(|(i, &tab)| {
+                let is_active = i == 0;
+                div()
+                    .px_4()
+                    .py_1()
+                    .rounded_full()
+                    .when(is_active, |this| this.bg(hsl(110., 45., 50.)).text_color(hsl(0., 0., 100.)))
+                    .when(!is_active, |this| this.text_color(cx.theme().muted_foreground).hover(|this| this.bg(cx.theme().muted.opacity(0.15))))
+                    .text_sm()
+                    .cursor_pointer()
+                    .child(tab)
+            }));
+
+        let item_count = items.len();
+        let info_bar = h_flex()
+            .items_center()
+            .gap_4()
+            .px_4()
+            .py_2()
+            .child(
+                div().text_sm().text_color(cx.theme().muted_foreground)
+                    .child(format!("共 {} 个项目", item_count))
+            )
+            .child(div().h_4().w_px().bg(cx.theme().border))
+            .child(
+                Button::new("play-all-btn")
+                    .small()
+                    .label("▶ 全部播放")
+                    .on_click(move |_, _window, _cx| {})
+            )
+            .child(
+                Button::new("shuffle-btn")
+                    .small()
+                    .label("🎲 随机播放")
+                    .on_click(move |_, _window, _cx| {})
+            )
+            .child(div().h_4().w_px().bg(cx.theme().border))
+            .child(
+                Button::new("sort-btn")
+                    .small()
+                    .label(format!("≡ 排序方式: {}", sort_field.label()))
+                    .on_click(move |_, _window, cx| {
+                        if let Some(app) = app_weak2.upgrade() {
+                            cx.update_entity(&app, |app, _cx| {
+                                app.state.browser_sort_field = app.state.browser_sort_field.cycle();
+                            });
+                        }
+                    })
+            )
+            .child(
+                Button::new("sort-order-btn")
+                    .small()
+                    .label(sort_order.label())
+                    .on_click(move |_, _window, cx| {
+                        if let Some(app) = app_weak3.upgrade() {
+                            cx.update_entity(&app, |app, _cx| {
+                                app.state.browser_sort_order = app.state.browser_sort_order.toggle();
+                            });
+                        }
+                    })
+            )
+            .child(
+                Button::new("filter-btn")
+                    .small()
+                    .label("≡ 筛选")
+                    .selected(show_filters)
+                    .on_click(move |_, _window, cx| {
+                        if let Some(app) = app_weak4.upgrade() {
+                            cx.update_entity(&app, |app, _cx| {
+                                app.state.browser_show_filters = !app.state.browser_show_filters;
+                            });
+                        }
+                    })
+            );
+
+        let header_bar = h_flex()
+            .p_4()
+            .gap_4()
+            .items_center()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(
+                div()
+                    .text_lg()
+                    .font_bold()
+                    .child(library_name)
+            )
+            .child(
+                Input::new(&self.search_input)
+                    .small()
+                    .cleanable(true)
+                    .prefix(Icon::new(IconName::Search).small())
+            );
+
         v_flex()
             .size_full()
+            .child(tab_bar)
             .child(
-                h_flex()
-                    .p_4()
-                    .gap_4()
-                    .items_center()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        div()
-                            .text_lg()
-                            .font_bold()
-                            .child(library_name)
-                    )
-                    .child(
-                        Input::new(&self.search_input)
-                            .small()
-                            .cleanable(true)
-                            .prefix(Icon::new(IconName::Search).small())
-                    )
-                    .child(
-                        Button::new("sort-btn")
-                            .small()
-                            .label(format!("Sort: {}", sort_field.label()))
-                            .on_click(move |_, _window, cx| {
-                                if let Some(app) = app_weak2.upgrade() {
-                                    cx.update_entity(&app, |app, _cx| {
-                                        app.state.browser_sort_field = app.state.browser_sort_field.cycle();
-                                    });
-                                }
-                            })
-                    )
-                    .child(
-                        Button::new("sort-order-btn")
-                            .small()
-                            .label(sort_order.label())
-                            .on_click(move |_, _window, cx| {
-                                if let Some(app) = app_weak3.upgrade() {
-                                    cx.update_entity(&app, |app, _cx| {
-                                        app.state.browser_sort_order = app.state.browser_sort_order.toggle();
-                                    });
-                                }
-                            })
-                    )
-                    .child(
-                        Button::new("filter-btn")
-                            .small()
-                            .label("Filters")
-                            .selected(show_filters)
-                            .on_click(move |_, _window, cx| {
-                                if let Some(app) = app_weak4.upgrade() {
-                                    cx.update_entity(&app, |app, _cx| {
-                                        app.state.browser_show_filters = !app.state.browser_show_filters;
-                                    });
-                                }
-                            })
-                    ),
+                header_bar
             )
+            .child(info_bar)
             .when(show_filters, |this| {
                 let mut filter_content: Vec<AnyElement> = Vec::new();
 
@@ -247,36 +299,69 @@ impl RenderOnce for BrowserView {
                         .child(div().text_sm().text_color(cx.theme().muted_foreground).child("No items found"))
                         .into_any_element()
                 } else {
-                    let rows = items.chunks(5);
+                    let cols = 5usize;
+                    let rows = items.chunks(cols);
                     let mut grid_content: Vec<AnyElement> = Vec::new();
 
                     for row in rows {
                         let cards = h_flex()
                             .gap_4()
                             .justify_center()
-                            .children(row.iter().map(|item| {
-                                let subtitle = item
-                                    .series_name
-                                    .clone()
-                                    .or_else(|| item.media_type.clone())
-                                    .unwrap_or_default();
-                                let badge_text: Option<&str> = match item.item_type.as_str() {
-                                    "Movie" => Some("Movie"),
-                                    "Series" => Some("Series"),
-                                    "Episode" => Some("Ep"),
-                                    _ => None,
-                                };
-                                let progress = item.user_data.as_ref().and_then(|u| {
-                                    let pos = u.playback_position_ticks?;
-                                    let dur = item.runtime_ticks?;
-                                    if dur > 0 { Some((pos as f32) / (dur as f32)) } else { None }
-                                });
-                                MediaCard::new(&item.id)
-                                    .title(&item.name)
-                                    .subtitle(subtitle)
-                                    .poster_image(poster_cache.get(&item.id).cloned())
-                                    .when_some(badge_text, |card, text| card.badge(text, BadgeVariant::Default))
-                                    .when_some(progress, |card, p| card.progress(p))
+                            .children(row.iter().enumerate().map(|(col_idx, item)| {
+                                let global_idx = grid_content.len() * cols + col_idx;
+                                let is_selected = global_idx == browser_selected;
+                                let poster = poster_cache.get(&item.id).cloned();
+                                let rating = item.community_rating.unwrap_or(0.0);
+                                let year = item.production_year.unwrap_or(0);
+
+                                v_flex()
+                                    .w(px(POSTER_W))
+                                    .gap_2()
+                                    .cursor_pointer()
+                                    .hover(|this| this.opacity(0.9))
+                                    .child(
+                                        div()
+                                            .id(format!("poster-{}", item.id))
+                                            .h(px(POSTER_H))
+                                            .rounded(px(6.))
+                                            .overflow_hidden()
+                                            .border_2()
+                                            .when(is_selected, |this| this.border_color(cx.theme().primary))
+                                            .when(!is_selected, |this| this.border_color(gpui::transparent_black()))
+                                            .child(match poster {
+                                                Some(image) => img(image).w_full().h_full().object_fit(gpui::ObjectFit::Cover).into_any_element(),
+                                                None => div().w_full().h_full().flex().items_center().justify_center().bg(cx.theme().muted.opacity(0.15)).child(
+                                                    Icon::new(IconName::Frame).large().text_color(cx.theme().muted_foreground.opacity(0.3))
+                                                ).into_any_element(),
+                                            })
+                                    )
+                                    .child(
+                                        v_flex()
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .font_medium()
+                                                    .overflow_x_hidden()
+                                                    .whitespace_nowrap()
+                                                    .child(item.display_name())
+                                            )
+                                            .child(
+                                                h_flex()
+                                                    .items_center()
+                                                    .gap_1()
+                                                    .child(Icon::new(IconName::Star).small().text_color(hsl(45., 0.8, 0.5)))
+                                                    .child(
+                                                        div().text_xs().text_color(cx.theme().muted_foreground)
+                                                            .child(format!("{:.1}", rating))
+                                                    )
+                                                    .child(div().flex_1())
+                                                    .child(
+                                                        div().text_xs().text_color(cx.theme().muted_foreground)
+                                                            .child(format!("{}", year))
+                                                    )
+                                            )
+                                    )
+                                    .into_any_element()
                             }));
                         grid_content.push(cards.into_any_element());
                     }

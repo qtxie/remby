@@ -69,6 +69,64 @@ impl ImageLoader {
         Some(image)
     }
 
+    pub async fn load_backdrop(
+        &self,
+        server: &str,
+        token: &str,
+        item_id: &str,
+    ) -> Option<Arc<Image>> {
+        let key = format!("backdrop:{}", item_id);
+        if let Some(cached) = self.cache.read().await.get(&key) {
+            return Some(cached.clone());
+        }
+
+        let url = format!(
+            "{}/Items/{}/Images/Backdrop?maxWidth=600&quality=80",
+            server, item_id
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .header("X-Emby-Token", token)
+            .send()
+            .await
+            .ok()?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return None;
+        }
+
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("image/jpeg")
+            .to_string();
+
+        let bytes = response.bytes().await.ok()?.to_vec();
+
+        if bytes.is_empty() {
+            return None;
+        }
+
+        let format = if content_type.contains("png") {
+            ImageFormat::Png
+        } else {
+            ImageFormat::Jpeg
+        };
+
+        let image = Arc::new(Image::from_bytes(format, bytes));
+
+        self.cache
+            .write()
+            .await
+            .insert(key, image.clone());
+
+        Some(image)
+    }
+
     pub async fn get_cached(&self, item_id: &str) -> Option<Arc<Image>> {
         self.cache.read().await.get(item_id).cloned()
     }

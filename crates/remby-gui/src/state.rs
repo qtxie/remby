@@ -225,6 +225,9 @@ pub struct GuiState {
     // Poster cache
     pub poster_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>,
 
+    // Backdrop cache
+    pub backdrop_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>,
+
     // Config
     pub config: RembyConfig,
     pub settings_tab: SettingsTab,
@@ -309,6 +312,7 @@ impl GuiState {
             series_selected: 0,
 
             poster_cache: std::collections::HashMap::new(),
+            backdrop_cache: std::collections::HashMap::new(),
 
             config: RembyConfig::default(),
             settings_tab: SettingsTab::Libraries,

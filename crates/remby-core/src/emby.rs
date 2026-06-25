@@ -76,6 +76,14 @@ pub struct MediaItem {
     pub overview: Option<String>,
     #[serde(default, rename = "ChildCount")]
     pub child_count: Option<i32>,
+    #[serde(default, rename = "CommunityRating")]
+    pub community_rating: Option<f32>,
+    #[serde(default, rename = "ProductionYear")]
+    pub production_year: Option<i32>,
+    #[serde(default, rename = "Genres")]
+    pub genres: Vec<String>,
+    #[serde(default, rename = "OfficialRating")]
+    pub official_rating: Option<String>,
     #[serde(default, rename = "MediaSources")]
     pub media_sources: Vec<MediaSource>,
     #[serde(default, rename = "UserData")]
@@ -971,6 +979,10 @@ impl MediaItem {
             series_id: None,
             overview: None,
             child_count: None,
+            community_rating: None,
+            production_year: None,
+            genres: Vec::new(),
+            official_rating: None,
             media_sources: Vec::new(),
             user_data: None,
         }

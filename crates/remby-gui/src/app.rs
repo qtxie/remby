@@ -235,6 +235,36 @@ impl RembyApp {
         .detach();
     }
 
+    pub fn load_backdrops(&self, item_ids: Vec<String>, cx: &mut Context<Self>) {
+        if self.state.client.is_none() || item_ids.is_empty() {
+            return;
+        }
+        let image_loader = self.image_loader.clone();
+        let server = self.state.server.clone();
+        let token = self.state.client.as_ref()
+            .map(|c| c.token().to_string())
+            .unwrap_or_default();
+
+        let this = cx.entity();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(item_ids.len());
+        crate::tokio_runtime().spawn(async move {
+            for item_id in item_ids {
+                if let Some(image) = image_loader.load_backdrop(&server, &token, &item_id).await {
+                    let _ = tx.send((item_id, image)).await;
+                }
+            }
+        });
+        cx.spawn(async move |_window, cx| {
+            while let Some((item_id, image)) = rx.recv().await {
+                cx.update_entity(&this, |app, cx| {
+                    app.state.backdrop_cache.insert(item_id, image);
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
     fn load_home_data(&mut self, cx: &mut Context<Self>) {
         if self.state.client.is_none() {
             self.show_toast("Not connected to server".into(), crate::state::StatusKind::Error);
@@ -701,7 +731,12 @@ impl RembyApp {
             let seasons = client.get_seasons(&sid).await.unwrap_or_default();
             let similar = client.get_similar(&sid).await.unwrap_or_default();
             (item, seasons, similar)
-        }, |app, _cx, (item, seasons, similar)| {
+        }, |app, cx, (item, seasons, similar)| {
+            if let Some(ref i) = item {
+                let id = i.id.clone();
+                app.load_posters(vec![id.clone()], cx);
+                app.load_backdrops(vec![id], cx);
+            }
             app.state.series_item = item;
             app.state.series_seasons = seasons;
             app.state.series_similar = similar;
