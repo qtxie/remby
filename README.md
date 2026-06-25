@@ -4,7 +4,7 @@
   <img src="assets/logo.png" alt="remby logo" width="200">
 </p>
 
-A lightweight Emby client with terminal UI and mpv playback.
+A lightweight Emby client with terminal UI (TUI) and GUI options, both using mpv for playback.
 
 > **Note**: This project was entirely written by AI (MiMo Code Agent).
 
@@ -62,6 +62,36 @@ cargo build --release
 ```
 
 The binary will be at `target/release/remby`.
+
+### GUI Version (remby-gui)
+
+remby-gui is a graphical alternative to the TUI version, built with [gpui](https://github.com/zed-industries/gpui) (the same framework powering Zed editor).
+
+**Features**:
+- Same core features as the TUI version (multi-account, auto-login, libraries, playback, etc.)
+- Native graphical window with system-native look and feel
+- Mouse-friendly interface alongside keyboard navigation
+- Visual media library browsing with thumbnails
+
+**Build GUI only**:
+
+```bash
+cargo build -p remby-gui
+```
+
+**Build everything** (TUI + GUI):
+
+```bash
+cargo build --workspace
+```
+
+**Run GUI**:
+
+```bash
+cargo run -p remby-gui
+```
+
+> **Note**: `remby` (TUI) and `remby-gui` (GUI) are separate binaries sharing the same `remby-core` library. You can build and run either independently.
 
 ### Usage
 
@@ -245,6 +275,36 @@ cargo build --release
 ```
 
 二进制文件位于 `target/release/remby`。
+
+### GUI 版本 (remby-gui)
+
+remby-gui 是 TUI 版本的图形化替代方案，使用 [gpui](https://github.com/zed-industries/gpui) 构建（与 Zed 编辑器使用相同的框架）。
+
+**功能特性**：
+- 与 TUI 版本相同的核心功能（多账户、自动登录、媒体库、播放等）
+- 原生图形窗口，具有系统原生外观和感觉
+- 鼠标友好界面，同时支持键盘导航
+- 可视化媒体库浏览，支持缩略图
+
+**仅编译 GUI**：
+
+```bash
+cargo build -p remby-gui
+```
+
+**编译全部**（TUI + GUI）：
+
+```bash
+cargo build --workspace
+```
+
+**运行 GUI**：
+
+```bash
+cargo run -p remby-gui
+```
+
+> **注意**：`remby`（TUI）和 `remby-gui`（GUI）是共享同一 `remby-core` 库的独立二进制文件。您可以独立编译和运行任一版本。
 
 ### 使用方法
 
