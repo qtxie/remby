@@ -11,6 +11,9 @@ use gpui_component::input::InputState;
 use app::RembyApp;
 
 fn main() {
+    remby_core::emby::init_device_id();
+    remby_core::i18n::init(&remby_core::config::load_config().language);
+
     gpui_platform::application().run(move |cx| {
         gpui_component::init(cx);
         app::init_key_bindings(cx);
