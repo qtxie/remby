@@ -1,7 +1,9 @@
+use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
-    // Capture git commit hash at build time
+    println!("cargo:rerun-if-changed=build.rs");
+
     let git_hash = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()
@@ -19,8 +21,11 @@ fn main() {
 
     #[cfg(windows)]
     {
+        let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let workspace_root = manifest_dir.parent().unwrap_or(&manifest_dir).parent().unwrap_or(&manifest_dir);
+        let icon_path = workspace_root.join("assets").join("logo.ico");
         let mut res = winres::WindowsResource::new();
-        res.set_icon("assets/logo.ico");
+        res.set_icon(icon_path.to_str().unwrap());
         res.compile().unwrap();
     }
 }

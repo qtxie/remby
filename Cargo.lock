@@ -2014,6 +2014,7 @@ dependencies = [
  "rand 0.8.6",
  "ratatui",
  "ratatui-textarea",
+ "remby-core",
  "reqwest",
  "serde",
  "serde_json",
@@ -2022,6 +2023,28 @@ dependencies = [
  "url",
  "uuid",
  "winres",
+]
+
+[[package]]
+name = "remby-core"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "dirs",
+ "futures",
+ "hostname",
+ "phf 0.14.0",
+ "rand 0.8.6",
+ "ratatui",
+ "ratatui-textarea",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "unicode-width",
+ "url",
+ "uuid",
 ]
 
 [[package]]

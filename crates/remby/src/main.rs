@@ -1,12 +1,8 @@
 mod app;
-mod config;
-mod crypto;
-mod emby;
 mod help;
-mod i18n;
-mod mpv;
-mod theme;
 mod ui;
+
+use remby_core::i18n::{t, tf};
 
 const DEFAULT_SORT_BY: &str = "DateCreated";
 const DEFAULT_SORT_ORDER: &str = "Descending";
@@ -24,7 +20,7 @@ use tokio::sync::mpsc;
 
 const SPINNER: [&str; 8] = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
 
-fn spawn_home_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient) {
+fn spawn_home_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: remby_core::emby::EmbyClient) {
     tokio::spawn(async move {
         let timeout = std::time::Duration::from_secs(120);
         let result = tokio::time::timeout(timeout, async {
@@ -35,13 +31,13 @@ fn spawn_home_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::e
             let mut items = Vec::new();
             if let Ok(resume) = resume_result {
                 if !resume.is_empty() {
-                    items.push(crate::emby::MediaItem::separator(t("title.continue_watching")));
+                    items.push(remby_core::emby::MediaItem::separator(t("title.continue_watching")));
                     items.extend(resume);
                 }
             }
             if let Ok(latest) = latest_result {
                 if !latest.is_empty() {
-                    items.push(crate::emby::MediaItem::separator(t("title.latest")));
+                    items.push(remby_core::emby::MediaItem::separator(t("title.latest")));
                     items.extend(latest);
                 }
             }
@@ -54,7 +50,7 @@ fn spawn_home_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::e
     });
 }
 
-fn spawn_following_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, following: Vec<String>) {
+fn spawn_following_load(tx: mpsc::UnboundedSender<BackgroundResult>, client: remby_core::emby::EmbyClient, following: Vec<String>) {
     if following.is_empty() { return; }
     tokio::spawn(async move {
         let mut updates = Vec::new();
@@ -86,13 +82,13 @@ struct Cli {
     mpv: Option<String>,
 }
 
-fn update_favorite_in_list(items: &mut [crate::emby::MediaItem], item_id: &str, is_favorite: bool) {
+fn update_favorite_in_list(items: &mut [remby_core::emby::MediaItem], item_id: &str, is_favorite: bool) {
     for item in items.iter_mut() {
         if item.id == item_id {
             if let Some(ref mut ud) = item.user_data {
                 ud.is_favorite = is_favorite;
             } else {
-                let mut ud = crate::emby::UserData::default();
+                let mut ud = remby_core::emby::UserData::default();
                 ud.is_favorite = is_favorite;
                 item.user_data = Some(ud);
             }
@@ -101,16 +97,15 @@ fn update_favorite_in_list(items: &mut [crate::emby::MediaItem], item_id: &str, 
 }
 
 use app::BackgroundResult;
-use crate::i18n::{t, tf};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    crate::emby::init_device_id();
+    remby_core::emby::init_device_id();
 
     // Initialize i18n
-    let config = crate::config::load_config();
-    crate::i18n::init(&config.language);
+    let config = remby_core::config::load_config();
+    remby_core::i18n::init(&config.language);
 
     // Splash screen
     enable_raw_mode()?;
@@ -122,15 +117,15 @@ async fn main() -> Result<()> {
     // Splash screen with animation during connection
     // Start connection in background
     let account = if cli.server.is_some() && cli.user.is_some() && cli.pass.is_some() {
-        Some(crate::config::Account {
+        Some(remby_core::config::Account {
             id: String::new(),
             label: "CLI".to_string(),
             server: cli.server.clone().unwrap(),
             username: cli.user.clone().unwrap(),
-            password_enc: crate::crypto::encrypt(&cli.pass.clone().unwrap()),
+            password_enc: remby_core::crypto::encrypt(&cli.pass.clone().unwrap()),
         })
     } else {
-        let accounts_cfg = crate::config::load_accounts();
+        let accounts_cfg = remby_core::config::load_accounts();
         accounts_cfg.last_account_id.and_then(|id| {
             accounts_cfg.accounts.into_iter().find(|a| a.id == id)
         })
@@ -206,43 +201,43 @@ async fn main() -> Result<()> {
     // Auto-save CLI args if login succeeded
     let cli_used = cli.server.is_some() && cli.user.is_some() && cli.pass.is_some();
     if cli_used && !state.server.is_empty() {
-        let mut accounts_cfg = crate::config::load_accounts();
+        let mut accounts_cfg = remby_core::config::load_accounts();
         let server = cli.server.clone().unwrap();
         let username = cli.user.clone().unwrap();
         let existing = accounts_cfg.accounts.iter().position(|a| a.server == server && a.username == username);
         let account_id = if let Some(idx) = existing {
             let id = accounts_cfg.accounts[idx].id.clone();
-            accounts_cfg.accounts[idx].password_enc = crate::crypto::encrypt(&cli.pass.unwrap());
+            accounts_cfg.accounts[idx].password_enc = remby_core::crypto::encrypt(&cli.pass.unwrap());
             id
         } else {
             let id = uuid::Uuid::new_v4().to_string();
-            accounts_cfg.accounts.push(crate::config::Account {
+            accounts_cfg.accounts.push(remby_core::config::Account {
                 id: id.clone(),
                 label: format!("{}@{}", username, server),
                 server,
                 username,
-                password_enc: crate::crypto::encrypt(&cli.pass.unwrap()),
+                password_enc: remby_core::crypto::encrypt(&cli.pass.unwrap()),
             });
             id
         };
         accounts_cfg.last_account_id = Some(account_id);
-        let _ = crate::config::save_accounts(&accounts_cfg);
+        let _ = remby_core::config::save_accounts(&accounts_cfg);
         if let Some(ref mpv_path) = cli.mpv {
             state.config.mpv_path = mpv_path.clone();
-            let _ = crate::config::save_config(&state.config);
+            let _ = remby_core::config::save_config(&state.config);
         }
     }
 
     // Auto-detect mpv path if not configured
     if state.config.mpv_path == "mpv" {
-        if let Some(detected) = mpv::find_mpv() {
+        if let Some(detected) = remby_core::mpv::find_mpv() {
             state.config.mpv_path = detected;
-            let _ = crate::config::save_config(&state.config);
+            let _ = remby_core::config::save_config(&state.config);
         }
     }
 
     if state.server.is_empty() {
-        let accounts_cfg = crate::config::load_accounts();
+        let accounts_cfg = remby_core::config::load_accounts();
         let has_config = std::path::Path::new(&dirs::config_dir().unwrap_or_default().join("remby").join("config.json")).exists();
         let has_accounts = !accounts_cfg.accounts.is_empty();
         if !has_config && !has_accounts {
@@ -384,7 +379,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         let url = state.client.stream_url_for_source(&detail, &Default::default());
                         if state.config.mpv_path == "mpv" {
                             state.open_mpv_prompt(&url, "", "", "", None);
-                        } else if let Ok((child, rx)) = mpv::play(&url, &state.config.mpv_path, None, None, None, None) {
+                        } else if let Ok((child, rx)) = remby_core::mpv::play(&url, &state.config.mpv_path, None, None, None, None) {
                             state.mpv_child = Some(child);
                             state.mpv_rx = Some(rx);
                             state.mpv_output.clear();
@@ -403,15 +398,15 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 BackgroundResult::AccountLoginSuccess(account, client, _account_id) => {
                     state.client = client;
                     state.server = account.server.clone();
-                    state.config = crate::config::load_config();
-                    let mut accounts_cfg = crate::config::load_accounts();
+                    state.config = remby_core::config::load_config();
+                    let mut accounts_cfg = remby_core::config::load_accounts();
                     let existing = accounts_cfg.accounts.iter().position(|a| a.server == account.server && a.username == account.username);
                     let account_id = if let Some(idx) = existing {
                         accounts_cfg.accounts[idx].password_enc = account.password_enc.clone();
                         accounts_cfg.accounts[idx].id.clone()
                     } else {
                         let id = if account.id.is_empty() { uuid::Uuid::new_v4().to_string() } else { account.id.clone() };
-                        accounts_cfg.accounts.push(crate::config::Account {
+                        accounts_cfg.accounts.push(remby_core::config::Account {
                             id: id.clone(),
                             label: account.label.clone(),
                             server: account.server.clone(),
@@ -421,7 +416,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         id
                     };
                     accounts_cfg.last_account_id = Some(account_id);
-                    let _ = crate::config::save_accounts(&accounts_cfg);
+                    let _ = remby_core::config::save_accounts(&accounts_cfg);
                     state.libraries.clear();
                     state.libraries_fetched_at = None;
                     state.library_latest.clear();
@@ -552,22 +547,22 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
             let rx = state.mpv_rx.as_ref().unwrap();
             while let Ok(event) = rx.try_recv() {
                 match event {
-                    mpv::MpvEvent::LogLine(line, level) => {
+                    remby_core::mpv::MpvEvent::LogLine(line, level) => {
                         state.mpv_output.push((line, level));
                         if state.mpv_output.len() > 200 {
                             state.mpv_output.remove(0);
                         }
                     }
-                    mpv::MpvEvent::Position(pos) => {
+                    remby_core::mpv::MpvEvent::Position(pos) => {
                         state.mpv_position = pos;
                     }
-                    mpv::MpvEvent::Duration(dur) => {
+                    remby_core::mpv::MpvEvent::Duration(dur) => {
                         state.mpv_duration = dur;
                     }
-                    mpv::MpvEvent::PlaybackStarted => {
+                    remby_core::mpv::MpvEvent::PlaybackStarted => {
                         state.status_msg = Some(app::Message::success("Playback started".to_string()));
                     }
-                    mpv::MpvEvent::PlaybackEnded => {
+                    remby_core::mpv::MpvEvent::PlaybackEnded => {
                         // Handled by mpv exit detection below
                     }
                 }
@@ -807,7 +802,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let vid = ps.selected_video.map(|v| v as i32);
                                         let aid = ps.selected_audio.map(|a| a as i32);
                                         let sid = ps.selected_subtitle.map(|s| s as i32);
-                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
+                                        if let Ok((child, rx)) = remby_core::mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
                                             state.mpv_child = Some(child);
                                             state.mpv_rx = Some(rx);
                                             state.mpv_output.clear();
@@ -823,7 +818,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 let _ = client.report_playback_start(&item_id, &source_id, &session_id).await;
                                             });
                                         } else {
-                                            state.status_msg = Some(app::Message::error("mpv::play failed".to_string()));
+                                            state.status_msg = Some(app::Message::error("remby_core::mpv::play failed".to_string()));
                                         }
                                     }
                                 }
@@ -871,7 +866,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Char('e') => {
                                     // Show series info for current series
                                     let series_id = state.episodes_series_id.clone();
-                                    let mut series_item = crate::emby::MediaItem::separator("");
+                                    let mut series_item = remby_core::emby::MediaItem::separator("");
                                     series_item.id = series_id;
                                     spawn_series_info(bg_tx.clone(), state.client.clone(), series_item);
                                 }
@@ -1119,7 +1114,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 tokio::spawn(async move {
                                                     if item_type == "Series" {
                                                         let series_id = series_id.unwrap_or(item_id);
-                                                        let mut series_item = crate::emby::MediaItem::separator("");
+                                                        let mut series_item = remby_core::emby::MediaItem::separator("");
                                                         series_item.id = series_id;
                                                         let result = build_series_state(&client, &series_item).await;
                                                         let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
@@ -1176,7 +1171,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             if !mpv.is_empty() && mpv != "mpv" {
                                                 state.config.mpv_path = mpv;
                                             }
-                                            let _ = crate::config::save_config(&state.config);
+                                            let _ = remby_core::config::save_config(&state.config);
                                             let server = state.wizard_state.server.lines().join("").trim().to_string();
                                             let username = state.wizard_state.username.lines().join("").trim().to_string();
                                             let password = state.wizard_state.password.lines().join("");
@@ -1184,14 +1179,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             state.loading_msg = t("status.connecting").to_string();
                                             let tx = bg_tx.clone();
                                             tokio::spawn(async move {
-                                                match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
+                                                match remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await {
                                                     Ok(client) => {
-                                                        let account = crate::config::Account {
+                                                        let account = remby_core::config::Account {
                                                             id: uuid::Uuid::new_v4().to_string(),
                                                             label: format!("{}@{}", username, server),
                                                             server,
                                                             username,
-                                                            password_enc: crate::crypto::encrypt(&password),
+                                                            password_enc: remby_core::crypto::encrypt(&password),
                                                         };
                                                         let _ = tx.send(BackgroundResult::AccountLoginSuccess(account, client, String::new()));
                                                     }
@@ -1218,14 +1213,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.status_msg = Some(app::Message::error("MPV path is required".to_string()));
                                     } else {
                                         state.config.mpv_path = mpv_path;
-                                        let _ = crate::config::save_config(&state.config);
+                                        let _ = remby_core::config::save_config(&state.config);
                                         let ps = &state.mpv_prompt_state;
                                         let start_secs = ps.resume_position.map(|t| t as f64 / 10_000_000.0);
                                         let vs = &state.playing_state;
                                         let vid = vs.selected_video.map(|v| v as i32);
                                         let aid = vs.selected_audio.map(|a| a as i32);
                                         let sid = vs.selected_subtitle.map(|s| s as i32);
-                                        if let Ok((child, rx)) = mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
+                                        if let Ok((child, rx)) = remby_core::mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
                                             state.mpv_child = Some(child);
                                             state.mpv_rx = Some(rx);
                                             state.mpv_output.clear();
@@ -1271,10 +1266,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if server.is_empty() || username.is_empty() || password.is_empty() {
                                             state.account_manager_state.status_msg = Some(t("status.fields_required").to_string());
                                         } else {
-                                            let password_enc = crate::crypto::encrypt(&password);
+                                            let password_enc = remby_core::crypto::encrypt(&password);
                                             let edit_idx = if let app::AccountManagerAction::Edit(idx) = ams.action { Some(idx) } else { None };
 
-                                            let account = crate::config::Account {
+                                            let account = remby_core::config::Account {
                                                 id: if let Some(idx) = edit_idx {
                                                     ams.accounts.get(idx).map(|a| a.id.clone()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
                                                 } else {
@@ -1311,11 +1306,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                     accounts.push(account);
                                                 }
 
-                                                let accounts_cfg = crate::config::AccountsConfig {
+                                                let accounts_cfg = remby_core::config::AccountsConfig {
                                                     accounts: accounts.clone(),
                                                     last_account_id: ams.last_account_id.clone(),
                                                 };
-                                                let _ = crate::config::save_accounts(&accounts_cfg);
+                                                let _ = remby_core::config::save_accounts(&accounts_cfg);
 
                                                 state.account_manager_state.accounts = accounts;
                                                 state.account_manager_state.action = app::AccountManagerAction::View;
@@ -1334,11 +1329,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     KeyCode::Char('y') | KeyCode::Enter => {
                                         let idx = if let app::AccountManagerAction::Delete(i) = state.account_manager_state.action { i } else { 0 };
                                         state.account_manager_state.accounts.remove(idx);
-                                        let accounts_cfg = crate::config::AccountsConfig {
+                                        let accounts_cfg = remby_core::config::AccountsConfig {
                                             accounts: state.account_manager_state.accounts.clone(),
                                             last_account_id: state.account_manager_state.last_account_id.clone(),
                                         };
-                                        let _ = crate::config::save_accounts(&accounts_cfg);
+                                        let _ = remby_core::config::save_accounts(&accounts_cfg);
                                         state.account_manager_state.action = app::AccountManagerAction::View;
                                         state.account_manager_state.status_msg = Some(t("status.account_deleted").to_string());
                                     }
@@ -1360,9 +1355,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         } else {
                                             ams.input_label.lines().join("").trim().to_string()
                                         };
-                                        let password_enc = crate::crypto::encrypt(&password);
+                                        let password_enc = remby_core::crypto::encrypt(&password);
                                         let idx = if let app::AccountManagerAction::ConfirmUpdate(i) = ams.action { i } else { 0 };
-                                        let account = crate::config::Account {
+                                        let account = remby_core::config::Account {
                                             id: ams.accounts.get(idx).map(|a| a.id.clone()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
                                             label,
                                             server,
@@ -1373,11 +1368,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if idx < accounts.len() {
                                             accounts[idx] = account;
                                         }
-                                        let accounts_cfg = crate::config::AccountsConfig {
+                                        let accounts_cfg = remby_core::config::AccountsConfig {
                                             accounts: accounts.clone(),
                                             last_account_id: ams.last_account_id.clone(),
                                         };
-                                        let _ = crate::config::save_accounts(&accounts_cfg);
+                                        let _ = remby_core::config::save_accounts(&accounts_cfg);
                                         state.account_manager_state.accounts = accounts;
                                         state.account_manager_state.action = app::AccountManagerAction::View;
                                         state.account_manager_state.status_msg = Some(t("status.account_saved").to_string());
@@ -1407,7 +1402,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let acc_count = state.account_manager_state.accounts.len();
                                         if sel < acc_count {
                                             if let Some(acc) = state.account_manager_state.accounts.get(sel).cloned() {
-                                                let password = crate::crypto::decrypt(&acc.password_enc).unwrap_or_default();
+                                                let password = remby_core::crypto::decrypt(&acc.password_enc).unwrap_or_default();
                                                 let server = acc.server.clone();
                                                 let username = acc.username.clone();
                                                 let account_id = acc.id.clone();
@@ -1415,7 +1410,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 state.loading_msg = tf("status.logging_in", &acc.username);
                                                 let tx = bg_tx.clone();
                                                 tokio::spawn(async move {
-                                                    match crate::emby::EmbyClient::authenticate(&server, &username, &password).await {
+                                                    match remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await {
                                                         Ok(client) => {
                                                             let _ = tx.send(BackgroundResult::AccountLoginSuccess(acc, client, account_id));
                                                         }
@@ -1442,7 +1437,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         let sel = state.account_manager_state.selected;
                                         if sel < state.account_manager_state.accounts.len() {
                                             if let Some(acc) = state.account_manager_state.accounts.get(sel).cloned() {
-                                                let password = crate::crypto::decrypt(&acc.password_enc).unwrap_or_default();
+                                                let password = remby_core::crypto::decrypt(&acc.password_enc).unwrap_or_default();
                                                 let mut label_ta = ratatui_textarea::TextArea::default();
                                                 label_ta.insert_str(&acc.label);
                                                 let mut server_ta = ratatui_textarea::TextArea::default();
@@ -1759,7 +1754,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 if item_type == "Series" {
                                                     // For series, show series info with seasons
                                                     let series_id = series_id.unwrap_or(item_id);
-                                                    let mut series_item = crate::emby::MediaItem::separator("");
+                                                    let mut series_item = remby_core::emby::MediaItem::separator("");
                                                     series_item.id = series_id;
                                                     let result = build_series_state(&client, &series_item).await;
                                                     let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
@@ -1791,7 +1786,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             match result {
                                                 Ok(Ok(libs)) => {
                                                     let items: Vec<_> = libs.into_iter().map(|lib| {
-                                                        crate::emby::MediaItem {
+                                                        remby_core::emby::MediaItem {
                                                             id: lib.id.clone(),
                                                             name: lib.name.clone(),
                                                             item_type: "Folder".to_string(),
@@ -1982,7 +1977,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
     Ok(())
 }
 
-fn spawn_load_favorites(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, following: Vec<String>) {
+fn spawn_load_favorites(tx: mpsc::UnboundedSender<BackgroundResult>, client: remby_core::emby::EmbyClient, following: Vec<String>) {
     tokio::spawn(async move {
         let fav_result = client.get_favorites(0, 200).await;
         let mut fav_ids = std::collections::HashSet::new();
@@ -2009,7 +2004,7 @@ fn spawn_load_favorites(tx: mpsc::UnboundedSender<BackgroundResult>, client: cra
     });
 }
 
-fn spawn_item_detail(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, item_id: String) {
+fn spawn_item_detail(tx: mpsc::UnboundedSender<BackgroundResult>, client: remby_core::emby::EmbyClient, item_id: String) {
     tokio::spawn(async move {
         let timeout = std::time::Duration::from_secs(60);
         let result = tokio::time::timeout(timeout, async {
@@ -2063,7 +2058,7 @@ fn spawn_library_browser_load(
                 client.get_studios(&library_id),
                 client.get_folders(&library_id),
             );
-            let items = items_result.unwrap_or_else(|_| crate::emby::PageResult { items: vec![], total: 0 });
+            let items = items_result.unwrap_or_else(|_| remby_core::emby::PageResult { items: vec![], total: 0 });
             let genres = genres_result.unwrap_or_default();
             let tags = tags_result.unwrap_or_default();
             let studios = studios_result.unwrap_or_default();
@@ -2077,7 +2072,7 @@ fn spawn_library_browser_load(
     });
 }
 
-fn spawn_series_info(tx: mpsc::UnboundedSender<BackgroundResult>, client: crate::emby::EmbyClient, item: crate::emby::MediaItem) {
+fn spawn_series_info(tx: mpsc::UnboundedSender<BackgroundResult>, client: remby_core::emby::EmbyClient, item: remby_core::emby::MediaItem) {
     tokio::spawn(async move {
         let result = build_series_state(&client, &item).await;
         let _ = tx.send(BackgroundResult::SeriesInfoLoaded(result));
@@ -2111,7 +2106,7 @@ fn reload_library_items(state: &mut app::AppState, bg_tx: &mpsc::UnboundedSender
     });
 }
 
-async fn build_series_state(client: &crate::emby::EmbyClient, item: &crate::emby::MediaItem) -> app::SeriesState {
+async fn build_series_state(client: &remby_core::emby::EmbyClient, item: &remby_core::emby::MediaItem) -> app::SeriesState {
     let series_id = item.series_id.as_deref().unwrap_or(&item.id);
 
     let (detail, seasons, similar) = tokio::join!(

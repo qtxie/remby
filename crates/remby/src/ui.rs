@@ -3,7 +3,7 @@ use ratatui::widgets::*;
 use ratatui_textarea::TextArea;
 
 use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
-use crate::i18n::{t, tf};
+use remby_core::i18n::{t, tf};
 use unicode_width::UnicodeWidthStr;
 
 fn rounded_block() -> Block<'static> {
@@ -55,7 +55,7 @@ pub fn render(f: &mut Frame, state: &AppState) {
     render_footer(f, state, layout[2], theme);
 }
 
-fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let title = if state.searching {
         format!("/ {}", state.search_query)
     } else {
@@ -167,12 +167,12 @@ fn render_header(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
     }
 }
 
-fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
-    let mut combined: Vec<crate::emby::MediaItem> = Vec::new();
+fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
+    let mut combined: Vec<remby_core::emby::MediaItem> = Vec::new();
 
     for (series_name, episodes) in &state.following_updates {
         if !episodes.is_empty() {
-            combined.push(crate::emby::MediaItem::separator(&format!("{} - {}", t("item.following_update"), series_name)));
+            combined.push(remby_core::emby::MediaItem::separator(&format!("{} - {}", t("item.following_update"), series_name)));
             for ep in episodes.iter().take(5) {
                 combined.push(ep.clone());
             }
@@ -250,7 +250,7 @@ fn render_home(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let mut items: Vec<ListItem> = Vec::new();
 
     // If loading and no libraries yet, show loading indicator
@@ -354,7 +354,7 @@ fn render_libraries(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let items_source = match state.view {
         View::Items => &state.items,
         View::SearchResults => &state.search_results,
@@ -425,7 +425,7 @@ fn render_items(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::them
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_source_select(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_source_select(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ss = &state.source_state;
     let item_name = ss.item.as_ref().map(|i| i.display_name()).unwrap_or_default();
 
@@ -463,7 +463,7 @@ fn render_source_select(f: &mut Frame, state: &AppState, area: Rect, theme: &cra
     }
 }
 
-fn render_episodes(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_episodes(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let items: Vec<ListItem> = state.episodes.iter().map(|item| {
         let name = item.display_name();
         let duration = item.duration_str().unwrap_or_default();
@@ -493,7 +493,7 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
     f.render_stateful_widget(list, area, &mut state_list);
 }
 
-fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ss = &state.series_state;
 
     let layout = Layout::default()
@@ -580,7 +580,7 @@ fn pad_right(s: &str, target: usize) -> String {
     format!("{}{}", s, " ".repeat(pad))
 }
 
-fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, theme: &crate::theme::Theme) {
+fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, theme: &remby_core::theme::Theme) {
     let mut lines: Vec<Line> = Vec::new();
 
     if let Some(ref source) = ps.media_source {
@@ -689,7 +689,7 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, t
     f.render_widget(Paragraph::new(lines), area);
 }
 
-fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ps = &state.playing_state;
     let has_resume = ps.resume_position.is_some() && !ps.playing;
 
@@ -869,7 +869,7 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::th
     }
 }
 
-fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ss = &state.settings_state;
 
     let lib_h = area.height.saturating_sub(14).max(3);
@@ -1062,7 +1062,7 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::t
     f.render_widget(tp_block, layout[4]);
 }
 
-fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let view_name = match state.help_state.previous_view {
         crate::app::View::Home => "Home",
         crate::app::View::Libraries => "Libraries",
@@ -1104,7 +1104,7 @@ fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme
     f.render_widget(List::new(items).block(block), popup);
 }
 
-fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let help = match state.view {
         View::Home => t("footer.home"),
         View::ContinueWatching | View::LatestItems => t("footer.continue_watching"),
@@ -1159,7 +1159,7 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
     f.render_widget(Paragraph::new(line), area);
 }
 
-pub fn track_label(stream: &crate::emby::MediaStream) -> String {
+pub fn track_label(stream: &remby_core::emby::MediaStream) -> String {
     if let Some(ref title) = stream.display_title {
         if !title.is_empty() {
             return title.clone();
@@ -1191,7 +1191,7 @@ pub fn track_label(stream: &crate::emby::MediaStream) -> String {
     }
 }
 
-fn render_track_select(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_track_select(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ts = &state.track_state;
     let item_name = ts.item.as_ref().map(|i| i.name.as_str()).unwrap_or("");
 
@@ -1229,9 +1229,9 @@ fn render_track_select(f: &mut Frame, state: &AppState, area: Rect, theme: &crat
 
 fn render_track_section(
     f: &mut Frame, _state: &AppState, area: Rect,
-    title: &str, tracks: &[crate::emby::MediaStream],
+    title: &str, tracks: &[remby_core::emby::MediaStream],
     selected: usize, current_section: &TrackSection, section: TrackSection,
-    theme: &crate::theme::Theme,
+    theme: &remby_core::theme::Theme,
 ) {
     let active = *current_section == section;
     let border_color = if active { theme.accent } else { theme.muted };
@@ -1267,7 +1267,7 @@ fn render_track_section(
     f.render_widget(list, area);
 }
 
-fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let bs = &state.library_browser_state;
 
     let items: Vec<ListItem> = bs.items.iter().map(|item| {
@@ -1292,7 +1292,7 @@ fn render_library_browser(f: &mut Frame, state: &AppState, area: Rect, theme: &c
     }
 }
 
-fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let bs = &state.library_browser_state;
     let order_label = match bs.sort_order {
         SortOrder::Asc => "↑",
@@ -1333,7 +1333,7 @@ fn render_sort_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &crate:
     f.render_widget(list, popup);
 }
 
-fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_filter_panel(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let bs = &state.library_browser_state;
 
     let mut items: Vec<ListItem> = Vec::new();
@@ -1517,7 +1517,7 @@ fn centered_rect(percent_x: u16, height: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-fn render_account_manager(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_account_manager(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ams = &state.account_manager_state;
 
     match &ams.action {
@@ -1538,7 +1538,7 @@ fn render_account_manager(f: &mut Frame, state: &AppState, area: Rect, theme: &c
     }
 }
 
-fn render_account_list(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_account_list(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ams = &state.account_manager_state;
     let mut items: Vec<ListItem> = Vec::new();
 
@@ -1591,7 +1591,7 @@ fn render_account_list(f: &mut Frame, state: &AppState, area: Rect, theme: &crat
     }
 }
 
-fn render_account_form(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_account_form(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ams = &state.account_manager_state;
     let is_edit = matches!(ams.action, crate::app::AccountManagerAction::Edit(_));
     let title = if is_edit { t("title.account_edit") } else { t("title.account_add") };
@@ -1679,7 +1679,7 @@ fn render_account_form(f: &mut Frame, state: &AppState, area: Rect, theme: &crat
     f.render_widget(hint, row_layout[5]);
 }
 
-fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ams = &state.account_manager_state;
     if let crate::app::AccountManagerAction::Delete(idx) = &ams.action {
         let name = ams.accounts.get(*idx).map(|a| a.label.as_str()).unwrap_or("?");
@@ -1705,7 +1705,7 @@ fn render_delete_confirm(f: &mut Frame, state: &AppState, area: Rect, theme: &cr
     }
 }
 
-fn render_confirm_update(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_confirm_update(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ams = &state.account_manager_state;
     if let crate::app::AccountManagerAction::ConfirmUpdate(idx) = &ams.action {
         let name = ams.accounts.get(*idx).map(|a| {
@@ -1728,7 +1728,7 @@ fn render_confirm_update(f: &mut Frame, state: &AppState, area: Rect, theme: &cr
     }
 }
 
-fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ws = &state.wizard_state;
     let popup = centered_rect(60, 16, area);
     f.render_widget(Clear, popup);
@@ -1874,7 +1874,7 @@ fn render_wizard(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::the
     }
 }
 
-fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect, theme: &crate::theme::Theme) {
+fn render_mpv_prompt(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ms = &state.mpv_prompt_state;
     let items: Vec<ListItem> = vec![
         ListItem::new(Line::from(Span::styled(

@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::time::Instant;
 use ratatui_textarea::TextArea;
 
-use crate::config::RembyConfig;
-use crate::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
+use remby_core::config::RembyConfig;
+use remby_core::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
 
 const CACHE_TTL_SECS: u64 = 300; // 5 minutes
 
@@ -94,7 +94,7 @@ pub enum BackgroundResult {
     SeriesMarkedWatched(String, usize),
     FavoriteToggled(String, bool, String),
     ItemRemovedFromContinue(String),
-    AccountLoginSuccess(crate::config::Account, EmbyClient, String),
+    AccountLoginSuccess(remby_core::config::Account, EmbyClient, String),
     AccountLoginFailed(String),
     Error(String),
     Timeout(String),
@@ -150,7 +150,7 @@ pub struct AppState {
     pub series_state: SeriesState,
     pub playing_state: PlayingState,
     pub mpv_child: Option<std::process::Child>,
-    pub mpv_rx: Option<std::sync::mpsc::Receiver<crate::mpv::MpvEvent>>,
+    pub mpv_rx: Option<std::sync::mpsc::Receiver<remby_core::mpv::MpvEvent>>,
     pub mpv_output: Vec<(String, String)>,
     pub mpv_output_scroll: usize,
     pub mpv_position: f64,
@@ -159,8 +159,8 @@ pub struct AppState {
     pub playback_started_at: Option<std::time::Instant>,
     pub bg_tx: Option<tokio::sync::mpsc::UnboundedSender<BackgroundResult>>,
     pub settings_state: SettingsState,
-    pub theme: crate::theme::Theme,
-    pub themes: std::collections::HashMap<String, crate::theme::ThemeColors>,
+    pub theme: remby_core::theme::Theme,
+    pub themes: std::collections::HashMap<String, remby_core::theme::ThemeColors>,
     pub config: RembyConfig,
     pub library_browser_state: LibraryBrowserState,
     pub favorites: Vec<MediaItem>,
@@ -215,7 +215,7 @@ pub struct PlayingState {
     pub selected_video: Option<usize>,
     pub selected_audio: Option<usize>,
     pub selected_subtitle: Option<usize>,
-    pub media_source: Option<crate::emby::MediaSource>,
+    pub media_source: Option<remby_core::emby::MediaSource>,
     pub url: String,
     pub resume_position: Option<i64>,
     pub option_selected: usize,
@@ -320,7 +320,7 @@ pub enum WizardAction {
 }
 
 pub struct AccountManagerState {
-    pub accounts: Vec<crate::config::Account>,
+    pub accounts: Vec<remby_core::config::Account>,
     pub last_account_id: Option<String>,
     pub selected: usize,
     pub action: AccountManagerAction,
@@ -384,7 +384,7 @@ impl Default for WizardState {
         
         Self {
             step: WizardField::Language,
-            language: crate::i18n::detect_system_lang().to_string(),
+            language: remby_core::i18n::detect_system_lang().to_string(),
             server,
             username,
             password,
@@ -583,20 +583,20 @@ pub struct HelpState {
 
 impl AppState {
     pub async fn new(
-        account: Option<crate::config::Account>,
+        account: Option<remby_core::config::Account>,
     ) -> Result<Self> {
-        let config = crate::config::load_config();
+        let config = remby_core::config::load_config();
 
         let (client, server) = if let Some(acc) = account {
-            let password = crate::crypto::decrypt(&acc.password_enc).unwrap_or_default();
+            let password = remby_core::crypto::decrypt(&acc.password_enc).unwrap_or_default();
             let client = EmbyClient::authenticate(&acc.server, &acc.username, &password).await?;
             (client, acc.server)
         } else {
             (EmbyClient::new(String::new(), String::new()), String::new())
         };
 
-        let themes = crate::config::load_themes();
-        let theme = crate::theme::Theme::by_name(&config.theme, &themes);
+        let themes = remby_core::config::load_themes();
+        let theme = remby_core::theme::Theme::by_name(&config.theme, &themes);
 
         Ok(Self {
             client,
@@ -992,7 +992,7 @@ impl AppState {
     }
 
     pub fn open_track_select(&mut self, item: &MediaItem, source: &MediaSource) {
-        let none_stream = crate::emby::MediaStream {
+        let none_stream = remby_core::emby::MediaStream {
             stream_type: String::new(),
             codec: String::new(),
             language: String::new(),
@@ -1050,7 +1050,7 @@ impl AppState {
         // Auto-select subtitle by language preference
         if has_subs {
             match config.preferred_subtitle_language.as_str() {
-                s if s == crate::i18n::t("settings.language.off") => selected_subtitle = 0,
+                s if s == remby_core::i18n::t("settings.language.off") => selected_subtitle = 0,
                 s if !s.is_empty() => {
                     if let Some(code) = language_name_to_code(s) {
                         if let Some(idx) = subtitle_tracks.iter().skip(1).position(|t| t.language == code) {
@@ -1258,8 +1258,8 @@ impl AppState {
         self.config.preferred_resolution = self.settings_state.preferred_resolution.clone();
         self.config.preferred_audio_language = self.settings_state.preferred_audio_language.clone();
         self.config.preferred_subtitle_language = self.settings_state.preferred_subtitle_language.clone();
-        crate::i18n::init(&self.config.language);
-        if let Err(e) = crate::config::save_config(&self.config) {
+        remby_core::i18n::init(&self.config.language);
+        if let Err(e) = remby_core::config::save_config(&self.config) {
             self.status_msg = Some(Message::error(format!("Save error: {e}")));
         } else {
             self.status_msg = Some(Message::success("Settings saved"));
@@ -1322,7 +1322,7 @@ impl AppState {
 
     pub fn settings_cycle_theme(&mut self, forward: bool) {
         if self.settings_state.section == SettingsSection::Theme {
-            let names = crate::theme::all_theme_names(&self.themes);
+            let names = remby_core::theme::all_theme_names(&self.themes);
             let idx = names.iter().position(|n| n == &self.settings_state.theme).unwrap_or(0);
             let new_idx = if forward {
                 (idx + 1) % names.len()
@@ -1330,7 +1330,7 @@ impl AppState {
                 (idx + names.len() - 1) % names.len()
             };
             self.settings_state.theme = names[new_idx].clone();
-            self.theme = crate::theme::Theme::by_name(&self.settings_state.theme, &self.themes);
+            self.theme = remby_core::theme::Theme::by_name(&self.settings_state.theme, &self.themes);
         }
     }
 
@@ -1376,7 +1376,7 @@ impl AppState {
         }
     }
 
-    pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<crate::emby::MediaSource>, selected_video: Option<usize>, selected_audio: Option<usize>, selected_subtitle: Option<usize>) {
+    pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<remby_core::emby::MediaSource>, selected_video: Option<usize>, selected_audio: Option<usize>, selected_subtitle: Option<usize>) {
         self.playing_state = PlayingState {
             item_name: item_name.to_string(),
             item_id: item_id.to_string(),
@@ -1685,7 +1685,7 @@ impl AppState {
             self.config.following_series.push(series_id.to_string());
             self.status_msg = Some(Message::info("Added to following"));
         }
-        let _ = crate::config::save_config(&self.config);
+        let _ = remby_core::config::save_config(&self.config);
     }
 
     pub fn open_favorites(&mut self) {
@@ -1702,7 +1702,7 @@ impl AppState {
 
     // --- Account Manager ---
     pub fn open_account_manager(&mut self) {
-        let accounts_cfg = crate::config::load_accounts();
+        let accounts_cfg = remby_core::config::load_accounts();
         self.account_manager_state = AccountManagerState {
             accounts: accounts_cfg.accounts,
             last_account_id: accounts_cfg.last_account_id,
@@ -1787,7 +1787,7 @@ impl AppState {
 
     // --- Wizard ---
     pub fn open_wizard(&mut self) {
-        let mpv_str = crate::mpv::find_mpv().unwrap_or_else(|| "mpv".to_string());
+        let mpv_str = remby_core::mpv::find_mpv().unwrap_or_else(|| "mpv".to_string());
         let mut mpv_path = TextArea::default();
         mpv_path.insert_str(&mpv_str);
         self.wizard_state = WizardState {
@@ -1829,7 +1829,7 @@ impl AppState {
         match self.wizard_state.step {
             WizardField::Language => {
                 // Apply language immediately for UI updates
-                crate::i18n::init(&self.wizard_state.language);
+                remby_core::i18n::init(&self.wizard_state.language);
                 self.wizard_state.step = WizardField::Server;
                 self.wizard_state.status_msg = None;
                 WizardAction::None
@@ -1837,7 +1837,7 @@ impl AppState {
             WizardField::Server => {
                 let server = self.wizard_state.server.lines().join("").trim().to_string();
                 if server.is_empty() {
-                    self.wizard_state.status_msg = Some(crate::i18n::t("status.server_required").to_string());
+                    self.wizard_state.status_msg = Some(remby_core::i18n::t("status.server_required").to_string());
                     return WizardAction::None;
                 }
                 self.wizard_state.step = WizardField::Username;
@@ -1847,7 +1847,7 @@ impl AppState {
             WizardField::Username => {
                 let username = self.wizard_state.username.lines().join("").trim().to_string();
                 if username.is_empty() {
-                    self.wizard_state.status_msg = Some(crate::i18n::t("status.username_required").to_string());
+                    self.wizard_state.status_msg = Some(remby_core::i18n::t("status.username_required").to_string());
                     return WizardAction::None;
                 }
                 self.wizard_state.step = WizardField::Password;
@@ -1857,7 +1857,7 @@ impl AppState {
             WizardField::Password => {
                 let password = self.wizard_state.password.lines().join("");
                 if password.is_empty() {
-                    self.wizard_state.status_msg = Some(crate::i18n::t("status.password_required").to_string());
+                    self.wizard_state.status_msg = Some(remby_core::i18n::t("status.password_required").to_string());
                     return WizardAction::None;
                 }
                 self.wizard_state.step = WizardField::MpvPath;
