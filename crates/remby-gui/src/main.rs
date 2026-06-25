@@ -1,4 +1,5 @@
 mod app;
+mod image_loader;
 mod state;
 mod views;
 

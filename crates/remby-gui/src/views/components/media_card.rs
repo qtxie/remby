@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use gpui::*;
 use gpui_component::*;
 
@@ -7,6 +9,7 @@ pub struct MediaCard {
     title: SharedString,
     subtitle: SharedString,
     poster_url: Option<String>,
+    poster_image: Option<Arc<Image>>,
 }
 
 impl MediaCard {
@@ -16,6 +19,7 @@ impl MediaCard {
             title: SharedString::default(),
             subtitle: SharedString::default(),
             poster_url: None,
+            poster_image: None,
         }
     }
 
@@ -33,12 +37,42 @@ impl MediaCard {
         self.poster_url = Some(url.into());
         self
     }
+
+    pub fn poster_image(mut self, image: Option<Arc<Image>>) -> Self {
+        self.poster_image = image;
+        self
+    }
 }
 
 impl RenderOnce for MediaCard {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let poster_area = if let Some(image) = self.poster_image {
+            div()
+                .id(self.id.clone())
+                .w_full()
+                .h(px(220.))
+                .rounded(cx.theme().radius)
+                .overflow_hidden()
+                .child(img(image).w_full().h_full().object_fit(gpui::ObjectFit::Cover))
+        } else {
+            div()
+                .id(self.id.clone())
+                .w_full()
+                .h(px(220.))
+                .bg(cx.theme().muted.opacity(0.15))
+                .rounded(cx.theme().radius)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    Icon::new(IconName::Frame)
+                        .large()
+                        .text_color(cx.theme().muted_foreground.opacity(0.3)),
+                )
+        };
+
         div()
-            .id(self.id)
+            .id(format!("{}-wrapper", self.id))
             .w(px(150.))
             .rounded_lg()
             .overflow_hidden()
@@ -47,21 +81,7 @@ impl RenderOnce for MediaCard {
             .child(
                 v_flex()
                     .gap_2()
-                    .child(
-                        div()
-                            .w_full()
-                            .h(px(220.))
-                            .bg(cx.theme().muted.opacity(0.15))
-                            .rounded(cx.theme().radius)
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                Icon::new(IconName::Frame)
-                                    .large()
-                                    .text_color(cx.theme().muted_foreground.opacity(0.3)),
-                            ),
-                    )
+                    .child(poster_area)
                     .child(
                         v_flex()
                             .gap_1()

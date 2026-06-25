@@ -5952,6 +5952,7 @@ dependencies = [
  "gpui-component",
  "gpui_platform",
  "remby-core",
+ "reqwest",
  "tokio",
  "uuid",
 ]
