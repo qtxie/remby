@@ -1,6 +1,6 @@
 mod loading;
 mod media_card;
-mod search_bar;
+pub mod search_bar;
 pub mod sidebar;
 mod toast;
 

@@ -2,6 +2,7 @@ use gpui::*;
 use gpui_component::*;
 use gpui_component::input::{Input, InputState};
 
+#[derive(IntoElement)]
 pub struct SearchBar {
     input_state: Entity<InputState>,
 }

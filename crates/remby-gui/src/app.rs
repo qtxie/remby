@@ -1227,6 +1227,39 @@ impl Render for RembyApp {
             None
         };
 
+        let header = if !matches!(self.state.view, View::Login) {
+            Some(
+                h_flex()
+                    .h(px(48.))
+                    .items_center()
+                    .px_4()
+                    .bg(cx.theme().background)
+                    .border_b_1()
+                    .border_color(cx.theme().border)
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_bold()
+                            .child("Remby"),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        crate::views::components::search_bar::SearchBar::new(
+                            self.browser_search_input.clone(),
+                        ),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(self.state.server.clone()),
+                    ),
+            )
+        } else {
+            None
+        };
+
         v_flex()
             .id("remby-app")
             .size_full()
@@ -1255,6 +1288,7 @@ impl Render for RembyApp {
                         .child(status_msg),
                 )
             })
+            .when_some(header, |this, header| this.child(header))
             .child(
                 h_flex()
                     .flex_1()
