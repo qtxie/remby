@@ -57,17 +57,17 @@ impl RenderOnce for MediaCard {
             div()
                 .id(self.id.clone())
                 .w_full()
-                .h(px(220.))
-                .rounded(cx.theme().radius)
+                .h(px(270.))
+                .rounded(px(8.))
                 .overflow_hidden()
                 .child(img(image).w_full().h_full().object_fit(gpui::ObjectFit::Cover))
         } else {
             div()
                 .id(self.id.clone())
                 .w_full()
-                .h(px(220.))
+                .h(px(270.))
                 .bg(cx.theme().muted.opacity(0.15))
-                .rounded(cx.theme().radius)
+                .rounded(px(8.))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -80,11 +80,14 @@ impl RenderOnce for MediaCard {
 
         let wrapper = div()
             .id(format!("{}-wrapper", self.id))
-            .w(px(150.))
-            .rounded_lg()
+            .w(px(160.))
+            .rounded(px(8.))
             .overflow_hidden()
             .cursor_pointer()
-            .hover(|this| this.opacity(0.9));
+            .hover(|this| {
+                this.shadow_lg()
+                    .bg(cx.theme().muted.opacity(0.05))
+            });
 
         let wrapper = if let Some(handler) = self.on_click {
             wrapper.on_click(move |_event: &ClickEvent, window, cx| handler(window, cx))
