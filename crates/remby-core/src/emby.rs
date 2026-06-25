@@ -448,13 +448,11 @@ impl EmbyClient {
         let mut seen = std::collections::HashSet::new();
         let mut items = Vec::new();
 
-        for resp in [term_result, prefix_result] {
-            if let Ok(r) = resp {
-                if let Ok(data) = r.json::<ItemsResponse>().await {
-                    for item in data.items {
-                        if seen.insert(item.id.clone()) {
-                            items.push(item);
-                        }
+        for r in [term_result, prefix_result].into_iter().flatten() {
+            if let Ok(data) = r.json::<ItemsResponse>().await {
+                for item in data.items {
+                    if seen.insert(item.id.clone()) {
+                        items.push(item);
                     }
                 }
             }
@@ -858,6 +856,7 @@ impl EmbyClient {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_items_filtered(
         &self,
         parent_id: &str,

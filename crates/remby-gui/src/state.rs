@@ -105,6 +105,7 @@ impl SortOrder {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default)]
 pub struct BrowserFilters {
     pub genres: Vec<String>,
     pub tags: Vec<String>,
@@ -113,17 +114,6 @@ pub struct BrowserFilters {
     pub year_max: Option<u32>,
 }
 
-impl Default for BrowserFilters {
-    fn default() -> Self {
-        Self {
-            genres: Vec::new(),
-            tags: Vec::new(),
-            studios: Vec::new(),
-            year_min: None,
-            year_max: None,
-        }
-    }
-}
 
 impl BrowserFilters {
     pub fn is_empty(&self) -> bool {
@@ -203,6 +193,13 @@ pub struct GuiState {
     pub player_play_session_id: String,
     pub player_media_source_id: String,
 
+    // Navigation indices (for j/k keyboard nav)
+    pub home_selected: usize,
+    pub libraries_selected: usize,
+    pub favorites_selected: usize,
+    pub browser_selected: usize,
+    pub series_selected: usize,
+
     // Config
     pub config: RembyConfig,
     pub settings_tab: SettingsTab,
@@ -274,6 +271,12 @@ impl GuiState {
             player_started: false,
             player_play_session_id: String::new(),
             player_media_source_id: String::new(),
+
+            home_selected: 0,
+            libraries_selected: 0,
+            favorites_selected: 0,
+            browser_selected: 0,
+            series_selected: 0,
 
             config: RembyConfig::default(),
             settings_tab: SettingsTab::Libraries,

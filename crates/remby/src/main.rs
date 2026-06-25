@@ -88,8 +88,7 @@ fn update_favorite_in_list(items: &mut [remby_core::emby::MediaItem], item_id: &
             if let Some(ref mut ud) = item.user_data {
                 ud.is_favorite = is_favorite;
             } else {
-                let mut ud = remby_core::emby::UserData::default();
-                ud.is_favorite = is_favorite;
+                let ud = remby_core::emby::UserData { is_favorite, ..Default::default() };
                 item.user_data = Some(ud);
             }
         }
@@ -148,16 +147,14 @@ async fn main() -> Result<()> {
                 ])
                 .split(area);
 
-            let logo_raw = vec![
-                "██████╗ ███████╗███╗   ███╗██████╗ ██╗   ██╗",
+            let logo_raw = ["██████╗ ███████╗███╗   ███╗██████╗ ██╗   ██╗",
                 "██╔══██╗██╔════╝████╗ ████║██╔══██╗╚██╗ ██╔╝",
                 "██████╔╝█████╗  ██╔████╔██║██████╔╝ ╚████╔╝",
                 "██╔══██╗██╔══╝  ██║╚██╔╝██║██╔══██╗  ╚██╔╝",
                 "██║  ██║███████╗██║ ╚═╝ ██║██████╔╝   ██║",
                 "╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═════╝    ╚═╝",
                 "",
-                "     ◁◁  ▐▐  ▷  ▷▷      [00:42/24:11]",
-            ];
+                "     ◁◁  ▐▐  ▷  ▷▷      [00:42/24:11]"];
             let green = Style::default().fg(Color::Green);
             let area_width = f.area().width as usize;
             let logo_width = unicode_width::UnicodeWidthStr::width(logo_raw[0]);
@@ -505,9 +502,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         None
                     };
                     if let Some(sid) = series_id {
-                        if is_favorite && !state.config.following_series.contains(&sid) {
-                            state.toggle_follow(&sid);
-                        } else if !is_favorite && state.config.following_series.contains(&sid) {
+                        if (is_favorite && !state.config.following_series.contains(&sid))
+                            || (!is_favorite && state.config.following_series.contains(&sid))
+                        {
                             state.toggle_follow(&sid);
                         }
                     }
@@ -516,11 +513,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                 }
                 BackgroundResult::ItemRemovedFromContinue(item_id) => {
                     state.home_items.retain(|item| item.id != item_id);
-                    if state.view == app::View::ContinueWatching {
-                        if state.selected >= state.home_items.len() && state.selected > 0 {
+                    if state.view == app::View::ContinueWatching
+                        && state.selected >= state.home_items.len() && state.selected > 0 {
                             state.selected -= 1;
                         }
-                    }
                     state.loading = false;
                     state.status_msg = Some(app::Message::success(t("status.removed_from_continue").to_string()));
                 }
@@ -543,8 +539,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
         }
 
         // Drain mpv events
-        if state.mpv_rx.is_some() {
-            let rx = state.mpv_rx.as_ref().unwrap();
+        if let Some(rx) = &state.mpv_rx {
             while let Ok(event) = rx.try_recv() {
                 match event {
                     remby_core::mpv::MpvEvent::LogLine(line, level) => {
@@ -618,11 +613,10 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Up | KeyCode::Char('k') if in_track_prefs => {
                                     state.settings_state.selected = state.settings_state.selected.saturating_sub(1);
                                 }
-                                KeyCode::Down | KeyCode::Char('j') if in_track_prefs => {
-                                    if state.settings_state.selected < 2 {
+                                KeyCode::Down | KeyCode::Char('j') if in_track_prefs
+                                    && state.settings_state.selected < 2 => {
                                         state.settings_state.selected += 1;
                                     }
-                                }
                                 KeyCode::Up if !in_non_lib && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_up(),
                                 KeyCode::Down if !in_non_lib && key.modifiers.contains(KeyModifiers::SHIFT) => state.settings_move_down(),
                                 KeyCode::Up | KeyCode::Char('k') if !in_non_lib => state.settings_select_prev(),
@@ -704,7 +698,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             } else {
                                                 state.track_state.video_tracks
                                                     .get(state.track_state.selected_video)
-                                                    .map(|t| ui::track_label(t))
+                                                    .map(ui::track_label)
                                                     .unwrap_or_else(|| t("track.default").to_string())
                                             };
                                             let audio_label = if state.track_state.selected_audio == 0 {
@@ -712,7 +706,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             } else {
                                                 state.track_state.audio_tracks
                                                     .get(state.track_state.selected_audio)
-                                                    .map(|t| ui::track_label(t))
+                                                    .map(ui::track_label)
                                                     .unwrap_or_else(|| t("track.default").to_string())
                                             };
                                             let sub_label = if state.track_state.selected_subtitle == 0 {
@@ -720,7 +714,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                             } else {
                                                 state.track_state.subtitle_tracks
                                                     .get(state.track_state.selected_subtitle)
-                                                    .map(|t| ui::track_label(t))
+                                                    .map(ui::track_label)
                                                     .unwrap_or_else(|| t("track.off").to_string())
                                             };
                                             let resume_ticks = item.resume_position_ticks();
@@ -772,18 +766,16 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.playing_state.option_selected = 1;
                                     }
                                 }
-                                KeyCode::PageUp => {
-                                    if mpv_has_output {
+                                KeyCode::PageUp
+                                    if mpv_has_output => {
                                         let max_scroll = state.mpv_output.len().saturating_sub(1);
                                         let target = state.mpv_output_scroll.saturating_add(10);
                                         state.mpv_output_scroll = target.min(max_scroll);
                                     }
-                                }
-                                KeyCode::PageDown => {
-                                    if mpv_has_output {
+                                KeyCode::PageDown
+                                    if mpv_has_output => {
                                         state.mpv_output_scroll = state.mpv_output_scroll.saturating_sub(10);
                                     }
-                                }
                                 KeyCode::Enter => {
                                     let is_default_mpv = state.config.mpv_path == "mpv";
                                     if is_default_mpv {
@@ -1129,16 +1121,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         }
                                     }
                                 }
-                                KeyCode::Char(c) => {
-                                    if state.library_browser_state.filter_year_field.is_some() {
+                                KeyCode::Char(c)
+                                    if state.library_browser_state.filter_year_field.is_some() => {
                                         state.library_browser_year_input(c);
                                     }
-                                }
-                                KeyCode::Backspace => {
-                                    if state.library_browser_state.filter_year_field.is_some() {
+                                KeyCode::Backspace
+                                    if state.library_browser_state.filter_year_field.is_some() => {
                                         state.library_browser_year_backspace();
                                     }
-                                }
                                 _ => {}
                             }
                         }

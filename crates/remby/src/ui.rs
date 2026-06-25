@@ -1046,8 +1046,6 @@ fn render_settings(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_co
         let row_active = tp_active && ss.selected == i;
         let row_style = if row_active {
             Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)
-        } else if tp_active {
-            Style::default()
         } else {
             Style::default()
         };
@@ -1095,7 +1093,7 @@ fn render_help(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::
     let block = rounded_block()
         .border_style(Style::default().fg(theme.accent))
         .title(Span::styled(
-            format!(" {} ", tf("title.help_label", &label)),
+            format!(" {} ", tf("title.help_label", label)),
             Style::default().fg(theme.text).add_modifier(Modifier::BOLD),
         ))
         .title_alignment(Alignment::Center);
@@ -1227,6 +1225,7 @@ fn render_track_select(f: &mut Frame, state: &AppState, area: Rect, theme: &remb
     render_track_section(f, state, sections_layout[2], t("section.subtitle"), &ts.subtitle_tracks, ts.selected_subtitle, &ts.section, TrackSection::Subtitle, theme);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_track_section(
     f: &mut Frame, _state: &AppState, area: Rect,
     title: &str, tracks: &[remby_core::emby::MediaStream],

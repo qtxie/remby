@@ -181,6 +181,7 @@ pub(crate) struct StackEntry {
     pub total_items: usize,
 }
 
+#[derive(Default)]
 pub struct SourceState {
     pub item: Option<MediaItem>,
     pub sources: Vec<MediaSource>,
@@ -204,6 +205,7 @@ pub enum SeriesSection {
     Similar,
 }
 
+#[derive(Default)]
 pub struct PlayingState {
     pub item_name: String,
     pub item_id: String,
@@ -258,27 +260,6 @@ pub enum SettingsColumn {
     Latest,
 }
 
-impl Default for PlayingState {
-    fn default() -> Self {
-        Self {
-            item_name: String::new(),
-            item_id: String::new(),
-            media_source_id: String::new(),
-            runtime_ticks: None,
-            video_track: String::new(),
-            audio_track: String::new(),
-            subtitle_track: String::new(),
-            selected_video: None,
-            selected_audio: None,
-            selected_subtitle: None,
-            media_source: None,
-            url: String::new(),
-            resume_position: None,
-            option_selected: 0,
-            playing: false,
-        }
-    }
-}
 
 impl Default for SettingsState {
     fn default() -> Self {
@@ -530,14 +511,6 @@ pub enum TrackSection {
     Subtitle,
 }
 
-impl Default for SourceState {
-    fn default() -> Self {
-        Self {
-            item: None,
-            sources: Vec::new(),
-        }
-    }
-}
 
 impl Default for TrackState {
     fn default() -> Self {
@@ -1376,6 +1349,7 @@ impl AppState {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<remby_core::emby::MediaSource>, selected_video: Option<usize>, selected_audio: Option<usize>, selected_subtitle: Option<usize>) {
         self.playing_state = PlayingState {
             item_name: item_name.to_string(),

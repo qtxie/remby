@@ -1,4 +1,5 @@
 use gpui::*;
+use gpui::prelude::FluentBuilder;
 use gpui_component::*;
 use gpui_component::input::InputState;
 
@@ -62,7 +63,7 @@ impl RembyApp {
             match remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await
             {
                 Ok(client) => {
-                    let _ = cx.update_entity(&this, |app, cx| {
+                    cx.update_entity(&this, |app, cx| {
                         app.state.client = Some(client);
                         app.state.navigate(View::Home);
                         app.load_home_data(cx);
@@ -70,8 +71,10 @@ impl RembyApp {
                 }
                 Err(e) => {
                     let msg = e.to_string();
-                    let _ = cx.update_entity(&this, |app, _cx| {
+                    cx.update_entity(&this, |app, _cx| {
                         app.state.login_error = msg;
+                        app.state.status_msg = "Login failed. Check server URL and credentials.".into();
+                        app.state.status_kind = crate::state::StatusKind::Error;
                     });
                 }
             }
@@ -81,6 +84,7 @@ impl RembyApp {
 
     fn load_home_data(&mut self, cx: &mut Context<Self>) {
         if self.state.client.is_none() {
+            self.show_toast("Not connected to server".into(), crate::state::StatusKind::Error);
             return;
         }
         self.state.loading = true;
@@ -88,7 +92,7 @@ impl RembyApp {
 
         let this = cx.entity();
         cx.spawn(async move |_window, cx| {
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 app.state.loading_msg = "Loading continue watching...".into();
             });
 
@@ -96,14 +100,14 @@ impl RembyApp {
                 let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
                 let cw = client.get_resume_items(20).await.unwrap_or_default();
 
-                let _ = cx.update_entity(&this, |app, _cx| {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.continue_watching = cw;
                     app.state.loading_msg = "Loading latest items...".into();
                 });
 
                 let latest = client.get_latest_items(20).await.unwrap_or_default();
 
-                let _ = cx.update_entity(&this, |app, _cx| {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.latest_items = latest;
                     app.state.loading_msg = "Loading following updates...".into();
                 });
@@ -120,9 +124,12 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some(following) = result {
                     app.state.following_updates = following;
+                } else {
+                    app.state.status_msg = "Failed to load home data".into();
+                    app.state.status_kind = crate::state::StatusKind::Error;
                 }
                 app.state.loading = false;
                 app.state.loading_msg.clear();
@@ -133,6 +140,7 @@ impl RembyApp {
 
     pub fn load_libraries_data(&mut self, cx: &mut Context<Self>) {
         if self.state.client.is_none() {
+            self.show_toast("Not connected to server".into(), crate::state::StatusKind::Error);
             return;
         }
         self.state.loading = true;
@@ -144,7 +152,7 @@ impl RembyApp {
                 let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
                 let libraries = client.get_libraries().await.unwrap_or_default();
 
-                let _ = cx.update_entity(&this, |app, _cx| {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.libraries = libraries.clone();
                     app.state.loading_msg = "Loading latest items...".into();
                 });
@@ -162,9 +170,12 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some(latest) = result {
                     app.state.latest_items = latest;
+                } else {
+                    app.state.status_msg = "Failed to load libraries".into();
+                    app.state.status_kind = crate::state::StatusKind::Error;
                 }
                 app.state.loading = false;
                 app.state.loading_msg.clear();
@@ -175,6 +186,7 @@ impl RembyApp {
 
     pub fn load_browser_data(&mut self, cx: &mut Context<Self>) {
         if self.state.client.is_none() {
+            self.show_toast("Not connected to server".into(), crate::state::StatusKind::Error);
             return;
         }
         self.state.loading = true;
@@ -236,13 +248,16 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some(((total, items), genres, tags, studios)) = result {
                     app.state.browser_items = items;
                     app.state.browser_total = total;
                     app.state.browser_available_genres = genres;
                     app.state.browser_available_tags = tags;
                     app.state.browser_available_studios = studios;
+                } else {
+                    app.state.status_msg = "Failed to load library items".into();
+                    app.state.status_kind = crate::state::StatusKind::Error;
                 }
                 app.state.loading = false;
             });
@@ -300,7 +315,7 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some(items) = result {
                     app.state.browser_items.extend(items);
                 }
@@ -344,7 +359,7 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some((total, items)) = result {
                     app.state.browser_items = items;
                     app.state.browser_total = total;
@@ -371,7 +386,7 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 app.state.player_loading = false;
                 if let Some(sources) = result {
                     app.state.player_sources = sources;
@@ -467,9 +482,11 @@ impl RembyApp {
             let (_child, rx) = match result {
                 Ok(r) => r,
                 Err(e) => {
-                    let _ = cx.update_entity(&this, |app, _cx| {
+                    cx.update_entity(&this, |app, _cx| {
                         app.state.playing = false;
                         app.state.player_logs.push(format!("Failed to start mpv: {}", e));
+                        app.state.status_msg = format!("mpv error: {}", e);
+                        app.state.status_kind = crate::state::StatusKind::Error;
                     });
                     return;
                 }
@@ -501,22 +518,22 @@ impl RembyApp {
                     event = tokio_rx.recv() => {
                         match event {
                             Some(remby_core::mpv::MpvEvent::Position(pos)) => {
-                                let _ = cx.update_entity(&this, |app, _cx| {
+                                cx.update_entity(&this, |app, _cx| {
                                     app.state.player_position = pos;
                                 });
                             }
                             Some(remby_core::mpv::MpvEvent::Duration(dur)) => {
-                                let _ = cx.update_entity(&this, |app, _cx| {
+                                cx.update_entity(&this, |app, _cx| {
                                     app.state.player_duration = dur;
                                 });
                             }
                             Some(remby_core::mpv::MpvEvent::PlaybackStarted) => {
-                                let _ = cx.update_entity(&this, |app, _cx| {
+                                cx.update_entity(&this, |app, _cx| {
                                     app.state.player_started = true;
                                 });
                             }
                             Some(remby_core::mpv::MpvEvent::LogLine(line, _level)) => {
-                                let _ = cx.update_entity(&this, |app, _cx| {
+                                cx.update_entity(&this, |app, _cx| {
                                     app.state.player_logs.push(line);
                                     if app.state.player_logs.len() > 500 {
                                         app.state.player_logs.drain(..250);
@@ -531,7 +548,7 @@ impl RembyApp {
                 }
             }
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 let pos_ticks = (app.state.player_position * 10_000_000.0) as i64;
                 let item_id = app.state.playing_item.as_ref().map(|i| i.id.clone()).unwrap_or_default();
                 let ms_id = app.state.player_media_source_id.clone();
@@ -579,6 +596,7 @@ impl RembyApp {
 
     pub fn load_favorites(&mut self, cx: &mut Context<Self>) {
         if self.state.client.is_none() {
+            self.show_toast("Not connected to server".into(), crate::state::StatusKind::Error);
             return;
         }
         self.state.loading = true;
@@ -592,9 +610,12 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some(favs) = result {
                     app.state.favorites = favs;
+                } else {
+                    app.state.status_msg = "Failed to load favorites".into();
+                    app.state.status_kind = crate::state::StatusKind::Error;
                 }
                 app.state.loading = false;
             });
@@ -608,6 +629,7 @@ impl RembyApp {
         cx: &mut Context<Self>,
     ) {
         if self.state.client.is_none() {
+            self.show_toast("Not connected to server".into(), crate::state::StatusKind::Error);
             return;
         }
         self.state.loading = true;
@@ -624,11 +646,14 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some((item, seasons, similar)) = result {
                     app.state.series_item = item;
                     app.state.series_seasons = seasons;
                     app.state.series_similar = similar;
+                } else {
+                    app.state.status_msg = "Failed to load series info".into();
+                    app.state.status_kind = crate::state::StatusKind::Error;
                 }
                 app.state.loading = false;
             });
@@ -672,7 +697,7 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some((item_opt, seasons_opt, episodes_opt)) = result {
                     if let Some(item) = item_opt {
                         app.state.series_item = Some(item);
@@ -710,7 +735,7 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, _cx| {
+            cx.update_entity(&this, |app, _cx| {
                 if let Some(Some(updated_item)) = result {
                     if let Some(ref mut si) = app.state.series_item {
                         if si.id == item_id {
@@ -743,7 +768,7 @@ impl RembyApp {
             }
             .await;
 
-            let _ = cx.update_entity(&this, |app, cx| {
+            cx.update_entity(&this, |app, cx| {
                 if let Some(Some(item)) = result {
                     app.state.playing_item = Some(item);
                     app.state.navigate(View::Player);
@@ -766,11 +791,208 @@ impl RembyApp {
             View::Settings => "Settings",
         }
     }
+
+    fn window_title(&self) -> String {
+        let view = self.view_label();
+        match self.state.view {
+            View::LibraryBrowser => format!("remby - {}", self.state.browser_library_name),
+            _ => format!("remby - {}", view),
+        }
+    }
+
+    fn show_toast(&mut self, msg: String, kind: crate::state::StatusKind) {
+        self.state.status_msg = msg;
+        self.state.status_kind = kind;
+    }
 }
 
 impl Render for RembyApp {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        match self.state.view {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        window.set_window_title(&self.window_title());
+
+        let app_entity = cx.entity();
+        let current_view = self.state.view.clone();
+        let is_input_focused = matches!(
+            self.state.view,
+            View::Login | View::Settings | View::LibraryBrowser
+        );
+        let has_client = self.state.client.is_some();
+
+        window.on_key_event::<KeyDownEvent>(move |event, _phase, _window, cx| {
+            if event.keystroke.modifiers.control || event.keystroke.modifiers.platform || event.keystroke.modifiers.alt {
+                return;
+            }
+            let key = event.keystroke.key.as_ref();
+
+            cx.update_entity(&app_entity, |app, cx| {
+                if is_input_focused && !matches!(key, "escape" | "q") {
+                    return;
+                }
+
+                match key {
+                    "escape" => {
+                        app.state.go_back();
+                        cx.notify();
+                    }
+                    "q" => {
+                        cx.quit();
+                    }
+                    "j" if has_client && !is_input_focused => {
+                        match current_view {
+                            View::Home => {
+                                app.state.home_selected = app.state.home_selected.saturating_add(1);
+                            }
+                            View::Libraries => {
+                                let max = app.state.libraries.len().saturating_sub(1);
+                                app.state.libraries_selected = app.state.libraries_selected.min(max).saturating_add(1);
+                            }
+                            View::Favorites => {
+                                let max = app.state.favorites.len().saturating_sub(1);
+                                app.state.favorites_selected = app.state.favorites_selected.min(max).saturating_add(1);
+                            }
+                            View::LibraryBrowser => {
+                                let max = app.state.browser_items.len().saturating_sub(1);
+                                app.state.browser_selected = app.state.browser_selected.min(max).saturating_add(1);
+                            }
+                            View::SeriesInfo => {
+                                app.state.series_selected = app.state.series_selected.saturating_add(1);
+                            }
+                            _ => {}
+                        }
+                        cx.notify();
+                    }
+                    "k" if has_client && !is_input_focused => {
+                        match current_view {
+                            View::Home => {
+                                app.state.home_selected = app.state.home_selected.saturating_sub(1);
+                            }
+                            View::Libraries => {
+                                app.state.libraries_selected = app.state.libraries_selected.saturating_sub(1);
+                            }
+                            View::Favorites => {
+                                app.state.favorites_selected = app.state.favorites_selected.saturating_sub(1);
+                            }
+                            View::LibraryBrowser => {
+                                app.state.browser_selected = app.state.browser_selected.saturating_sub(1);
+                            }
+                            View::SeriesInfo => {
+                                app.state.series_selected = app.state.series_selected.saturating_sub(1);
+                            }
+                            _ => {}
+                        }
+                        cx.notify();
+                    }
+                    "f" if has_client && !is_input_focused
+                        && current_view == View::SeriesInfo => {
+                            if let Some(ref item) = app.state.series_item {
+                                let item_id = item.id.clone();
+                                let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
+                                app.toggle_favorite(&item_id, !is_fav, cx);
+                            }
+                        }
+                    "z" if has_client && !is_input_focused => {
+                        match current_view {
+                            View::LibraryBrowser => {
+                                if let Some(item) = app.state.browser_items.get(app.state.browser_selected) {
+                                    let item_id = item.id.clone();
+                                    let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
+                                    app.toggle_favorite(&item_id, !is_fav, cx);
+                                }
+                            }
+                            View::Home => {
+                                let items = &app.state.continue_watching;
+                                if let Some(item) = items.get(app.state.home_selected) {
+                                    let item_id = item.id.clone();
+                                    let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
+                                    app.toggle_favorite(&item_id, !is_fav, cx);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    "s" if has_client && !is_input_focused => {
+                        app.state.navigate(View::Settings);
+                        cx.notify();
+                    }
+                    "l" if has_client && !is_input_focused => {
+                        app.state.navigate(View::Libraries);
+                        cx.notify();
+                    }
+                    "u" if has_client && !is_input_focused => {
+                        app.state.navigate(View::Home);
+                        cx.notify();
+                    }
+                    "enter" if has_client && !is_input_focused => {
+                        match current_view {
+                            View::Home => {
+                                let idx = app.state.home_selected;
+                                let item_opt = app.state.continue_watching.get(idx).map(|i| {
+                                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
+                                });
+                                if let Some((item_id, series_id, media_type)) = item_opt {
+                                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
+                                        let sid = series_id.unwrap_or(item_id.clone());
+                                        app.state.navigate(View::SeriesInfo);
+                                        app.load_series_info(&sid, cx);
+                                    } else {
+                                        app.play_item(&item_id, cx);
+                                    }
+                                }
+                            }
+                            View::Libraries => {
+                                let idx = app.state.libraries_selected;
+                                let lib_opt = app.state.libraries.get(idx).map(|l| {
+                                    (l.id.clone(), l.name.clone())
+                                });
+                                if let Some((lib_id, lib_name)) = lib_opt {
+                                    app.state.browser_library_id = lib_id;
+                                    app.state.browser_library_name = lib_name;
+                                    app.state.navigate(View::LibraryBrowser);
+                                    cx.notify();
+                                }
+                            }
+                            View::LibraryBrowser => {
+                                let idx = app.state.browser_selected;
+                                let item_opt = app.state.browser_items.get(idx).map(|i| {
+                                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
+                                });
+                                if let Some((item_id, series_id, media_type)) = item_opt {
+                                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
+                                        let sid = series_id.unwrap_or(item_id.clone());
+                                        app.state.navigate(View::SeriesInfo);
+                                        app.load_series_info(&sid, cx);
+                                    } else {
+                                        app.play_item(&item_id, cx);
+                                    }
+                                }
+                            }
+                            View::Favorites => {
+                                let idx = app.state.favorites_selected;
+                                let item_opt = app.state.favorites.get(idx).map(|i| {
+                                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
+                                });
+                                if let Some((item_id, series_id, media_type)) = item_opt {
+                                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
+                                        let sid = series_id.unwrap_or(item_id.clone());
+                                        app.state.navigate(View::SeriesInfo);
+                                        app.load_series_info(&sid, cx);
+                                    } else {
+                                        app.play_item(&item_id, cx);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            });
+        });
+
+        let status_msg = self.state.status_msg.clone();
+        let status_kind = self.state.status_kind.clone();
+
+        let view_element: AnyElement = match self.state.view {
             View::Login => {
                 let this = cx.entity();
                 LoginView::new(
@@ -791,7 +1013,7 @@ impl Render for RembyApp {
                     cx.spawn({
                         let this = this.clone();
                         async move |_window, cx| {
-                            let _ = cx.update_entity(&this, |app, cx| {
+                            cx.update_entity(&this, |app, cx| {
                                 app.load_libraries_data(cx);
                             });
                         }
@@ -806,7 +1028,7 @@ impl Render for RembyApp {
                     cx.spawn({
                         let this = this.clone();
                         async move |_window, cx| {
-                            let _ = cx.update_entity(&this, |app, cx| {
+                            cx.update_entity(&this, |app, cx| {
                                 app.load_browser_data(cx);
                             });
                         }
@@ -825,7 +1047,7 @@ impl Render for RembyApp {
                     cx.spawn({
                         let this = this.clone();
                         async move |_window, cx| {
-                            let _ = cx.update_entity(&this, |app, cx| {
+                            cx.update_entity(&this, |app, cx| {
                                 app.load_player_sources(cx);
                             });
                         }
@@ -844,7 +1066,7 @@ impl Render for RembyApp {
                     cx.spawn({
                         let this = this.clone();
                         async move |_window, cx| {
-                            let _ = cx.update_entity(&this, |app, cx| {
+                            cx.update_entity(&this, |app, cx| {
                                 app.load_favorites(cx);
                             });
                         }
@@ -866,7 +1088,7 @@ impl Render for RembyApp {
                         let this = this.clone();
                         let series_id = series_id.clone();
                         async move |_window, cx| {
-                            let _ = cx.update_entity(&this, |app, cx| {
+                            cx.update_entity(&this, |app, cx| {
                                 app.load_series_episodes(&series_id, &section, cx);
                             });
                         }
@@ -875,6 +1097,38 @@ impl Render for RembyApp {
                 }
                 SeriesView::new(this.downgrade()).into_any_element()
             }
-        }
+        };
+
+        let has_toast = !status_msg.is_empty();
+        let toast_bg = match status_kind {
+            crate::state::StatusKind::Info => cx.theme().info.opacity(0.15),
+            crate::state::StatusKind::Success => cx.theme().success.opacity(0.15),
+            crate::state::StatusKind::Error => cx.theme().danger.opacity(0.15),
+            crate::state::StatusKind::Loading => cx.theme().muted.opacity(0.15),
+        };
+        let toast_border = match status_kind {
+            crate::state::StatusKind::Info => cx.theme().info,
+            crate::state::StatusKind::Success => cx.theme().success,
+            crate::state::StatusKind::Error => cx.theme().danger,
+            crate::state::StatusKind::Loading => cx.theme().muted,
+        };
+        v_flex()
+            .size_full()
+            .when(has_toast, |this| {
+                this.child(
+                    div()
+                        .px_4()
+                        .py_2()
+                        .rounded(cx.theme().radius)
+                        .mx_2()
+                        .mt_2()
+                        .bg(toast_bg)
+                        .border_1()
+                        .border_color(toast_border)
+                        .text_sm()
+                        .child(status_msg),
+                )
+            })
+            .child(view_element)
     }
 }

@@ -18,6 +18,7 @@ pub fn apply_remby_theme(cx: &mut gpui::App, theme_name: &str) {
     apply_color_map(theme, accent, text, muted, warning, success, error, selection_fg);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_color_map(
     theme: &mut Theme,
     accent: Hsla,
@@ -37,10 +38,10 @@ fn apply_color_map(
     theme.primary_foreground = selection_fg;
     theme.primary_hover = accent.opacity(0.85);
     theme.primary_active = accent.darken(0.15);
-    theme.button_primary = accent.into();
+    theme.button_primary = accent;
     theme.button_primary_foreground = selection_fg;
-    theme.button_primary_hover = accent.opacity(0.85).into();
-    theme.button_primary_active = accent.darken(0.15).into();
+    theme.button_primary_hover = accent.opacity(0.85);
+    theme.button_primary_active = accent.darken(0.15);
 
     theme.accent = accent;
     theme.accent_foreground = selection_fg;
@@ -50,37 +51,37 @@ fn apply_color_map(
 
     theme.warning = warning;
     theme.warning_foreground = selection_fg;
-    theme.warning_hover = warning.opacity(0.85).into();
-    theme.warning_active = warning.darken(0.15).into();
-    theme.button_warning = warning.mix_oklab(transparent, 0.2).into();
+    theme.warning_hover = warning.opacity(0.85);
+    theme.warning_active = warning.darken(0.15);
+    theme.button_warning = warning.mix_oklab(transparent, 0.2);
     theme.button_warning_foreground = warning;
-    theme.button_warning_hover = warning.mix_oklab(transparent, 0.3).into();
-    theme.button_warning_active = warning.mix_oklab(transparent, 0.4).into();
+    theme.button_warning_hover = warning.mix_oklab(transparent, 0.3);
+    theme.button_warning_active = warning.mix_oklab(transparent, 0.4);
 
     theme.success = success;
     theme.success_foreground = selection_fg;
-    theme.success_hover = success.opacity(0.85).into();
-    theme.success_active = success.darken(0.15).into();
-    theme.button_success = success.mix_oklab(transparent, 0.2).into();
+    theme.success_hover = success.opacity(0.85);
+    theme.success_active = success.darken(0.15);
+    theme.button_success = success.mix_oklab(transparent, 0.2);
     theme.button_success_foreground = success;
-    theme.button_success_hover = success.mix_oklab(transparent, 0.3).into();
-    theme.button_success_active = success.mix_oklab(transparent, 0.4).into();
+    theme.button_success_hover = success.mix_oklab(transparent, 0.3);
+    theme.button_success_active = success.mix_oklab(transparent, 0.4);
 
     theme.danger = error;
     theme.danger_foreground = selection_fg;
-    theme.danger_hover = error.opacity(0.85).into();
-    theme.danger_active = error.darken(0.15).into();
-    theme.button_danger = error.mix_oklab(transparent, 0.2).into();
+    theme.danger_hover = error.opacity(0.85);
+    theme.danger_active = error.darken(0.15);
+    theme.button_danger = error.mix_oklab(transparent, 0.2);
     theme.button_danger_foreground = error;
-    theme.button_danger_hover = error.mix_oklab(transparent, 0.3).into();
-    theme.button_danger_active = error.mix_oklab(transparent, 0.4).into();
+    theme.button_danger_hover = error.mix_oklab(transparent, 0.3);
+    theme.button_danger_active = error.mix_oklab(transparent, 0.4);
 
     theme.info = accent;
     theme.info_foreground = selection_fg;
-    theme.button_info = accent.mix_oklab(transparent, 0.2).into();
+    theme.button_info = accent.mix_oklab(transparent, 0.2);
     theme.button_info_foreground = accent;
-    theme.button_info_hover = accent.mix_oklab(transparent, 0.3).into();
-    theme.button_info_active = accent.mix_oklab(transparent, 0.4).into();
+    theme.button_info_hover = accent.mix_oklab(transparent, 0.3);
+    theme.button_info_active = accent.mix_oklab(transparent, 0.4);
 
     theme.border = muted;
     theme.input = muted;
@@ -89,7 +90,7 @@ fn apply_color_map(
     theme.link_active = accent;
     theme.link_hover = accent;
 
-    theme.selection = accent.opacity(0.25).into();
+    theme.selection = accent.opacity(0.25);
 
     theme.tokens = ThemeTokens::from(&theme.colors);
 }

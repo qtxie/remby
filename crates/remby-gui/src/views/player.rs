@@ -301,7 +301,7 @@ impl RenderOnce for PlayerView {
 
             if has_resume {
                 let app_wr = self.app.clone();
-                let item_id_r = item.id.clone();
+                let _item_id_r = item.id.clone();
                 let resume_s = resume_secs.unwrap_or(0.0);
                 play_buttons.push(
                     Button::new("resume-btn")
