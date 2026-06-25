@@ -5,7 +5,7 @@ use gpui_component::scroll::ScrollableElement;
 
 use crate::app::RembyApp;
 use crate::views::components::badge::BadgeVariant;
-use crate::views::components::{LoadingIndicator, MediaCard};
+use crate::views::components::{ContinueWatchingCard, LoadingIndicator, MediaCard};
 
 #[derive(IntoElement)]
 pub struct HomeView {
@@ -56,9 +56,9 @@ impl RenderOnce for HomeView {
                         div()
                             .text_lg()
                             .font_bold()
-                            .child("Continue Watching"),
+                            .child("继续观看"),
                     )
-                    .child(horizontal_row(continue_watching, poster_cache.clone(), app_entity.clone()))
+                    .child(continue_watching_row(continue_watching, poster_cache.clone(), app_entity.clone()))
                     .into_any_element(),
             );
         }
@@ -66,14 +66,27 @@ impl RenderOnce for HomeView {
         if !latest_items.is_empty() {
             sections.push(
                 v_flex()
-                    .gap_2()
+                    .gap_3()
                     .child(
-                        div()
-                            .text_lg()
-                            .font_bold()
-                            .child("Latest"),
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_bold()
+                                    .child("最新 电影")
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().primary)
+                                    .cursor_pointer()
+                                    .hover(|this| this.opacity(0.8))
+                                    .child("查看全部 →")
+                            )
                     )
-                    .child(horizontal_row(latest_items, poster_cache.clone(), app_entity.clone()))
+                    .child(latest_movies_row(latest_items, poster_cache.clone(), app_entity.clone()))
                     .into_any_element(),
             );
         }
@@ -86,7 +99,7 @@ impl RenderOnce for HomeView {
                         div()
                             .text_lg()
                             .font_bold()
-                            .child("Following Updates"),
+                            .child("关注更新"),
                     )
                     .child(horizontal_row(following_updates, poster_cache, app_entity))
                     .into_any_element(),
@@ -109,6 +122,70 @@ impl RenderOnce for HomeView {
             .children(sections)
             .into_any_element()
     }
+}
+
+fn continue_watching_row(items: Vec<remby_core::emby::MediaItem>, poster_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>, app: WeakEntity<RembyApp>) -> impl IntoElement {
+    h_flex()
+        .gap_4()
+        .overflow_x_scrollbar()
+        .children(items.into_iter().map(move |item| {
+            let subtitle = item
+                .series_name
+                .clone()
+                .or_else(|| item.media_type.clone())
+                .unwrap_or_default();
+            let progress = item.user_data.as_ref().and_then(|u| {
+                let pos = u.playback_position_ticks?;
+                let dur = item.runtime_ticks?;
+                if dur > 0 { Some((pos as f32) / (dur as f32)) } else { None }
+            });
+            let item_id = item.id.clone();
+            let app = app.clone();
+            ContinueWatchingCard::new(&item.id, &item.name)
+                .subtitle(subtitle)
+                .image(poster_cache.get(&item.id).cloned())
+                .when_some(progress, |card, p| card.progress(p))
+                .on_click(move |_window, cx| {
+                    if let Some(app) = app.upgrade() {
+                        cx.update_entity(&app, |app, cx| {
+                            app.play_item(&item_id, cx);
+                        });
+                    }
+                })
+        }))
+}
+
+fn latest_movies_row(items: Vec<remby_core::emby::MediaItem>, poster_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>, app: WeakEntity<RembyApp>) -> impl IntoElement {
+    h_flex()
+        .gap_4()
+        .overflow_x_scrollbar()
+        .children(items.into_iter().map(move |item| {
+            let subtitle = item
+                .series_name
+                .clone()
+                .or_else(|| item.media_type.clone())
+                .unwrap_or_default();
+            let badge_text: Option<&str> = match item.item_type.as_str() {
+                "Movie" => Some("Movie"),
+                "Series" => Some("Series"),
+                "Episode" => Some("Ep"),
+                _ => None,
+            };
+            let item_id = item.id.clone();
+            let app = app.clone();
+            MediaCard::new(&item.id)
+                .title(&item.name)
+                .subtitle(subtitle)
+                .poster_image(poster_cache.get(&item.id).cloned())
+                .when_some(badge_text, |card, text| card.badge(text, BadgeVariant::Default))
+                .on_click(move |_window, cx| {
+                    if let Some(app) = app.upgrade() {
+                        cx.update_entity(&app, |app, cx| {
+                            app.play_item(&item_id, cx);
+                        });
+                    }
+                })
+        }))
 }
 
 fn horizontal_row(items: Vec<remby_core::emby::MediaItem>, poster_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>, app: WeakEntity<RembyApp>) -> impl IntoElement {

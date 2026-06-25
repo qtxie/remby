@@ -22,6 +22,21 @@ pub enum StatusKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomeTab {
+    Home,
+    Favorites,
+}
+
+impl HomeTab {
+    pub fn label(&self) -> &'static str {
+        match self {
+            HomeTab::Home => "主页",
+            HomeTab::Favorites => "喜欢",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsTab {
     Libraries,
     MpvPath,
@@ -140,6 +155,9 @@ pub struct GuiState {
     pub status_msg: String,
     pub status_kind: StatusKind,
 
+    // Home tabs
+    pub home_tab: HomeTab,
+
     // Home data
     pub continue_watching: Vec<MediaItem>,
     pub latest_items: Vec<MediaItem>,
@@ -226,6 +244,8 @@ impl GuiState {
 
             view: View::Login,
             view_stack: Vec::new(),
+
+            home_tab: HomeTab::Home,
 
             loading: false,
             loading_msg: String::new(),

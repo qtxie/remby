@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::*;
-use gpui::prelude::FluentBuilder;
+use gpui::prelude::*;
 use gpui_component::*;
 use gpui_component::input::{InputState, InputEvent};
 
@@ -997,6 +997,7 @@ impl RembyApp {
         if self.state.client.is_none() { return; }
         let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
         if is_input { return; }
+        self.state.home_tab = crate::state::HomeTab::Home;
         self.state.navigate(View::Home);
         cx.notify();
     }
@@ -1152,7 +1153,61 @@ impl Render for RembyApp {
                             )
                     )
                     .child(div().flex_1())
-                    // Placeholder for tabs (Task 6 will add real tabs)
+                    .child({
+                        let home_tab = self.state.home_tab;
+                        let app_weak = cx.entity().downgrade();
+                        let app_weak2 = cx.entity().downgrade();
+                        h_flex()
+                            .gap_2()
+                            .child({
+                                let is_active = home_tab == crate::state::HomeTab::Home;
+                                let app = app_weak.clone();
+                                h_flex()
+                                    .id("tab-home")
+                                    .items_center()
+                                    .px_4()
+                                    .py_1_5()
+                                    .rounded_full()
+                                    .text_sm()
+                                    .font_medium()
+                                    .cursor_pointer()
+                                    .when(is_active, |this| this.bg(cx.theme().primary).text_color(gpui::white()))
+                                    .when(!is_active, |this| this.text_color(cx.theme().foreground).hover(|this| this.bg(cx.theme().muted)))
+                                    .child("主页")
+                                    .on_click(move |_event, _window, cx| {
+                                        if let Some(app) = app.upgrade() {
+                                            cx.update_entity(&app, |app, _cx| {
+                                                app.state.home_tab = crate::state::HomeTab::Home;
+                                                app.state.navigate(crate::state::View::Home);
+                                            });
+                                        }
+                                    })
+                            })
+                            .child({
+                                let is_active = home_tab == crate::state::HomeTab::Favorites;
+                                let app = app_weak2;
+                                h_flex()
+                                    .id("tab-favorites")
+                                    .items_center()
+                                    .px_4()
+                                    .py_1_5()
+                                    .rounded_full()
+                                    .text_sm()
+                                    .font_medium()
+                                    .cursor_pointer()
+                                    .when(is_active, |this| this.bg(cx.theme().primary).text_color(gpui::white()))
+                                    .when(!is_active, |this| this.text_color(cx.theme().foreground).hover(|this| this.bg(cx.theme().muted)))
+                                    .child("喜欢")
+                                    .on_click(move |_event, _window, cx| {
+                                        if let Some(app) = app.upgrade() {
+                                            cx.update_entity(&app, |app, _cx| {
+                                                app.state.home_tab = crate::state::HomeTab::Favorites;
+                                                app.state.navigate(crate::state::View::Favorites);
+                                            });
+                                        }
+                                    })
+                            })
+                    })
                     .child(div().flex_1())
                     .child(
                         h_flex()
