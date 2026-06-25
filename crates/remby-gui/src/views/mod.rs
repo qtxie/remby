@@ -4,3 +4,4 @@ pub mod home;
 pub mod libraries;
 pub mod login;
 pub mod player;
+pub mod settings;

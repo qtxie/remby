@@ -21,6 +21,15 @@ pub enum StatusKind {
     Loading,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsTab {
+    Libraries,
+    MpvPath,
+    Language,
+    Theme,
+    TrackPreferences,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SeriesSection {
     Seasons,
@@ -196,6 +205,7 @@ pub struct GuiState {
 
     // Config
     pub config: RembyConfig,
+    pub settings_tab: SettingsTab,
 
     // Login
     pub login_server: String,
@@ -266,6 +276,7 @@ impl GuiState {
             player_media_source_id: String::new(),
 
             config: RembyConfig::default(),
+            settings_tab: SettingsTab::Libraries,
 
             login_server: String::new(),
             login_username: String::new(),

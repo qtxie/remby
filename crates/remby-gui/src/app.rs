@@ -8,6 +8,7 @@ use crate::views::home::HomeView;
 use crate::views::libraries::LibrariesView;
 use crate::views::login::LoginView;
 use crate::views::player::PlayerView;
+use crate::views::settings::SettingsView;
 
 pub struct RembyApp {
     pub state: GuiState,
@@ -15,6 +16,7 @@ pub struct RembyApp {
     username_input: Entity<InputState>,
     password_input: Entity<InputState>,
     browser_search_input: Entity<InputState>,
+    mpv_path_input: Entity<InputState>,
     player_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
@@ -24,6 +26,7 @@ impl RembyApp {
         username_input: Entity<InputState>,
         password_input: Entity<InputState>,
         browser_search_input: Entity<InputState>,
+        mpv_path_input: Entity<InputState>,
         _cx: &mut Context<Self>,
     ) -> Self {
         let mut state = GuiState::new();
@@ -35,6 +38,7 @@ impl RembyApp {
             username_input,
             password_input,
             browser_search_input,
+            mpv_path_input,
             player_stop_tx: None,
         }
     }
@@ -648,6 +652,10 @@ impl Render for RembyApp {
                     .detach();
                 }
                 PlayerView::new(this.downgrade()).into_any_element()
+            }
+            View::Settings => {
+                let this = cx.entity();
+                SettingsView::new(this.downgrade(), self.mpv_path_input.clone()).into_any_element()
             }
             _ => div()
                 .size_full()
