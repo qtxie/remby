@@ -249,12 +249,18 @@ impl RembyApp {
         });
         cx.spawn(async move |_window, cx| {
             if let Ok((cw, latest, following)) = rx.await {
-                cx.update_entity(&this, |app, _cx| {
+                cx.update_entity(&this, |app, cx| {
                     app.state.continue_watching = cw;
                     app.state.latest_items = latest;
                     app.state.following_updates = following;
                     app.state.loading = false;
                     app.state.loading_msg.clear();
+                    let ids: Vec<String> = app.state.continue_watching.iter()
+                        .chain(app.state.latest_items.iter())
+                        .chain(app.state.following_updates.iter())
+                        .map(|i| i.id.clone())
+                        .collect();
+                    app.load_posters(ids, cx);
                 });
             } else {
                 cx.update_entity(&this, |app, _cx| {
@@ -290,11 +296,13 @@ impl RembyApp {
         });
         cx.spawn(async move |_window, cx| {
             if let Ok((libraries, latest)) = rx.await {
-                cx.update_entity(&this, |app, _cx| {
+                cx.update_entity(&this, |app, cx| {
                     app.state.libraries = libraries;
                     app.state.latest_items = latest;
                     app.state.loading = false;
                     app.state.loading_msg.clear();
+                    let ids: Vec<String> = app.state.latest_items.iter().map(|i| i.id.clone()).collect();
+                    app.load_posters(ids, cx);
                 });
             } else {
                 cx.update_entity(&this, |app, _cx| {
@@ -356,13 +364,15 @@ impl RembyApp {
         });
         cx.spawn(async move |_window, cx| {
             if let Ok(((total, items), genres, tags, studios)) = rx.await {
-                cx.update_entity(&this, |app, _cx| {
+                cx.update_entity(&this, |app, cx| {
                     app.state.browser_items = items;
                     app.state.browser_total = total;
                     app.state.browser_available_genres = genres;
                     app.state.browser_available_tags = tags;
                     app.state.browser_available_studios = studios;
                     app.state.loading = false;
+                    let ids: Vec<String> = app.state.browser_items.iter().map(|i| i.id.clone()).collect();
+                    app.load_posters(ids, cx);
                 });
             } else {
                 cx.update_entity(&this, |app, _cx| {
@@ -700,9 +710,11 @@ impl RembyApp {
         });
         cx.spawn(async move |_window, cx| {
             if let Ok(favs) = rx.await {
-                cx.update_entity(&this, |app, _cx| {
+                cx.update_entity(&this, |app, cx| {
                     app.state.favorites = favs;
                     app.state.loading = false;
+                    let ids: Vec<String> = app.state.favorites.iter().map(|i| i.id.clone()).collect();
+                    app.load_posters(ids, cx);
                 });
             } else {
                 cx.update_entity(&this, |app, _cx| {
