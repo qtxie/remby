@@ -14,3 +14,4 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "1d217ee3
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
+uuid = { version = "1", features = ["v4"] }

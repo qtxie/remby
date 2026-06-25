@@ -5953,6 +5953,7 @@ dependencies = [
  "gpui_platform",
  "remby-core",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
