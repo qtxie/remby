@@ -4,10 +4,12 @@ use gpui_component::input::InputState;
 
 use crate::state::{GuiState, View};
 use crate::views::browser::BrowserView;
+use crate::views::favorites::FavoritesView;
 use crate::views::home::HomeView;
 use crate::views::libraries::LibrariesView;
 use crate::views::login::LoginView;
 use crate::views::player::PlayerView;
+use crate::views::series::SeriesView;
 use crate::views::settings::SettingsView;
 
 pub struct RembyApp {
@@ -573,6 +575,183 @@ impl RembyApp {
         self.state.player_media_source_id.clear();
     }
 
+    pub fn load_favorites(&mut self, cx: &mut Context<Self>) {
+        if self.state.client.is_none() {
+            return;
+        }
+        self.state.loading = true;
+
+        let this = cx.entity();
+        cx.spawn(async move |_window, cx| {
+            let result = async {
+                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
+                let page = client.get_favorites(0, 100).await.ok();
+                Some(page.map(|p| p.items).unwrap_or_default())
+            }
+            .await;
+
+            let _ = cx.update_entity(&this, |app, _cx| {
+                if let Some(favs) = result {
+                    app.state.favorites = favs;
+                }
+                app.state.loading = false;
+            });
+        })
+        .detach();
+    }
+
+    pub fn load_series_info(
+        &mut self,
+        series_id: &str,
+        cx: &mut Context<Self>,
+    ) {
+        if self.state.client.is_none() {
+            return;
+        }
+        self.state.loading = true;
+        let series_id = series_id.to_string();
+
+        let this = cx.entity();
+        cx.spawn(async move |_window, cx| {
+            let result = async {
+                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
+                let item = client.get_item_detail(&series_id).await.ok();
+                let seasons = client.get_seasons(&series_id).await.unwrap_or_default();
+                let similar = client.get_similar(&series_id).await.unwrap_or_default();
+                Some((item, seasons, similar))
+            }
+            .await;
+
+            let _ = cx.update_entity(&this, |app, _cx| {
+                if let Some((item, seasons, similar)) = result {
+                    app.state.series_item = item;
+                    app.state.series_seasons = seasons;
+                    app.state.series_similar = similar;
+                }
+                app.state.loading = false;
+            });
+        })
+        .detach();
+    }
+
+    pub fn load_series_episodes(
+        &mut self,
+        series_id: &str,
+        section: &crate::state::SeriesSection,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::state::SeriesSection;
+
+        if self.state.client.is_none() {
+            return;
+        }
+        self.state.loading = true;
+        let series_id = series_id.to_string();
+        let section = section.clone();
+
+        let this = cx.entity();
+        cx.spawn(async move |_window, cx| {
+            let result = async {
+                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
+                match section {
+                    SeriesSection::Seasons => {
+                        let seasons = client.get_seasons(&series_id).await.unwrap_or_default();
+                        Some((None, Some(seasons), None))
+                    }
+                    SeriesSection::Episodes => {
+                        let episodes = client.get_episodes(&series_id).await.unwrap_or_default();
+                        Some((None, None, Some(episodes.0)))
+                    }
+                    SeriesSection::Similar => {
+                        let _similar = client.get_similar(&series_id).await.unwrap_or_default();
+                        Some((None, None, None))
+                    }
+                }
+            }
+            .await;
+
+            let _ = cx.update_entity(&this, |app, _cx| {
+                if let Some((item_opt, seasons_opt, episodes_opt)) = result {
+                    if let Some(item) = item_opt {
+                        app.state.series_item = Some(item);
+                    }
+                    if let Some(seasons) = seasons_opt {
+                        app.state.series_seasons = seasons;
+                    }
+                    if let Some(episodes) = episodes_opt {
+                        app.state.series_episodes = episodes;
+                    }
+                }
+                app.state.loading = false;
+            });
+        })
+        .detach();
+    }
+
+    pub fn toggle_favorite(
+        &mut self,
+        item_id: &str,
+        is_favorite: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.state.client.is_none() {
+            return;
+        }
+        let item_id = item_id.to_string();
+        let this = cx.entity();
+        cx.spawn(async move |_window, cx| {
+            let result = async {
+                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
+                client.toggle_favorite(&item_id, is_favorite).await.ok();
+                let item = client.get_item_detail(&item_id).await.ok();
+                Some(item)
+            }
+            .await;
+
+            let _ = cx.update_entity(&this, |app, _cx| {
+                if let Some(Some(updated_item)) = result {
+                    if let Some(ref mut si) = app.state.series_item {
+                        if si.id == item_id {
+                            *si = updated_item.clone();
+                        }
+                    }
+                    app.state
+                        .favorites
+                        .retain(|i| i.id != item_id);
+                    if is_favorite {
+                        app.state.favorites.push(updated_item);
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub fn play_item(&mut self, item_id: &str, cx: &mut Context<Self>) {
+        if self.state.client.is_none() {
+            return;
+        }
+        let item_id = item_id.to_string();
+        let this = cx.entity();
+        cx.spawn(async move |_window, cx| {
+            let result = async {
+                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
+                let item = client.get_item_detail(&item_id).await.ok();
+                Some(item)
+            }
+            .await;
+
+            let _ = cx.update_entity(&this, |app, cx| {
+                if let Some(Some(item)) = result {
+                    app.state.playing_item = Some(item);
+                    app.state.navigate(View::Player);
+                    app.load_player_sources(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
     fn view_label(&self) -> &str {
         match self.state.view {
             View::Login => "Login",
@@ -657,13 +836,43 @@ impl Render for RembyApp {
                 let this = cx.entity();
                 SettingsView::new(this.downgrade(), self.mpv_path_input.clone()).into_any_element()
             }
-            _ => div()
-                .size_full()
-                .v_flex()
-                .items_center()
-                .justify_center()
-                .child(format!("remby - {}", self.view_label()))
-                .into_any_element(),
+            View::Favorites => {
+                let this = cx.entity();
+                if self.state.favorites.is_empty() && !self.state.loading {
+                    cx.spawn({
+                        let this = this.clone();
+                        async move |_window, cx| {
+                            let _ = cx.update_entity(&this, |app, cx| {
+                                app.load_favorites(cx);
+                            });
+                        }
+                    })
+                    .detach();
+                }
+                FavoritesView::new(this.downgrade()).into_any_element()
+            }
+            View::SeriesInfo => {
+                let this = cx.entity();
+                if self.state.series_seasons.is_empty()
+                    && self.state.series_episodes.is_empty()
+                    && self.state.series_item.is_some()
+                    && !self.state.loading
+                {
+                    let series_id = self.state.series_item.as_ref().map(|i| i.id.clone()).unwrap_or_default();
+                    let section = self.state.series_section.clone();
+                    cx.spawn({
+                        let this = this.clone();
+                        let series_id = series_id.clone();
+                        async move |_window, cx| {
+                            let _ = cx.update_entity(&this, |app, cx| {
+                                app.load_series_episodes(&series_id, &section, cx);
+                            });
+                        }
+                    })
+                    .detach();
+                }
+                SeriesView::new(this.downgrade()).into_any_element()
+            }
         }
     }
 }

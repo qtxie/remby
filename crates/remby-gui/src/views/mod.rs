@@ -1,7 +1,9 @@
 pub mod browser;
 pub mod components;
+pub mod favorites;
 pub mod home;
 pub mod libraries;
 pub mod login;
 pub mod player;
+pub mod series;
 pub mod settings;
