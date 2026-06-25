@@ -1194,18 +1194,6 @@ impl Render for RembyApp {
         };
 
         let has_toast = !status_msg.is_empty();
-        let toast_bg = match status_kind {
-            crate::state::StatusKind::Info => cx.theme().info.opacity(0.15),
-            crate::state::StatusKind::Success => cx.theme().success.opacity(0.15),
-            crate::state::StatusKind::Error => cx.theme().danger.opacity(0.15),
-            crate::state::StatusKind::Loading => cx.theme().muted.opacity(0.15),
-        };
-        let toast_border = match status_kind {
-            crate::state::StatusKind::Info => cx.theme().info,
-            crate::state::StatusKind::Success => cx.theme().success,
-            crate::state::StatusKind::Error => cx.theme().danger,
-            crate::state::StatusKind::Loading => cx.theme().muted,
-        };
         let sidebar = if !matches!(self.state.view, View::Login) {
             let this = cx.entity();
             Some(
@@ -1275,17 +1263,7 @@ impl Render for RembyApp {
             .on_action(cx.listener(Self::handle_navigate_home))
             .when(has_toast, |this| {
                 this.child(
-                    div()
-                        .px_4()
-                        .py_2()
-                        .rounded(cx.theme().radius)
-                        .mx_2()
-                        .mt_2()
-                        .bg(toast_bg)
-                        .border_1()
-                        .border_color(toast_border)
-                        .text_sm()
-                        .child(status_msg),
+                    crate::views::components::toast::Toast::new(status_msg, status_kind)
                 )
             })
             .when_some(header, |this, header| this.child(header))

@@ -3,6 +3,7 @@ use gpui_component::*;
 
 use crate::state::StatusKind;
 
+#[derive(IntoElement)]
 pub struct Toast {
     message: String,
     kind: StatusKind,
