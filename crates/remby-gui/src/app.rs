@@ -3,6 +3,7 @@ use gpui_component::*;
 use gpui_component::input::InputState;
 
 use crate::state::{GuiState, View};
+use crate::views::home::HomeView;
 use crate::views::login::LoginView;
 
 pub struct RembyApp {
@@ -45,9 +46,10 @@ impl RembyApp {
             match remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await
             {
                 Ok(client) => {
-                    let _ = cx.update_entity(&this, |app, _cx| {
+                    let _ = cx.update_entity(&this, |app, cx| {
                         app.state.client = Some(client);
                         app.state.navigate(View::Home);
+                        app.load_home_data(cx);
                     });
                 }
                 Err(e) => {
@@ -57,6 +59,58 @@ impl RembyApp {
                     });
                 }
             }
+        })
+        .detach();
+    }
+
+    fn load_home_data(&mut self, cx: &mut Context<Self>) {
+        if self.state.client.is_none() {
+            return;
+        }
+        self.state.loading = true;
+        self.state.loading_msg = "Loading home data...".into();
+
+        let this = cx.entity();
+        cx.spawn(async move |_window, cx| {
+            let _ = cx.update_entity(&this, |app, _cx| {
+                app.state.loading_msg = "Loading continue watching...".into();
+            });
+
+            let result = async {
+                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
+                let cw = client.get_resume_items(20).await.unwrap_or_default();
+
+                let _ = cx.update_entity(&this, |app, _cx| {
+                    app.state.continue_watching = cw;
+                    app.state.loading_msg = "Loading latest items...".into();
+                });
+
+                let latest = client.get_latest_items(20).await.unwrap_or_default();
+
+                let _ = cx.update_entity(&this, |app, _cx| {
+                    app.state.latest_items = latest;
+                    app.state.loading_msg = "Loading following updates...".into();
+                });
+
+                let following = client
+                    .get_latest_items(20)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|item| item.series_id.is_some())
+                    .collect();
+
+                Some(following)
+            }
+            .await;
+
+            let _ = cx.update_entity(&this, |app, _cx| {
+                if let Some(following) = result {
+                    app.state.following_updates = following;
+                }
+                app.state.loading = false;
+                app.state.loading_msg.clear();
+            });
         })
         .detach();
     }
@@ -87,6 +141,10 @@ impl Render for RembyApp {
                     this.downgrade(),
                 )
                 .into_any_element()
+            }
+            View::Home => {
+                let this = cx.entity();
+                HomeView::new(this.downgrade()).into_any_element()
             }
             _ => div()
                 .size_full()

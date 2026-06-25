@@ -1,6 +1,7 @@
 use gpui::*;
 use gpui_component::*;
 
+#[derive(IntoElement)]
 pub struct MediaCard {
     id: SharedString,
     title: SharedString,

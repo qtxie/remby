@@ -2,6 +2,7 @@ use gpui::*;
 use gpui_component::*;
 use gpui_component::spinner::Spinner;
 
+#[derive(IntoElement)]
 pub struct LoadingIndicator {
     message: String,
 }
