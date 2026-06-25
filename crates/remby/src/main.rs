@@ -818,7 +818,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 let _ = client.report_playback_start(&item_id, &source_id, &session_id).await;
                                             });
                                         } else {
-                                            state.status_msg = Some(app::Message::error("remby_core::mpv::play failed".to_string()));
+                                            state.status_msg = Some(app::Message::error("mpv::play failed".to_string()));
                                         }
                                     }
                                 }
