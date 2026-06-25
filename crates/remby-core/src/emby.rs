@@ -230,6 +230,10 @@ impl EmbyClient {
         }
     }
 
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
     pub async fn authenticate(base_url: &str, username: &str, password: &str) -> Result<Self> {
         let url = format!("{}/Users/AuthenticateByName", base_url.trim_end_matches('/'));
         let body = json!({
