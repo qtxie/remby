@@ -10,6 +10,7 @@ pub struct MediaCard {
     subtitle: SharedString,
     poster_url: Option<String>,
     poster_image: Option<Arc<Image>>,
+    on_click: Option<Box<dyn Fn(&mut Window, &mut App)>>,
 }
 
 impl MediaCard {
@@ -20,6 +21,7 @@ impl MediaCard {
             subtitle: SharedString::default(),
             poster_url: None,
             poster_image: None,
+            on_click: None,
         }
     }
 
@@ -40,6 +42,11 @@ impl MediaCard {
 
     pub fn poster_image(mut self, image: Option<Arc<Image>>) -> Self {
         self.poster_image = image;
+        self
+    }
+
+    pub fn on_click(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Box::new(handler));
         self
     }
 }
@@ -71,14 +78,21 @@ impl RenderOnce for MediaCard {
                 )
         };
 
-        div()
+        let wrapper = div()
             .id(format!("{}-wrapper", self.id))
             .w(px(150.))
             .rounded_lg()
             .overflow_hidden()
             .cursor_pointer()
-            .hover(|this| this.opacity(0.9))
-            .child(
+            .hover(|this| this.opacity(0.9));
+
+        let wrapper = if let Some(handler) = self.on_click {
+            wrapper.on_click(move |_event: &ClickEvent, window, cx| handler(window, cx))
+        } else {
+            wrapper
+        };
+
+        wrapper.child(
                 v_flex()
                     .gap_2()
                     .child(poster_area)
