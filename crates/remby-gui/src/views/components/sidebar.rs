@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use gpui::*;
 use gpui_component::*;
 use gpui::prelude::FluentBuilder;
@@ -7,11 +9,20 @@ use crate::state::View;
 #[derive(IntoElement)]
 pub struct SidebarNav {
     current_view: View,
+    on_navigate: Option<Arc<dyn Fn(View, &mut Window, &mut App) + 'static>>,
 }
 
 impl SidebarNav {
     pub fn new(current_view: View) -> Self {
-        Self { current_view }
+        Self {
+            current_view,
+            on_navigate: None,
+        }
+    }
+
+    pub fn on_navigate(mut self, handler: impl Fn(View, &mut Window, &mut App) + 'static) -> Self {
+        self.on_navigate = Some(Arc::new(handler));
+        self
     }
 }
 
@@ -52,6 +63,7 @@ impl RenderOnce for SidebarNav {
                     .mt_2()
                     .children(nav_items.into_iter().map(move |(label, icon, view)| {
                         let is_active = self.current_view == view;
+                        let on_navigate = self.on_navigate.clone();
                         h_flex()
                             .id(label)
                             .w_full()
@@ -61,6 +73,7 @@ impl RenderOnce for SidebarNav {
                             .py_2()
                             .rounded(cx.theme().radius)
                             .text_sm()
+                            .cursor_pointer()
                             .when(is_active, |this| {
                                 this.bg(cx.theme().primary.opacity(0.1))
                                     .text_color(cx.theme().primary)
@@ -71,6 +84,11 @@ impl RenderOnce for SidebarNav {
                             })
                             .child(Icon::new(icon).small())
                             .child(div().child(label))
+                            .on_click(move |_event, window, cx| {
+                                if let Some(ref handler) = on_navigate {
+                                    handler(view.clone(), window, cx);
+                                }
+                            })
                     })),
             )
     }

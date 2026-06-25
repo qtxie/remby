@@ -1207,7 +1207,22 @@ impl Render for RembyApp {
             crate::state::StatusKind::Loading => cx.theme().muted,
         };
         let sidebar = if !matches!(self.state.view, View::Login) {
-            Some(SidebarNav::new(self.state.view.clone()))
+            let this = cx.entity();
+            Some(
+                SidebarNav::new(self.state.view.clone())
+                    .on_navigate(move |view, _window, cx| {
+                        this.update(cx, |app, cx| {
+                            app.state.navigate(view);
+                            match app.state.view {
+                                View::Home => app.load_home_data(cx),
+                                View::Libraries => app.load_libraries_data(cx),
+                                View::Favorites => app.load_favorites(cx),
+                                _ => {}
+                            }
+                            cx.notify();
+                        });
+                    }),
+            )
         } else {
             None
         };
