@@ -2,25 +2,7 @@ use gpui::Hsla;
 use gpui_component::{Colorize, Theme, ThemeTokens, hsl};
 use ratatui::style::Color;
 
-pub fn apply_remby_theme(cx: &mut gpui::App, theme_name: &str) {
-    let custom_themes = remby_core::config::load_themes();
-    let rt = remby_core::theme::Theme::by_name(theme_name, &custom_themes);
-
-    let accent = ratatui_to_hsla(rt.accent);
-    let text = ratatui_to_hsla(rt.text);
-    let muted = ratatui_to_hsla(rt.muted);
-    let warning = ratatui_to_hsla(rt.warning);
-    let success = ratatui_to_hsla(rt.success);
-    let error = ratatui_to_hsla(rt.error);
-    let selection_fg = ratatui_to_hsla(rt.selection_fg);
-
-    let theme = Theme::global_mut(cx);
-    apply_color_map(theme, accent, text, muted, warning, success, error, selection_fg);
-}
-
-#[allow(clippy::too_many_arguments)]
-fn apply_color_map(
-    theme: &mut Theme,
+struct RembyThemeColors {
     accent: Hsla,
     text: Hsla,
     muted: Hsla,
@@ -28,69 +10,96 @@ fn apply_color_map(
     success: Hsla,
     error: Hsla,
     selection_fg: Hsla,
-) {
+    background: Hsla,
+    card: Hsla,
+    border: Hsla,
+}
+
+pub fn apply_remby_theme(cx: &mut gpui::App, theme_name: &str) {
+    let custom_themes = remby_core::config::load_themes();
+    let rt = remby_core::theme::Theme::by_name(theme_name, &custom_themes);
+
+    let colors = RembyThemeColors {
+        accent: ratatui_to_hsla(rt.accent),
+        text: ratatui_to_hsla(rt.text),
+        muted: ratatui_to_hsla(rt.muted),
+        warning: ratatui_to_hsla(rt.warning),
+        success: ratatui_to_hsla(rt.success),
+        error: ratatui_to_hsla(rt.error),
+        selection_fg: ratatui_to_hsla(rt.selection_fg),
+        background: hsl(0., 0., 8.),
+        card: hsl(0., 0., 12.),
+        border: hsl(0., 0., 20.),
+    };
+
+    let theme = Theme::global_mut(cx);
+    apply_color_map(theme, &colors);
+}
+
+fn apply_color_map(theme: &mut Theme, c: &RembyThemeColors) {
     let transparent = gpui::transparent_black();
 
-    theme.foreground = text;
-    theme.background = hsl(0., 0., 8.);
+    theme.foreground = c.text;
+    theme.background = c.background;
 
-    theme.primary = accent;
-    theme.primary_foreground = selection_fg;
-    theme.primary_hover = accent.opacity(0.85);
-    theme.primary_active = accent.darken(0.15);
-    theme.button_primary = accent;
-    theme.button_primary_foreground = selection_fg;
-    theme.button_primary_hover = accent.opacity(0.85);
-    theme.button_primary_active = accent.darken(0.15);
+    theme.primary = c.accent;
+    theme.primary_foreground = c.selection_fg;
+    theme.primary_hover = c.accent.opacity(0.85);
+    theme.primary_active = c.accent.darken(0.15);
+    theme.button_primary = c.accent;
+    theme.button_primary_foreground = c.selection_fg;
+    theme.button_primary_hover = c.accent.opacity(0.85);
+    theme.button_primary_active = c.accent.darken(0.15);
 
-    theme.accent = accent;
-    theme.accent_foreground = selection_fg;
+    theme.accent = c.accent;
+    theme.accent_foreground = c.selection_fg;
 
-    theme.muted = muted;
-    theme.muted_foreground = text.opacity(0.6);
+    theme.muted = c.muted;
+    theme.muted_foreground = c.text.opacity(0.6);
 
-    theme.warning = warning;
-    theme.warning_foreground = selection_fg;
-    theme.warning_hover = warning.opacity(0.85);
-    theme.warning_active = warning.darken(0.15);
-    theme.button_warning = warning.mix_oklab(transparent, 0.2);
-    theme.button_warning_foreground = warning;
-    theme.button_warning_hover = warning.mix_oklab(transparent, 0.3);
-    theme.button_warning_active = warning.mix_oklab(transparent, 0.4);
+    theme.warning = c.warning;
+    theme.warning_foreground = c.selection_fg;
+    theme.warning_hover = c.warning.opacity(0.85);
+    theme.warning_active = c.warning.darken(0.15);
+    theme.button_warning = c.warning.mix_oklab(transparent, 0.2);
+    theme.button_warning_foreground = c.warning;
+    theme.button_warning_hover = c.warning.mix_oklab(transparent, 0.3);
+    theme.button_warning_active = c.warning.mix_oklab(transparent, 0.4);
 
-    theme.success = success;
-    theme.success_foreground = selection_fg;
-    theme.success_hover = success.opacity(0.85);
-    theme.success_active = success.darken(0.15);
-    theme.button_success = success.mix_oklab(transparent, 0.2);
-    theme.button_success_foreground = success;
-    theme.button_success_hover = success.mix_oklab(transparent, 0.3);
-    theme.button_success_active = success.mix_oklab(transparent, 0.4);
+    theme.success = c.success;
+    theme.success_foreground = c.selection_fg;
+    theme.success_hover = c.success.opacity(0.85);
+    theme.success_active = c.success.darken(0.15);
+    theme.button_success = c.success.mix_oklab(transparent, 0.2);
+    theme.button_success_foreground = c.success;
+    theme.button_success_hover = c.success.mix_oklab(transparent, 0.3);
+    theme.button_success_active = c.success.mix_oklab(transparent, 0.4);
 
-    theme.danger = error;
-    theme.danger_foreground = selection_fg;
-    theme.danger_hover = error.opacity(0.85);
-    theme.danger_active = error.darken(0.15);
-    theme.button_danger = error.mix_oklab(transparent, 0.2);
-    theme.button_danger_foreground = error;
-    theme.button_danger_hover = error.mix_oklab(transparent, 0.3);
-    theme.button_danger_active = error.mix_oklab(transparent, 0.4);
+    theme.danger = c.error;
+    theme.danger_foreground = c.selection_fg;
+    theme.danger_hover = c.error.opacity(0.85);
+    theme.danger_active = c.error.darken(0.15);
+    theme.button_danger = c.error.mix_oklab(transparent, 0.2);
+    theme.button_danger_foreground = c.error;
+    theme.button_danger_hover = c.error.mix_oklab(transparent, 0.3);
+    theme.button_danger_active = c.error.mix_oklab(transparent, 0.4);
 
-    theme.info = accent;
-    theme.info_foreground = selection_fg;
-    theme.button_info = accent.mix_oklab(transparent, 0.2);
-    theme.button_info_foreground = accent;
-    theme.button_info_hover = accent.mix_oklab(transparent, 0.3);
-    theme.button_info_active = accent.mix_oklab(transparent, 0.4);
+    theme.info = c.accent;
+    theme.info_foreground = c.selection_fg;
+    theme.button_info = c.accent.mix_oklab(transparent, 0.2);
+    theme.button_info_foreground = c.accent;
+    theme.button_info_hover = c.accent.mix_oklab(transparent, 0.3);
+    theme.button_info_active = c.accent.mix_oklab(transparent, 0.4);
 
-    theme.border = muted;
-    theme.input = muted;
+    theme.popover = c.card;
+    theme.border = c.border;
+    theme.input = c.muted;
 
-    theme.link = accent;
-    theme.link_active = accent;
-    theme.link_hover = accent;
+    theme.link = c.accent;
+    theme.link_active = c.accent;
+    theme.link_hover = c.accent;
 
-    theme.selection = accent.opacity(0.25);
+    theme.selection = c.accent.opacity(0.25);
 
     theme.tokens = ThemeTokens::from(&theme.colors);
 }
