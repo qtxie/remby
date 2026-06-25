@@ -29,10 +29,12 @@ impl RembyApp {
         password_input: Entity<InputState>,
         browser_search_input: Entity<InputState>,
         mpv_path_input: Entity<InputState>,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) -> Self {
         let mut state = GuiState::new();
         state.config = remby_core::config::load_config();
+
+        crate::theme_adapter::apply_remby_theme(cx, &state.config.theme);
 
         Self {
             state,

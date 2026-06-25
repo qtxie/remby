@@ -268,6 +268,7 @@ impl RenderOnce for SettingsView {
                                         app.state.config.theme = t.clone();
                                     });
                                 }
+                                crate::theme_adapter::apply_remby_theme(cx, &t);
                             })
                             .into_any_element()
                     })
@@ -417,11 +418,15 @@ impl RenderOnce for SettingsView {
                                     let mpv_val = cx.read_entity(&mpv_save, |s, _| {
                                         s.value().to_string()
                                     });
+                                    let theme_name = cx.read_entity(&app, |a, _| {
+                                        a.state.config.theme.clone()
+                                    });
                                     cx.update_entity(&app, |app, _cx| {
                                         app.state.config.mpv_path = mpv_val;
                                         let _ = remby_core::config::save_config(&app.state.config);
                                         app.state.status_msg = "Settings saved".into();
                                     });
+                                    crate::theme_adapter::apply_remby_theme(cx, &theme_name);
                                 }
                             }),
                     ),

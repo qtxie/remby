@@ -16,3 +16,4 @@ tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.13", features = ["rustls"], default-features = false }
+ratatui = "0.30"

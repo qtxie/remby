@@ -1,6 +1,7 @@
 mod app;
 mod image_loader;
 mod state;
+mod theme_adapter;
 mod views;
 
 use gpui::*;

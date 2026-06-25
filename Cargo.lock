@@ -5951,6 +5951,7 @@ dependencies = [
  "gpui",
  "gpui-component",
  "gpui_platform",
+ "ratatui",
  "remby-core",
  "reqwest",
  "tokio",
