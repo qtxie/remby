@@ -15,6 +15,19 @@ struct RembyThemeColors {
     border: Hsla,
 }
 
+pub fn apply_emby_theater_theme(cx: &mut gpui::App) {
+    let theme = Theme::global_mut(cx);
+    theme.background = hsl(210., 45., 22.);
+    theme.primary = hsl(110., 45., 50.);
+    theme.foreground = hsl(0., 0., 100.);
+    theme.muted_foreground = hsl(0., 0., 100.).opacity(0.6);
+    theme.border = hsl(0., 0., 100.).opacity(0.1);
+    theme.accent = hsl(110., 45., 50.);
+    theme.accent_foreground = hsl(0., 0., 100.);
+    theme.input = hsl(210., 45., 15.);
+    theme.tokens = ThemeTokens::from(&theme.colors);
+}
+
 pub fn apply_remby_theme(cx: &mut gpui::App, theme_name: &str) {
     let custom_themes = remby_core::config::load_themes();
     let rt = remby_core::theme::Theme::by_name(theme_name, &custom_themes);
