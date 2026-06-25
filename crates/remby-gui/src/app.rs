@@ -13,6 +13,7 @@ use crate::views::libraries::LibrariesView;
 use crate::views::login::LoginView;
 use crate::views::player::PlayerView;
 use crate::views::series::SeriesView;
+use crate::views::components::sidebar::SidebarNav;
 use crate::views::settings::SettingsView;
 
 #[derive(gpui::Action, Clone, PartialEq)]
@@ -1205,6 +1206,12 @@ impl Render for RembyApp {
             crate::state::StatusKind::Error => cx.theme().danger,
             crate::state::StatusKind::Loading => cx.theme().muted,
         };
+        let sidebar = if !matches!(self.state.view, View::Login) {
+            Some(SidebarNav::new(self.state.view.clone()))
+        } else {
+            None
+        };
+
         v_flex()
             .id("remby-app")
             .size_full()
@@ -1233,6 +1240,16 @@ impl Render for RembyApp {
                         .child(status_msg),
                 )
             })
-            .child(view_element)
+            .child(
+                h_flex()
+                    .flex_1()
+                    .when_some(sidebar, |this, sidebar| this.child(sidebar))
+                    .child(
+                        div()
+                            .flex_1()
+                            .h_full()
+                            .child(view_element),
+                    ),
+            )
     }
 }

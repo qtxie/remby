@@ -4,6 +4,7 @@ use gpui::prelude::FluentBuilder;
 
 use crate::state::View;
 
+#[derive(IntoElement)]
 pub struct SidebarNav {
     current_view: View,
 }

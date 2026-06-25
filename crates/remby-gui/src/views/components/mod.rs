@@ -1,7 +1,7 @@
 mod loading;
 mod media_card;
 mod search_bar;
-mod sidebar;
+pub mod sidebar;
 mod toast;
 
 pub use loading::LoadingIndicator;
