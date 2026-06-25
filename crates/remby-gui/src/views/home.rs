@@ -18,7 +18,7 @@ impl HomeView {
 
 impl RenderOnce for HomeView {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, continue_watching, latest_items, following_updates, app_entity) = self
+        let (loading, continue_watching, latest_items, following_updates, poster_cache, app_entity) = self
             .app
             .upgrade()
             .map(|app| {
@@ -28,11 +28,12 @@ impl RenderOnce for HomeView {
                         state.state.continue_watching.clone(),
                         state.state.latest_items.clone(),
                         state.state.following_updates.clone(),
+                        state.state.poster_cache.clone(),
                         app.downgrade(),
                     )
                 })
             })
-            .unwrap_or((false, vec![], vec![], vec![], self.app.clone()));
+            .unwrap_or((false, vec![], vec![], vec![], Default::default(), self.app.clone()));
 
         if loading {
             return v_flex()
@@ -55,7 +56,7 @@ impl RenderOnce for HomeView {
                             .font_bold()
                             .child("Continue Watching"),
                     )
-                    .child(horizontal_row(continue_watching, app_entity.clone()))
+                    .child(horizontal_row(continue_watching, poster_cache.clone(), app_entity.clone()))
                     .into_any_element(),
             );
         }
@@ -70,7 +71,7 @@ impl RenderOnce for HomeView {
                             .font_bold()
                             .child("Latest"),
                     )
-                    .child(horizontal_row(latest_items, app_entity.clone()))
+                    .child(horizontal_row(latest_items, poster_cache.clone(), app_entity.clone()))
                     .into_any_element(),
             );
         }
@@ -85,7 +86,7 @@ impl RenderOnce for HomeView {
                             .font_bold()
                             .child("Following Updates"),
                     )
-                    .child(horizontal_row(following_updates, app_entity))
+                    .child(horizontal_row(following_updates, poster_cache, app_entity))
                     .into_any_element(),
             );
         }
@@ -108,7 +109,7 @@ impl RenderOnce for HomeView {
     }
 }
 
-fn horizontal_row(items: Vec<remby_core::emby::MediaItem>, app: WeakEntity<RembyApp>) -> impl IntoElement {
+fn horizontal_row(items: Vec<remby_core::emby::MediaItem>, poster_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>, app: WeakEntity<RembyApp>) -> impl IntoElement {
     h_flex()
         .gap_4()
         .overflow_x_scrollbar()
@@ -123,6 +124,7 @@ fn horizontal_row(items: Vec<remby_core::emby::MediaItem>, app: WeakEntity<Remby
             MediaCard::new(&item.id)
                 .title(&item.name)
                 .subtitle(subtitle)
+                .poster_image(poster_cache.get(&item.id).cloned())
                 .on_click(move |_window, cx| {
                     if let Some(app) = app.upgrade() {
                         cx.update_entity(&app, |app, cx| {

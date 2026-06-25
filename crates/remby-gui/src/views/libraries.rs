@@ -19,7 +19,7 @@ impl LibrariesView {
 
 impl RenderOnce for LibrariesView {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, libraries, latest_items) = self
+        let (loading, libraries, latest_items, poster_cache) = self
             .app
             .upgrade()
             .map(|app| {
@@ -28,10 +28,11 @@ impl RenderOnce for LibrariesView {
                         state.state.loading,
                         state.state.libraries.clone(),
                         state.state.latest_items.clone(),
+                        state.state.poster_cache.clone(),
                     )
                 })
             })
-            .unwrap_or((false, vec![], vec![]));
+            .unwrap_or((false, vec![], vec![], Default::default()));
 
         if loading && libraries.is_empty() {
             return v_flex()
@@ -119,6 +120,7 @@ impl RenderOnce for LibrariesView {
                                 MediaCard::new(&item.id)
                                     .title(&item.name)
                                     .subtitle(subtitle)
+                                    .poster_image(poster_cache.get(&item.id).cloned())
                             })),
                     )
                     .into_any_element(),

@@ -17,15 +17,15 @@ impl FavoritesView {
 
 impl RenderOnce for FavoritesView {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, favorites) = self
+        let (loading, favorites, poster_cache) = self
             .app
             .upgrade()
             .map(|app| {
                 cx.read_entity(&app, |state, _| {
-                    (state.state.loading, state.state.favorites.clone())
+                    (state.state.loading, state.state.favorites.clone(), state.state.poster_cache.clone())
                 })
             })
-            .unwrap_or((false, vec![]));
+            .unwrap_or((false, vec![], Default::default()));
 
         if loading && favorites.is_empty() {
             return v_flex()
@@ -82,6 +82,7 @@ impl RenderOnce for FavoritesView {
                         MediaCard::new(&item.id)
                             .title(&item.name)
                             .subtitle(subtitle)
+                            .poster_image(poster_cache.get(&item.id).cloned())
                     })),
             )
             .into_any_element()
