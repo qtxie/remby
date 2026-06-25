@@ -1,5 +1,6 @@
 mod app;
 mod image_loader;
+mod loaders;
 mod state;
 mod theme_adapter;
 mod views;
