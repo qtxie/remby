@@ -13,6 +13,7 @@ use app::RembyApp;
 fn main() {
     gpui_platform::application().run(move |cx| {
         gpui_component::init(cx);
+        app::init_key_bindings(cx);
 
         cx.spawn(async move |cx| {
             cx.open_window(WindowOptions::default(), |window, cx| {

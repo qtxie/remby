@@ -13,6 +13,51 @@ use crate::views::player::PlayerView;
 use crate::views::series::SeriesView;
 use crate::views::settings::SettingsView;
 
+#[derive(gpui::Action, Clone, PartialEq)]
+struct GoBack;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct NavigateHome;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct NavigateLibraries;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct NavigateSettings;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct SelectNext;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct SelectPrev;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct SelectItem;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct ToggleFavorite;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct ToggleFollow;
+
+#[derive(gpui::Action, Clone, PartialEq)]
+struct QuitApp;
+
+pub fn init_key_bindings(cx: &mut App) {
+    cx.bind_keys(vec![
+        KeyBinding::new("escape", GoBack, None),
+        KeyBinding::new("q", QuitApp, None),
+        KeyBinding::new("j", SelectNext, None),
+        KeyBinding::new("k", SelectPrev, None),
+        KeyBinding::new("enter", SelectItem, None),
+        KeyBinding::new("z", ToggleFavorite, None),
+        KeyBinding::new("f", ToggleFollow, None),
+        KeyBinding::new("s", NavigateSettings, None),
+        KeyBinding::new("l", NavigateLibraries, None),
+        KeyBinding::new("u", NavigateHome, None),
+    ]);
+}
+
 pub struct RembyApp {
     pub state: GuiState,
     server_input: Entity<InputState>,
@@ -804,190 +849,176 @@ impl RembyApp {
         self.state.status_msg = msg;
         self.state.status_kind = kind;
     }
+
+    fn handle_go_back(&mut self, _: &GoBack, _window: &mut Window, cx: &mut Context<Self>) {
+        self.state.go_back();
+        cx.notify();
+    }
+
+    fn handle_quit(&mut self, _: &QuitApp, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.quit();
+    }
+
+    fn handle_select_next(&mut self, _: &SelectNext, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
+        if is_input { return; }
+        match self.state.view {
+            View::Home => { self.state.home_selected = self.state.home_selected.saturating_add(1); }
+            View::Libraries => {
+                let max = self.state.libraries.len().saturating_sub(1);
+                self.state.libraries_selected = self.state.libraries_selected.min(max).saturating_add(1);
+            }
+            View::Favorites => {
+                let max = self.state.favorites.len().saturating_sub(1);
+                self.state.favorites_selected = self.state.favorites_selected.min(max).saturating_add(1);
+            }
+            View::LibraryBrowser => {
+                let max = self.state.browser_items.len().saturating_sub(1);
+                self.state.browser_selected = self.state.browser_selected.min(max).saturating_add(1);
+            }
+            View::SeriesInfo => { self.state.series_selected = self.state.series_selected.saturating_add(1); }
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    fn handle_select_prev(&mut self, _: &SelectPrev, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
+        if is_input { return; }
+        match self.state.view {
+            View::Home => { self.state.home_selected = self.state.home_selected.saturating_sub(1); }
+            View::Libraries => { self.state.libraries_selected = self.state.libraries_selected.saturating_sub(1); }
+            View::Favorites => { self.state.favorites_selected = self.state.favorites_selected.saturating_sub(1); }
+            View::LibraryBrowser => { self.state.browser_selected = self.state.browser_selected.saturating_sub(1); }
+            View::SeriesInfo => { self.state.series_selected = self.state.series_selected.saturating_sub(1); }
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    fn handle_select_item(&mut self, _: &SelectItem, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
+        if is_input { return; }
+        match self.state.view {
+            View::Home => {
+                let idx = self.state.home_selected;
+                let item_opt = self.state.continue_watching.get(idx).map(|i| {
+                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
+                });
+                if let Some((item_id, series_id, media_type)) = item_opt {
+                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
+                        let sid = series_id.unwrap_or(item_id);
+                        self.state.navigate(View::SeriesInfo);
+                        self.load_series_info(&sid, cx);
+                    } else {
+                        self.play_item(&item_id, cx);
+                    }
+                }
+            }
+            View::Libraries => {
+                let idx = self.state.libraries_selected;
+                if let Some(lib) = self.state.libraries.get(idx) {
+                    let lib_id = lib.id.clone();
+                    let lib_name = lib.name.clone();
+                    self.state.browser_library_id = lib_id;
+                    self.state.browser_library_name = lib_name;
+                    self.state.navigate(View::LibraryBrowser);
+                    cx.notify();
+                }
+            }
+            View::LibraryBrowser | View::Favorites => {
+                let items = match self.state.view {
+                    View::LibraryBrowser => &self.state.browser_items,
+                    View::Favorites => &self.state.favorites,
+                    _ => unreachable!(),
+                };
+                let idx = match self.state.view {
+                    View::LibraryBrowser => self.state.browser_selected,
+                    View::Favorites => self.state.favorites_selected,
+                    _ => unreachable!(),
+                };
+                let item_opt = items.get(idx).map(|i| {
+                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
+                });
+                if let Some((item_id, series_id, media_type)) = item_opt {
+                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
+                        let sid = series_id.unwrap_or(item_id);
+                        self.state.navigate(View::SeriesInfo);
+                        self.load_series_info(&sid, cx);
+                    } else {
+                        self.play_item(&item_id, cx);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_toggle_favorite(&mut self, _: &ToggleFavorite, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
+        if is_input { return; }
+        match self.state.view {
+            View::LibraryBrowser => {
+                if let Some(item) = self.state.browser_items.get(self.state.browser_selected) {
+                    let item_id = item.id.clone();
+                    let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
+                    self.toggle_favorite(&item_id, !is_fav, cx);
+                }
+            }
+            View::Home => {
+                if let Some(item) = self.state.continue_watching.get(self.state.home_selected) {
+                    let item_id = item.id.clone();
+                    let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
+                    self.toggle_favorite(&item_id, !is_fav, cx);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_toggle_follow(&mut self, _: &ToggleFollow, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        if self.state.view == View::SeriesInfo {
+            if let Some(ref item) = self.state.series_item {
+                let item_id = item.id.clone();
+                let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
+                self.toggle_favorite(&item_id, !is_fav, cx);
+            }
+        }
+    }
+
+    fn handle_navigate_settings(&mut self, _: &NavigateSettings, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
+        if is_input { return; }
+        self.state.navigate(View::Settings);
+        cx.notify();
+    }
+
+    fn handle_navigate_libraries(&mut self, _: &NavigateLibraries, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
+        if is_input { return; }
+        self.state.navigate(View::Libraries);
+        cx.notify();
+    }
+
+    fn handle_navigate_home(&mut self, _: &NavigateHome, _window: &mut Window, cx: &mut Context<Self>) {
+        if self.state.client.is_none() { return; }
+        let is_input = matches!(self.state.view, View::Login | View::Settings | View::LibraryBrowser);
+        if is_input { return; }
+        self.state.navigate(View::Home);
+        cx.notify();
+    }
 }
 
 impl Render for RembyApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_window_title(&self.window_title());
-
-        let app_entity = cx.entity();
-        let current_view = self.state.view.clone();
-        let is_input_focused = matches!(
-            self.state.view,
-            View::Login | View::Settings | View::LibraryBrowser
-        );
-        let has_client = self.state.client.is_some();
-
-        window.on_key_event::<KeyDownEvent>(move |event, _phase, _window, cx| {
-            if event.keystroke.modifiers.control || event.keystroke.modifiers.platform || event.keystroke.modifiers.alt {
-                return;
-            }
-            let key = event.keystroke.key.as_ref();
-
-            cx.update_entity(&app_entity, |app, cx| {
-                if is_input_focused && !matches!(key, "escape" | "q") {
-                    return;
-                }
-
-                match key {
-                    "escape" => {
-                        app.state.go_back();
-                        cx.notify();
-                    }
-                    "q" => {
-                        cx.quit();
-                    }
-                    "j" if has_client && !is_input_focused => {
-                        match current_view {
-                            View::Home => {
-                                app.state.home_selected = app.state.home_selected.saturating_add(1);
-                            }
-                            View::Libraries => {
-                                let max = app.state.libraries.len().saturating_sub(1);
-                                app.state.libraries_selected = app.state.libraries_selected.min(max).saturating_add(1);
-                            }
-                            View::Favorites => {
-                                let max = app.state.favorites.len().saturating_sub(1);
-                                app.state.favorites_selected = app.state.favorites_selected.min(max).saturating_add(1);
-                            }
-                            View::LibraryBrowser => {
-                                let max = app.state.browser_items.len().saturating_sub(1);
-                                app.state.browser_selected = app.state.browser_selected.min(max).saturating_add(1);
-                            }
-                            View::SeriesInfo => {
-                                app.state.series_selected = app.state.series_selected.saturating_add(1);
-                            }
-                            _ => {}
-                        }
-                        cx.notify();
-                    }
-                    "k" if has_client && !is_input_focused => {
-                        match current_view {
-                            View::Home => {
-                                app.state.home_selected = app.state.home_selected.saturating_sub(1);
-                            }
-                            View::Libraries => {
-                                app.state.libraries_selected = app.state.libraries_selected.saturating_sub(1);
-                            }
-                            View::Favorites => {
-                                app.state.favorites_selected = app.state.favorites_selected.saturating_sub(1);
-                            }
-                            View::LibraryBrowser => {
-                                app.state.browser_selected = app.state.browser_selected.saturating_sub(1);
-                            }
-                            View::SeriesInfo => {
-                                app.state.series_selected = app.state.series_selected.saturating_sub(1);
-                            }
-                            _ => {}
-                        }
-                        cx.notify();
-                    }
-                    "f" if has_client && !is_input_focused
-                        && current_view == View::SeriesInfo => {
-                            if let Some(ref item) = app.state.series_item {
-                                let item_id = item.id.clone();
-                                let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
-                                app.toggle_favorite(&item_id, !is_fav, cx);
-                            }
-                        }
-                    "z" if has_client && !is_input_focused => {
-                        match current_view {
-                            View::LibraryBrowser => {
-                                if let Some(item) = app.state.browser_items.get(app.state.browser_selected) {
-                                    let item_id = item.id.clone();
-                                    let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
-                                    app.toggle_favorite(&item_id, !is_fav, cx);
-                                }
-                            }
-                            View::Home => {
-                                let items = &app.state.continue_watching;
-                                if let Some(item) = items.get(app.state.home_selected) {
-                                    let item_id = item.id.clone();
-                                    let is_fav = item.user_data.as_ref().map(|u| u.is_favorite).unwrap_or(false);
-                                    app.toggle_favorite(&item_id, !is_fav, cx);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    "s" if has_client && !is_input_focused => {
-                        app.state.navigate(View::Settings);
-                        cx.notify();
-                    }
-                    "l" if has_client && !is_input_focused => {
-                        app.state.navigate(View::Libraries);
-                        cx.notify();
-                    }
-                    "u" if has_client && !is_input_focused => {
-                        app.state.navigate(View::Home);
-                        cx.notify();
-                    }
-                    "enter" if has_client && !is_input_focused => {
-                        match current_view {
-                            View::Home => {
-                                let idx = app.state.home_selected;
-                                let item_opt = app.state.continue_watching.get(idx).map(|i| {
-                                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
-                                });
-                                if let Some((item_id, series_id, media_type)) = item_opt {
-                                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
-                                        let sid = series_id.unwrap_or(item_id.clone());
-                                        app.state.navigate(View::SeriesInfo);
-                                        app.load_series_info(&sid, cx);
-                                    } else {
-                                        app.play_item(&item_id, cx);
-                                    }
-                                }
-                            }
-                            View::Libraries => {
-                                let idx = app.state.libraries_selected;
-                                let lib_opt = app.state.libraries.get(idx).map(|l| {
-                                    (l.id.clone(), l.name.clone())
-                                });
-                                if let Some((lib_id, lib_name)) = lib_opt {
-                                    app.state.browser_library_id = lib_id;
-                                    app.state.browser_library_name = lib_name;
-                                    app.state.navigate(View::LibraryBrowser);
-                                    cx.notify();
-                                }
-                            }
-                            View::LibraryBrowser => {
-                                let idx = app.state.browser_selected;
-                                let item_opt = app.state.browser_items.get(idx).map(|i| {
-                                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
-                                });
-                                if let Some((item_id, series_id, media_type)) = item_opt {
-                                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
-                                        let sid = series_id.unwrap_or(item_id.clone());
-                                        app.state.navigate(View::SeriesInfo);
-                                        app.load_series_info(&sid, cx);
-                                    } else {
-                                        app.play_item(&item_id, cx);
-                                    }
-                                }
-                            }
-                            View::Favorites => {
-                                let idx = app.state.favorites_selected;
-                                let item_opt = app.state.favorites.get(idx).map(|i| {
-                                    (i.id.clone(), i.series_id.clone(), i.media_type.clone())
-                                });
-                                if let Some((item_id, series_id, media_type)) = item_opt {
-                                    if series_id.is_some() || media_type.as_deref() == Some("Series") {
-                                        let sid = series_id.unwrap_or(item_id.clone());
-                                        app.state.navigate(View::SeriesInfo);
-                                        app.load_series_info(&sid, cx);
-                                    } else {
-                                        app.play_item(&item_id, cx);
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    _ => {}
-                }
-            });
-        });
 
         let status_msg = self.state.status_msg.clone();
         let status_kind = self.state.status_kind.clone();
@@ -1113,7 +1144,18 @@ impl Render for RembyApp {
             crate::state::StatusKind::Loading => cx.theme().muted,
         };
         v_flex()
+            .id("remby-app")
             .size_full()
+            .on_action(cx.listener(Self::handle_go_back))
+            .on_action(cx.listener(Self::handle_quit))
+            .on_action(cx.listener(Self::handle_select_next))
+            .on_action(cx.listener(Self::handle_select_prev))
+            .on_action(cx.listener(Self::handle_select_item))
+            .on_action(cx.listener(Self::handle_toggle_favorite))
+            .on_action(cx.listener(Self::handle_toggle_follow))
+            .on_action(cx.listener(Self::handle_navigate_settings))
+            .on_action(cx.listener(Self::handle_navigate_libraries))
+            .on_action(cx.listener(Self::handle_navigate_home))
             .when(has_toast, |this| {
                 this.child(
                     div()
