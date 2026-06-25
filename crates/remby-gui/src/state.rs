@@ -200,6 +200,9 @@ pub struct GuiState {
     pub browser_selected: usize,
     pub series_selected: usize,
 
+    // Poster cache
+    pub poster_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>,
+
     // Config
     pub config: RembyConfig,
     pub settings_tab: SettingsTab,
@@ -277,6 +280,8 @@ impl GuiState {
             favorites_selected: 0,
             browser_selected: 0,
             series_selected: 0,
+
+            poster_cache: std::collections::HashMap::new(),
 
             config: RembyConfig::default(),
             settings_tab: SettingsTab::Libraries,

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use gpui::*;
 use gpui::prelude::FluentBuilder;
 use gpui_component::*;
@@ -60,6 +62,7 @@ pub fn init_key_bindings(cx: &mut App) {
 
 pub struct RembyApp {
     pub state: GuiState,
+    pub image_loader: Arc<crate::image_loader::ImageLoader>,
     server_input: Entity<InputState>,
     username_input: Entity<InputState>,
     password_input: Entity<InputState>,
@@ -90,6 +93,7 @@ impl RembyApp {
 
         let app = Self {
             state,
+            image_loader: Arc::new(crate::image_loader::ImageLoader::new()),
             server_input,
             username_input,
             password_input,
