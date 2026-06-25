@@ -146,49 +146,34 @@ impl RembyApp {
         self.state.loading_msg = "Loading home data...".into();
 
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let cw = client.get_resume_items(20).await.unwrap_or_default();
+            let latest = client.get_latest_items(20).await.unwrap_or_default();
+            let following = client.get_latest_items(20).await.unwrap_or_default()
+                .into_iter()
+                .filter(|item| item.series_id.is_some())
+                .collect();
+            let _ = tx.send((cw, latest, following));
+        });
         cx.spawn(async move |_window, cx| {
-            cx.update_entity(&this, |app, _cx| {
-                app.state.loading_msg = "Loading continue watching...".into();
-            });
-
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                let cw = client.get_resume_items(20).await.unwrap_or_default();
-
+            if let Ok((cw, latest, following)) = rx.await {
                 cx.update_entity(&this, |app, _cx| {
                     app.state.continue_watching = cw;
-                    app.state.loading_msg = "Loading latest items...".into();
-                });
-
-                let latest = client.get_latest_items(20).await.unwrap_or_default();
-
-                cx.update_entity(&this, |app, _cx| {
                     app.state.latest_items = latest;
-                    app.state.loading_msg = "Loading following updates...".into();
-                });
-
-                let following = client
-                    .get_latest_items(20)
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|item| item.series_id.is_some())
-                    .collect();
-
-                Some(following)
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some(following) = result {
                     app.state.following_updates = following;
-                } else {
+                    app.state.loading = false;
+                    app.state.loading_msg.clear();
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.status_msg = "Failed to load home data".into();
                     app.state.status_kind = crate::state::StatusKind::Error;
-                }
-                app.state.loading = false;
-                app.state.loading_msg.clear();
-            });
+                    app.state.loading = false;
+                    app.state.loading_msg.clear();
+                });
+            }
         })
         .detach();
     }
@@ -202,39 +187,33 @@ impl RembyApp {
         self.state.loading_msg = "Loading libraries...".into();
 
         let this = cx.entity();
-        cx.spawn(async move |_window, cx| {
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                let libraries = client.get_libraries().await.unwrap_or_default();
-
-                cx.update_entity(&this, |app, _cx| {
-                    app.state.libraries = libraries.clone();
-                    app.state.loading_msg = "Loading latest items...".into();
-                });
-
-                let mut all_latest = Vec::new();
-                for lib in &libraries {
-                    let items = client
-                        .get_latest_for_library(&lib.id, 10)
-                        .await
-                        .unwrap_or_default();
-                    all_latest.extend(items);
-                }
-
-                Some(all_latest)
+        let client = self.state.client.clone().unwrap();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let libraries = client.get_libraries().await.unwrap_or_default();
+            let mut all_latest = Vec::new();
+            for lib in &libraries {
+                let items = client.get_latest_for_library(&lib.id, 10).await.unwrap_or_default();
+                all_latest.extend(items);
             }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some(latest) = result {
+            let _ = tx.send((libraries, all_latest));
+        });
+        cx.spawn(async move |_window, cx| {
+            if let Ok((libraries, latest)) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
+                    app.state.libraries = libraries;
                     app.state.latest_items = latest;
-                } else {
+                    app.state.loading = false;
+                    app.state.loading_msg.clear();
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.status_msg = "Failed to load libraries".into();
                     app.state.status_kind = crate::state::StatusKind::Error;
-                }
-                app.state.loading = false;
-                app.state.loading_msg.clear();
-            });
+                    app.state.loading = false;
+                    app.state.loading_msg.clear();
+                });
+            }
         })
         .detach();
     }
@@ -249,73 +228,59 @@ impl RembyApp {
         self.state.browser_total = 0;
 
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let library_id = self.state.browser_library_id.clone();
+        let sort_field = self.state.browser_sort_field.emby_key().to_string();
+        let sort_order = self.state.browser_sort_order.emby_key().to_string();
+        let filters = self.state.browser_filters.clone();
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let genres_str = if filters.genres.is_empty() { None } else { Some(filters.genres.join(",")) };
+            let tags_str = if filters.tags.is_empty() { None } else { Some(filters.tags.join(",")) };
+            let studios_str = if filters.studios.is_empty() { None } else { Some(filters.studios.join(",")) };
+            let years_str = match (filters.year_min, filters.year_max) {
+                (Some(min), Some(max)) => Some(format!("{}-{}", min, max)),
+                (Some(min), None) => Some(min.to_string()),
+                (None, Some(max)) => Some(max.to_string()),
+                (None, None) => None,
+            };
+
+            let page = client.get_items_filtered(
+                &library_id, 0, 50, &sort_field, &sort_order,
+                genres_str.as_deref(), tags_str.as_deref(), studios_str.as_deref(), years_str.as_deref(),
+            ).await.ok();
+
+            let (genres, tags, studios) = tokio::join!(
+                client.get_genres(&library_id),
+                client.get_tags(&library_id),
+                client.get_studios(&library_id),
+            );
+
+            let _ = tx.send((
+                page.map(|p| (p.total, p.items)).unwrap_or_default(),
+                genres.unwrap_or_default(),
+                tags.unwrap_or_default(),
+                studios.unwrap_or_default(),
+            ));
+        });
         cx.spawn(async move |_window, cx| {
-            let result = async {
-                let (client, library_id, sort_field, sort_order, filters) = cx.read_entity(&this, |app, _| {
-                    (
-                        app.state.client.clone(),
-                        app.state.browser_library_id.clone(),
-                        app.state.browser_sort_field.emby_key().to_string(),
-                        app.state.browser_sort_order.emby_key().to_string(),
-                        app.state.browser_filters.clone(),
-                    )
-                });
-
-                let client = client?;
-
-                let genres_str = if filters.genres.is_empty() { None } else { Some(filters.genres.join(",")) };
-                let tags_str = if filters.tags.is_empty() { None } else { Some(filters.tags.join(",")) };
-                let studios_str = if filters.studios.is_empty() { None } else { Some(filters.studios.join(",")) };
-                let years_str = match (filters.year_min, filters.year_max) {
-                    (Some(min), Some(max)) => Some(format!("{}-{}", min, max)),
-                    (Some(min), None) => Some(min.to_string()),
-                    (None, Some(max)) => Some(max.to_string()),
-                    (None, None) => None,
-                };
-
-                let page = client
-                    .get_items_filtered(
-                        &library_id,
-                        0,
-                        50,
-                        &sort_field,
-                        &sort_order,
-                        genres_str.as_deref(),
-                        tags_str.as_deref(),
-                        studios_str.as_deref(),
-                        years_str.as_deref(),
-                    )
-                    .await
-                    .ok();
-
-                let (genres, tags, studios) = tokio::join!(
-                    client.get_genres(&library_id),
-                    client.get_tags(&library_id),
-                    client.get_studios(&library_id),
-                );
-
-                Some((
-                    page.map(|p| (p.total, p.items)).unwrap_or_default(),
-                    genres.unwrap_or_default(),
-                    tags.unwrap_or_default(),
-                    studios.unwrap_or_default(),
-                ))
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some(((total, items), genres, tags, studios)) = result {
+            if let Ok(((total, items), genres, tags, studios)) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.browser_items = items;
                     app.state.browser_total = total;
                     app.state.browser_available_genres = genres;
                     app.state.browser_available_tags = tags;
                     app.state.browser_available_studios = studios;
-                } else {
+                    app.state.loading = false;
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.status_msg = "Failed to load library items".into();
                     app.state.status_kind = crate::state::StatusKind::Error;
-                }
-                app.state.loading = false;
-            });
+                    app.state.loading = false;
+                });
+            }
         })
         .detach();
     }
@@ -327,55 +292,40 @@ impl RembyApp {
         self.state.browser_loading_more = true;
 
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let library_id = self.state.browser_library_id.clone();
+        let sort_field = self.state.browser_sort_field.emby_key().to_string();
+        let sort_order = self.state.browser_sort_order.emby_key().to_string();
+        let filters = self.state.browser_filters.clone();
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let genres_str = if filters.genres.is_empty() { None } else { Some(filters.genres.join(",")) };
+            let tags_str = if filters.tags.is_empty() { None } else { Some(filters.tags.join(",")) };
+            let studios_str = if filters.studios.is_empty() { None } else { Some(filters.studios.join(",")) };
+            let years_str = match (filters.year_min, filters.year_max) {
+                (Some(min), Some(max)) => Some(format!("{}-{}", min, max)),
+                (Some(min), None) => Some(min.to_string()),
+                (None, Some(max)) => Some(max.to_string()),
+                (None, None) => None,
+            };
+            let page = client.get_items_filtered(
+                &library_id, start, 50, &sort_field, &sort_order,
+                genres_str.as_deref(), tags_str.as_deref(), studios_str.as_deref(), years_str.as_deref(),
+            ).await.ok();
+            let _ = tx.send(page.map(|p| p.items));
+        });
         cx.spawn(async move |_window, cx| {
-            let result = async {
-                let (client, library_id, sort_field, sort_order, filters) = cx.read_entity(&this, |app, _| {
-                    (
-                        app.state.client.clone(),
-                        app.state.browser_library_id.clone(),
-                        app.state.browser_sort_field.emby_key().to_string(),
-                        app.state.browser_sort_order.emby_key().to_string(),
-                        app.state.browser_filters.clone(),
-                    )
-                });
-
-                let client = client?;
-
-                let genres_str = if filters.genres.is_empty() { None } else { Some(filters.genres.join(",")) };
-                let tags_str = if filters.tags.is_empty() { None } else { Some(filters.tags.join(",")) };
-                let studios_str = if filters.studios.is_empty() { None } else { Some(filters.studios.join(",")) };
-                let years_str = match (filters.year_min, filters.year_max) {
-                    (Some(min), Some(max)) => Some(format!("{}-{}", min, max)),
-                    (Some(min), None) => Some(min.to_string()),
-                    (None, Some(max)) => Some(max.to_string()),
-                    (None, None) => None,
-                };
-
-                let page = client
-                    .get_items_filtered(
-                        &library_id,
-                        start,
-                        50,
-                        &sort_field,
-                        &sort_order,
-                        genres_str.as_deref(),
-                        tags_str.as_deref(),
-                        studios_str.as_deref(),
-                        years_str.as_deref(),
-                    )
-                    .await
-                    .ok();
-
-                page.map(|p| p.items)
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some(items) = result {
+            if let Ok(Some(items)) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.browser_items.extend(items);
-                }
-                app.state.browser_loading_more = false;
-            });
+                    app.state.browser_loading_more = false;
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
+                    app.state.browser_loading_more = false;
+                });
+            }
         })
         .detach();
     }
@@ -390,37 +340,30 @@ impl RembyApp {
         self.state.browser_search_term = query.clone();
 
         let this = cx.entity();
-        cx.spawn(async move |_window, cx| {
-            let result = async {
-                let (client, library_id) = cx.read_entity(&this, |app, _| {
-                    (
-                        app.state.client.clone(),
-                        app.state.browser_library_id.clone(),
-                    )
-                });
-
-                let client = client?;
-
-                if query.is_empty() {
-                    let page = client.get_items(&library_id, 0, 50).await.ok();
-                    return page.map(|p| (p.total, p.items));
-                }
-
-                let items = client
-                    .search_in_library(&query, &library_id)
-                    .await
-                    .unwrap_or_default();
+        let client = self.state.client.clone().unwrap();
+        let library_id = self.state.browser_library_id.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let result = if query.is_empty() {
+                client.get_items(&library_id, 0, 50).await.ok().map(|p| (p.total, p.items))
+            } else {
+                let items = client.search_in_library(&query, &library_id).await.unwrap_or_default();
                 Some((items.len(), items))
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some((total, items)) = result {
+            };
+            let _ = tx.send(result);
+        });
+        cx.spawn(async move |_window, cx| {
+            if let Ok(Some((total, items))) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.browser_items = items;
                     app.state.browser_total = total;
-                }
-                app.state.loading = false;
-            });
+                    app.state.loading = false;
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
+                    app.state.loading = false;
+                });
+            }
         })
         .detach();
     }
@@ -433,23 +376,27 @@ impl RembyApp {
         self.state.player_loading = true;
 
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let item_id = item.id.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let sources = client.get_playback_info(&item_id).await.ok().unwrap_or_default();
+            let _ = tx.send(sources);
+        });
         cx.spawn(async move |_window, cx| {
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                let sources = client.get_playback_info(&item.id).await.ok();
-                Some(sources.unwrap_or_default())
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                app.state.player_loading = false;
-                if let Some(sources) = result {
+            if let Ok(sources) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
+                    app.state.player_loading = false;
                     app.state.player_sources = sources;
                     if app.state.player_sources.len() == 1 {
                         app.select_player_source(0, &item.id);
                     }
-                }
-            });
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
+                    app.state.player_loading = false;
+                });
+            }
         })
         .detach();
     }
@@ -531,35 +478,29 @@ impl RembyApp {
         self.player_stop_tx = Some(stop_tx);
 
         let this = cx.entity();
-        cx.spawn(async move |_window, cx| {
-            let result = remby_core::mpv::play(&url, &mpv_path, video, audio, subtitle, start);
+        let report_client = self.state.client.clone();
+        let item_id = item.id.clone();
+        let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<String>(64);
+        let (_stop_tx_inner, stop_rx) = tokio::sync::oneshot::channel::<()>();
 
+        crate::tokio_runtime().spawn(async move {
+            let result = remby_core::mpv::play(&url, &mpv_path, video, audio, subtitle, start);
             let (_child, rx) = match result {
                 Ok(r) => r,
                 Err(e) => {
-                    cx.update_entity(&this, |app, _cx| {
-                        app.state.playing = false;
-                        app.state.player_logs.push(format!("Failed to start mpv: {}", e));
-                        app.state.status_msg = format!("mpv error: {}", e);
-                        app.state.status_kind = crate::state::StatusKind::Error;
-                    });
+                    let _ = event_tx.send(format!("ERROR:{}", e)).await;
                     return;
                 }
             };
 
-            let item_id = item.id.clone();
-            let ms_id = media_source_id.clone();
-            let ps_id = play_session_id.clone();
-            tokio::spawn(async move {
-                let _ = client.report_playback_start(&item_id, &ms_id, &ps_id).await;
-            });
+            if let Some(c) = report_client.as_ref() {
+                let _ = c.report_playback_start(&item_id, &media_source_id, &play_session_id).await;
+            }
 
-            let (tokio_tx, mut tokio_rx) = tokio::sync::mpsc::channel::<remby_core::mpv::MpvEvent>(64);
+            let (mpv_tx, mut mpv_rx) = tokio::sync::mpsc::channel::<remby_core::mpv::MpvEvent>(64);
             std::thread::spawn(move || {
                 while let Ok(event) = rx.recv() {
-                    if tokio_tx.blocking_send(event).is_err() {
-                        break;
-                    }
+                    if mpv_tx.blocking_send(event).is_err() { break; }
                 }
             });
 
@@ -567,55 +508,59 @@ impl RembyApp {
             loop {
                 tokio::select! {
                     biased;
-                    _ = &mut stop_rx => {
-                        break;
-                    }
-                    event = tokio_rx.recv() => {
+                    _ = &mut stop_rx => { break; }
+                    event = mpv_rx.recv() => {
                         match event {
                             Some(remby_core::mpv::MpvEvent::Position(pos)) => {
-                                cx.update_entity(&this, |app, _cx| {
-                                    app.state.player_position = pos;
-                                });
+                                let _ = event_tx.send(format!("POS:{}", pos)).await;
                             }
                             Some(remby_core::mpv::MpvEvent::Duration(dur)) => {
-                                cx.update_entity(&this, |app, _cx| {
-                                    app.state.player_duration = dur;
-                                });
+                                let _ = event_tx.send(format!("DUR:{}", dur)).await;
                             }
                             Some(remby_core::mpv::MpvEvent::PlaybackStarted) => {
-                                cx.update_entity(&this, |app, _cx| {
-                                    app.state.player_started = true;
-                                });
+                                let _ = event_tx.send("STARTED".into()).await;
                             }
-                            Some(remby_core::mpv::MpvEvent::LogLine(line, _level)) => {
-                                cx.update_entity(&this, |app, _cx| {
-                                    app.state.player_logs.push(line);
-                                    if app.state.player_logs.len() > 500 {
-                                        app.state.player_logs.drain(..250);
-                                    }
-                                });
+                            Some(remby_core::mpv::MpvEvent::LogLine(line, _)) => {
+                                let _ = event_tx.send(format!("LOG:{}", line)).await;
                             }
-                            Some(remby_core::mpv::MpvEvent::PlaybackEnded) | None => {
-                                break;
-                            }
+                            Some(remby_core::mpv::MpvEvent::PlaybackEnded) | None => { break; }
                         }
                     }
                 }
             }
 
-            cx.update_entity(&this, |app, _cx| {
-                let pos_ticks = (app.state.player_position * 10_000_000.0) as i64;
-                let item_id = app.state.playing_item.as_ref().map(|i| i.id.clone()).unwrap_or_default();
-                let ms_id = app.state.player_media_source_id.clone();
-                let ps_id = app.state.player_play_session_id.clone();
-                app.state.playing = false;
-                app.state.player_started = false;
-                let client = app.state.client.clone();
-                tokio::spawn(async move {
-                    if let Some(c) = client {
-                        let _ = c.report_playback_stopped(&item_id, &ms_id, &ps_id, pos_ticks).await;
+            let pos_ticks = 0i64;
+            if let Some(c) = report_client.as_ref() {
+                let _ = c.report_playback_stopped(&item_id, &media_source_id, &play_session_id, pos_ticks).await;
+            }
+        });
+
+        cx.spawn(async move |_window, cx| {
+            while let Some(msg) = event_rx.recv().await {
+                if msg == "STOPPED" { break; }
+                cx.update_entity(&this, |app, _cx| {
+                    if let Some(rest) = msg.strip_prefix("POS:") {
+                        app.state.player_position = rest.parse().unwrap_or(0.0);
+                    } else if let Some(rest) = msg.strip_prefix("DUR:") {
+                        app.state.player_duration = rest.parse().unwrap_or(0.0);
+                    } else if msg == "STARTED" {
+                        app.state.player_started = true;
+                    } else if let Some(rest) = msg.strip_prefix("LOG:") {
+                        app.state.player_logs.push(rest.to_string());
+                        if app.state.player_logs.len() > 500 {
+                            app.state.player_logs.drain(..250);
+                        }
+                    } else if let Some(rest) = msg.strip_prefix("ERROR:") {
+                        app.state.playing = false;
+                        app.state.player_logs.push(rest.to_string());
+                        app.state.status_msg = format!("mpv error: {}", rest);
+                        app.state.status_kind = crate::state::StatusKind::Error;
                     }
                 });
+            }
+            cx.update_entity(&this, |app, _cx| {
+                app.state.playing = false;
+                app.state.player_started = false;
             });
         })
         .detach();
@@ -657,23 +602,25 @@ impl RembyApp {
         self.state.loading = true;
 
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let page = client.get_favorites(0, 100).await.ok();
+            let _ = tx.send(page.map(|p| p.items).unwrap_or_default());
+        });
         cx.spawn(async move |_window, cx| {
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                let page = client.get_favorites(0, 100).await.ok();
-                Some(page.map(|p| p.items).unwrap_or_default())
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some(favs) = result {
+            if let Ok(favs) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.favorites = favs;
-                } else {
+                    app.state.loading = false;
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.status_msg = "Failed to load favorites".into();
                     app.state.status_kind = crate::state::StatusKind::Error;
-                }
-                app.state.loading = false;
-            });
+                    app.state.loading = false;
+                });
+            }
         })
         .detach();
     }
@@ -691,27 +638,30 @@ impl RembyApp {
         let series_id = series_id.to_string();
 
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let sid = series_id.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let item = client.get_item_detail(&sid).await.ok();
+            let seasons = client.get_seasons(&sid).await.unwrap_or_default();
+            let similar = client.get_similar(&sid).await.unwrap_or_default();
+            let _ = tx.send((item, seasons, similar));
+        });
         cx.spawn(async move |_window, cx| {
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                let item = client.get_item_detail(&series_id).await.ok();
-                let seasons = client.get_seasons(&series_id).await.unwrap_or_default();
-                let similar = client.get_similar(&series_id).await.unwrap_or_default();
-                Some((item, seasons, similar))
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some((item, seasons, similar)) = result {
+            if let Ok((item, seasons, similar)) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.series_item = item;
                     app.state.series_seasons = seasons;
                     app.state.series_similar = similar;
-                } else {
+                    app.state.loading = false;
+                });
+            } else {
+                cx.update_entity(&this, |app, _cx| {
                     app.state.status_msg = "Failed to load series info".into();
                     app.state.status_kind = crate::state::StatusKind::Error;
-                }
-                app.state.loading = false;
-            });
+                    app.state.loading = false;
+                });
+            }
         })
         .detach();
     }
@@ -732,28 +682,30 @@ impl RembyApp {
         let section = section.clone();
 
         let this = cx.entity();
-        cx.spawn(async move |_window, cx| {
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                match section {
-                    SeriesSection::Seasons => {
-                        let seasons = client.get_seasons(&series_id).await.unwrap_or_default();
-                        Some((None, Some(seasons), None))
-                    }
-                    SeriesSection::Episodes => {
-                        let episodes = client.get_episodes(&series_id).await.unwrap_or_default();
-                        Some((None, None, Some(episodes.0)))
-                    }
-                    SeriesSection::Similar => {
-                        let _similar = client.get_similar(&series_id).await.unwrap_or_default();
-                        Some((None, None, None))
-                    }
+        let client = self.state.client.clone().unwrap();
+        let sid = series_id.clone();
+        let sec = section.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let result = match sec {
+                SeriesSection::Seasons => {
+                    let seasons = client.get_seasons(&sid).await.unwrap_or_default();
+                    (None, Some(seasons), None)
                 }
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some((item_opt, seasons_opt, episodes_opt)) = result {
+                SeriesSection::Episodes => {
+                    let episodes = client.get_episodes(&sid).await.unwrap_or_default();
+                    (None, None, Some(episodes.0))
+                }
+                SeriesSection::Similar => {
+                    let _similar = client.get_similar(&sid).await.unwrap_or_default();
+                    (None, None, None)
+                }
+            };
+            let _ = tx.send(result);
+        });
+        cx.spawn(async move |_window, cx| {
+            if let Ok((item_opt, seasons_opt, episodes_opt)) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
                     if let Some(item) = item_opt {
                         app.state.series_item = Some(item);
                     }
@@ -763,9 +715,9 @@ impl RembyApp {
                     if let Some(episodes) = episodes_opt {
                         app.state.series_episodes = episodes;
                     }
-                }
-                app.state.loading = false;
-            });
+                    app.state.loading = false;
+                });
+            }
         })
         .detach();
     }
@@ -781,30 +733,28 @@ impl RembyApp {
         }
         let item_id = item_id.to_string();
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let iid = item_id.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let _ = client.toggle_favorite(&iid, is_favorite).await.ok();
+            let item = client.get_item_detail(&iid).await.ok();
+            let _ = tx.send(item);
+        });
         cx.spawn(async move |_window, cx| {
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                client.toggle_favorite(&item_id, is_favorite).await.ok();
-                let item = client.get_item_detail(&item_id).await.ok();
-                Some(item)
-            }
-            .await;
-
-            cx.update_entity(&this, |app, _cx| {
-                if let Some(Some(updated_item)) = result {
+            if let Ok(Some(updated_item)) = rx.await {
+                cx.update_entity(&this, |app, _cx| {
                     if let Some(ref mut si) = app.state.series_item {
                         if si.id == item_id {
                             *si = updated_item.clone();
                         }
                     }
-                    app.state
-                        .favorites
-                        .retain(|i| i.id != item_id);
+                    app.state.favorites.retain(|i| i.id != item_id);
                     if is_favorite {
                         app.state.favorites.push(updated_item);
                     }
-                }
-            });
+                });
+            }
         })
         .detach();
     }
@@ -815,21 +765,21 @@ impl RembyApp {
         }
         let item_id = item_id.to_string();
         let this = cx.entity();
+        let client = self.state.client.clone().unwrap();
+        let iid = item_id.clone();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let item = client.get_item_detail(&iid).await.ok();
+            let _ = tx.send(item);
+        });
         cx.spawn(async move |_window, cx| {
-            let result = async {
-                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
-                let item = client.get_item_detail(&item_id).await.ok();
-                Some(item)
-            }
-            .await;
-
-            cx.update_entity(&this, |app, cx| {
-                if let Some(Some(item)) = result {
+            if let Ok(Some(item)) = rx.await {
+                cx.update_entity(&this, |app, cx| {
                     app.state.playing_item = Some(item);
                     app.state.navigate(View::Player);
                     app.load_player_sources(cx);
-                }
-            });
+                });
+            }
         })
         .detach();
     }
