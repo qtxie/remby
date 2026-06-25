@@ -104,21 +104,31 @@ impl RembyApp {
         self.state.server = server.clone();
 
         let this = cx.entity();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        crate::tokio_runtime().spawn(async move {
+            let result = remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await;
+            let _ = tx.send(result);
+        });
         cx.spawn(async move |_window, cx| {
-            match remby_core::emby::EmbyClient::authenticate(&server, &username, &password).await
-            {
-                Ok(client) => {
+            match rx.await {
+                Ok(Ok(client)) => {
                     cx.update_entity(&this, |app, cx| {
                         app.state.client = Some(client);
                         app.state.navigate(View::Home);
                         app.load_home_data(cx);
                     });
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     let msg = e.to_string();
                     cx.update_entity(&this, |app, _cx| {
                         app.state.login_error = msg;
                         app.state.status_msg = "Login failed. Check server URL and credentials.".into();
+                        app.state.status_kind = crate::state::StatusKind::Error;
+                    });
+                }
+                Err(_) => {
+                    cx.update_entity(&this, |app, _cx| {
+                        app.state.login_error = "Internal error".into();
                         app.state.status_kind = crate::state::StatusKind::Error;
                     });
                 }

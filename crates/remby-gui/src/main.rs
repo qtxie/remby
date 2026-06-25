@@ -7,8 +7,19 @@ mod views;
 use gpui::*;
 use gpui_component::*;
 use gpui_component::input::InputState;
+use std::sync::OnceLock;
 
 use app::RembyApp;
+
+pub(crate) fn tokio_runtime() -> &'static tokio::runtime::Runtime {
+    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio runtime")
+    })
+}
 
 fn main() {
     remby_core::emby::init_device_id();
