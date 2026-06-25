@@ -1,5 +1,6 @@
 mod app;
 mod state;
+mod views;
 
 use gpui::*;
 use gpui_component::*;
