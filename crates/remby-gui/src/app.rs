@@ -13,7 +13,6 @@ use crate::views::libraries::LibrariesView;
 use crate::views::login::LoginView;
 use crate::views::player::PlayerView;
 use crate::views::series::SeriesView;
-use crate::views::components::sidebar::SidebarNav;
 use crate::views::settings::SettingsView;
 
 #[derive(gpui::Action, Clone, PartialEq)]
@@ -84,7 +83,7 @@ impl RembyApp {
         let mut state = GuiState::new();
         state.config = remby_core::config::load_config();
 
-        crate::theme_adapter::apply_remby_theme(cx, &state.config.theme);
+        crate::theme_adapter::apply_emby_theater_theme(cx);
 
         // Auto-login from saved accounts
         let accounts_cfg = remby_core::config::load_accounts();
@@ -1118,55 +1117,51 @@ impl Render for RembyApp {
         };
 
         let has_toast = !status_msg.is_empty();
-        let sidebar = if !matches!(self.state.view, View::Login) {
-            let this = cx.entity();
-            Some(
-                SidebarNav::new(self.state.view.clone())
-                    .on_navigate(move |view, _window, cx| {
-                        this.update(cx, |app, cx| {
-                            app.state.navigate(view);
-                            match app.state.view {
-                                View::Home => app.load_home_data(cx),
-                                View::Libraries => app.load_libraries_data(cx),
-                                View::Favorites => app.load_favorites(cx),
-                                _ => {}
-                            }
-                            cx.notify();
-                        });
-                    }),
-            )
-        } else {
-            None
-        };
-
         let header = if !matches!(self.state.view, View::Login) {
             Some(
                 h_flex()
-                    .h(px(48.))
+                    .h(px(60.))
                     .items_center()
-                    .px_4()
-                    .bg(cx.theme().background)
-                    .border_b_1()
-                    .border_color(cx.theme().border)
+                    .px_6()
                     .child(
-                        div()
-                            .text_lg()
-                            .font_bold()
-                            .child("Remby"),
+                        h_flex()
+                            .items_center()
+                            .gap_3()
+                            .child(Icon::new(IconName::Menu).large())
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .w(px(24.))
+                                            .h(px(24.))
+                                            .rounded(px(4.))
+                                            .bg(cx.theme().primary)
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .child(Icon::new(IconName::Play).small())
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xl()
+                                            .font_bold()
+                                            .child("emby")
+                                    )
+                            )
                     )
                     .child(div().flex_1())
-                    .child(
-                        crate::views::components::search_bar::SearchBar::new(
-                            self.browser_search_input.clone(),
-                        ),
-                    )
+                    // Placeholder for tabs (Task 6 will add real tabs)
                     .child(div().flex_1())
                     .child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(self.state.server.clone()),
-                    ),
+                        h_flex()
+                            .gap_4()
+                            .child(Icon::new(IconName::Globe).large())
+                            .child(Icon::new(IconName::Search).large())
+                            .child(Icon::new(IconName::User).large())
+                            .child(Icon::new(IconName::Settings).large())
+                    )
             )
         } else {
             None
@@ -1185,22 +1180,17 @@ impl Render for RembyApp {
             .on_action(cx.listener(Self::handle_navigate_settings))
             .on_action(cx.listener(Self::handle_navigate_libraries))
             .on_action(cx.listener(Self::handle_navigate_home))
+            .children(header)
+            .child(
+                div()
+                    .flex_1()
+                    .overflow_y_hidden()
+                    .child(view_element)
+            )
             .when(has_toast, |this| {
                 this.child(
                     crate::views::components::toast::Toast::new(status_msg, status_kind)
                 )
             })
-            .when_some(header, |this, header| this.child(header))
-            .child(
-                h_flex()
-                    .flex_1()
-                    .when_some(sidebar, |this, sidebar| this.child(sidebar))
-                    .child(
-                        div()
-                            .flex_1()
-                            .h_full()
-                            .child(view_element),
-                    ),
-            )
     }
 }
