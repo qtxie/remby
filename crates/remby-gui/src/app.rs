@@ -4,6 +4,7 @@ use gpui_component::input::InputState;
 
 use crate::state::{GuiState, View};
 use crate::views::home::HomeView;
+use crate::views::libraries::LibrariesView;
 use crate::views::login::LoginView;
 
 pub struct RembyApp {
@@ -115,6 +116,48 @@ impl RembyApp {
         .detach();
     }
 
+    pub fn load_libraries_data(&mut self, cx: &mut Context<Self>) {
+        if self.state.client.is_none() {
+            return;
+        }
+        self.state.loading = true;
+        self.state.loading_msg = "Loading libraries...".into();
+
+        let this = cx.entity();
+        cx.spawn(async move |_window, cx| {
+            let result = async {
+                let client = cx.read_entity(&this, |app, _| app.state.client.clone())?;
+                let libraries = client.get_libraries().await.unwrap_or_default();
+
+                let _ = cx.update_entity(&this, |app, _cx| {
+                    app.state.libraries = libraries.clone();
+                    app.state.loading_msg = "Loading latest items...".into();
+                });
+
+                let mut all_latest = Vec::new();
+                for lib in &libraries {
+                    let items = client
+                        .get_latest_for_library(&lib.id, 10)
+                        .await
+                        .unwrap_or_default();
+                    all_latest.extend(items);
+                }
+
+                Some(all_latest)
+            }
+            .await;
+
+            let _ = cx.update_entity(&this, |app, _cx| {
+                if let Some(latest) = result {
+                    app.state.latest_items = latest;
+                }
+                app.state.loading = false;
+                app.state.loading_msg.clear();
+            });
+        })
+        .detach();
+    }
+
     fn view_label(&self) -> &str {
         match self.state.view {
             View::Login => "Login",
@@ -145,6 +188,21 @@ impl Render for RembyApp {
             View::Home => {
                 let this = cx.entity();
                 HomeView::new(this.downgrade()).into_any_element()
+            }
+            View::Libraries => {
+                let this = cx.entity();
+                if self.state.libraries.is_empty() && !self.state.loading {
+                    cx.spawn({
+                        let this = this.clone();
+                        async move |_window, cx| {
+                            let _ = cx.update_entity(&this, |app, cx| {
+                                app.load_libraries_data(cx);
+                            });
+                        }
+                    })
+                    .detach();
+                }
+                LibrariesView::new(this.downgrade()).into_any_element()
             }
             _ => div()
                 .size_full()
