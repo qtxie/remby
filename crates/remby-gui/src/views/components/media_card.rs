@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
+use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::*;
+
+use super::badge::{Badge, BadgeVariant};
+use super::progress::Progress;
 
 #[derive(IntoElement)]
 pub struct MediaCard {
@@ -11,6 +15,9 @@ pub struct MediaCard {
     poster_url: Option<String>,
     poster_image: Option<Arc<Image>>,
     on_click: Option<Box<dyn Fn(&mut Window, &mut App)>>,
+    badge: Option<SharedString>,
+    badge_variant: BadgeVariant,
+    progress: Option<f32>,
 }
 
 impl MediaCard {
@@ -22,6 +29,9 @@ impl MediaCard {
             poster_url: None,
             poster_image: None,
             on_click: None,
+            badge: None,
+            badge_variant: BadgeVariant::Default,
+            progress: None,
         }
     }
 
@@ -47,6 +57,17 @@ impl MediaCard {
 
     pub fn on_click(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Box::new(handler));
+        self
+    }
+
+    pub fn badge(mut self, text: impl Into<SharedString>, variant: BadgeVariant) -> Self {
+        self.badge = Some(text.into());
+        self.badge_variant = variant;
+        self
+    }
+
+    pub fn progress(mut self, value: f32) -> Self {
+        self.progress = Some(value);
         self
     }
 }
@@ -78,6 +99,19 @@ impl RenderOnce for MediaCard {
                 )
         };
 
+        let poster_with_badge = div()
+            .relative()
+            .child(poster_area)
+            .when_some(self.badge, |this, text| {
+                this.child(
+                    div()
+                        .absolute()
+                        .top(px(8.))
+                        .left(px(8.))
+                        .child(Badge::new(text).variant(self.badge_variant)),
+                )
+            });
+
         let wrapper = div()
             .id(format!("{}-wrapper", self.id))
             .w(px(160.))
@@ -98,7 +132,10 @@ impl RenderOnce for MediaCard {
         wrapper.child(
                 v_flex()
                     .gap_2()
-                    .child(poster_area)
+                    .child(poster_with_badge)
+                    .when_some(self.progress, |this, value| {
+                        this.child(Progress::new(value))
+                    })
                     .child(
                         v_flex()
                             .gap_1()
