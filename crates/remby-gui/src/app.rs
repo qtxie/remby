@@ -1118,6 +1118,18 @@ impl Render for RembyApp {
             }
             View::Home => {
                 let this = cx.entity();
+                // 加载媒体库数据（如果尚未加载）
+                if self.state.libraries.is_empty() && !self.state.loading {
+                    cx.spawn({
+                        let this = this.clone();
+                        async move |_window, cx| {
+                            cx.update_entity(&this, |app, cx| {
+                                app.load_libraries_data(cx);
+                            });
+                        }
+                    })
+                    .detach();
+                }
                 HomeView::new(this.downgrade()).into_any_element()
             }
             View::Libraries => {
