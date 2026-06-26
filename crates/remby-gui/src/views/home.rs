@@ -6,6 +6,7 @@ use gpui_component::scroll::ScrollableElement;
 use crate::app::RembyApp;
 use crate::views::components::badge::BadgeVariant;
 use crate::views::components::{ContinueWatchingCard, LoadingIndicator, MediaCard};
+use crate::views::components::library_card::LibraryCard;
 
 #[derive(IntoElement)]
 pub struct HomeView {
@@ -20,7 +21,8 @@ impl HomeView {
 
 impl RenderOnce for HomeView {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, continue_watching, latest_items, following_updates, poster_cache, backdrop_cache, app_entity) = self
+        let app_for_my_media = self.app.clone();
+        let (loading, continue_watching, latest_items, following_updates, poster_cache, libraries, app_entity) = self
             .app
             .upgrade()
             .map(|app| {
@@ -31,12 +33,12 @@ impl RenderOnce for HomeView {
                         state.state.latest_items.clone(),
                         state.state.following_updates.clone(),
                         state.state.poster_cache.clone(),
-                        state.state.backdrop_cache.clone(),
+                        state.state.libraries.clone(),
                         app.downgrade(),
                     )
                 })
             })
-            .unwrap_or((false, vec![], vec![], vec![], Default::default(), Default::default(), self.app.clone()));
+            .unwrap_or((false, vec![], vec![], vec![], Default::default(), vec![], self.app.clone()));
 
         if loading {
             return v_flex()
@@ -50,138 +52,44 @@ impl RenderOnce for HomeView {
         let mut sections: Vec<AnyElement> = Vec::new();
         let bg_color = cx.theme().background;
 
-        if !continue_watching.is_empty() {
-            let hero = &continue_watching[0];
-            let hero_backdrop = backdrop_cache.get(&hero.id).cloned();
-            let hero_poster = poster_cache.get(&hero.id).cloned();
-            let hero_title = hero.name.clone();
-            let hero_year = hero.production_year.unwrap_or(0);
-            let hero_rating = hero.community_rating.unwrap_or(0.0);
-            let hero_series = hero.series_name.clone().unwrap_or_default();
-            let hero_episode = match (hero.parent_index_number, hero.index_number) {
-                (Some(s), Some(e)) => format!("S{:02}E{:02}", s, e),
-                (None, Some(e)) => format!("E{:02}", e),
-                _ => String::new(),
-            };
-            let hero_id = hero.id.clone();
-            let hero_series_id = hero.series_id.clone();
-            let hero_item_type = hero.item_type.clone();
-            let hero_app = app_entity.clone();
-
-            let hero_bg: AnyElement = match hero_backdrop {
-                Some(bd) => img(bd).w_full().h_full().object_fit(gpui::ObjectFit::Cover).into_any_element(),
-                None => match hero_poster {
-                    Some(p) => img(p).w_full().h_full().object_fit(gpui::ObjectFit::Cover).into_any_element(),
-                    None => div().w_full().h_full().bg(cx.theme().muted.opacity(0.2)).into_any_element(),
-                },
-            };
-
+        if !libraries.is_empty() {
+            let this = app_for_my_media.clone();
             sections.push(
-                div()
-                    .h(px(360.))
-                    .relative()
-                    .overflow_hidden()
-                    .rounded(px(12.))
+                v_flex()
+                    .gap_3()
                     .child(
                         div()
-                            .absolute()
-                            .inset_0()
-                            .child(hero_bg)
+                            .text_lg()
+                            .font_bold()
+                            .child("我的媒体")
                     )
                     .child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .bg(gpui::linear_gradient(
-                                90.,
-                                gpui::linear_color_stop(cx.theme().background.opacity(0.95), 0.),
-                                gpui::linear_color_stop(cx.theme().background.opacity(0.3), 0.6),
-                            ))
-                    )
-                    .child(
-                        div()
-                            .absolute()
-                            .bottom_0()
-                            .left_0()
-                            .p_8()
-                            .child(
-                                v_flex()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .text_3xl()
-                                            .font_bold()
-                                            .child(hero_title)
-                                    )
-                                    .child(
-                                        h_flex()
-                                            .items_center()
-                                            .gap_3()
-                                            .text_sm()
-                                            .text_color(cx.theme().muted_foreground)
-                                            .when(!hero_series.is_empty(), |this| {
-                                                this.child(
-                                                    div()
-                                                        .text_color(cx.theme().foreground)
-                                                        .child(hero_series)
-                                                )
-                                            })
-                                            .when(!hero_episode.is_empty(), |this| {
-                                                this.child(div().child(hero_episode))
-                                            })
-                                            .when(hero_year > 0, |this| {
-                                                this.child(div().child(format!("{}", hero_year)))
-                                            })
-                                            .when(hero_rating > 0.0, |this| {
-                                                this.child(
-                                                    h_flex()
-                                                        .items_center()
-                                                        .gap_1()
-                                                        .child(Icon::new(IconName::Star).small().text_color(hsl(45., 0.8, 0.5)))
-                                                        .child(div().child(format!("{:.1}", hero_rating)))
-                                                )
-                                            })
-                                    )
-                                    .child(
-                                        {
-                                            let app_ref = hero_app.clone();
-                                            let play_id = hero_id.clone();
-                                            let play_sid = hero_series_id.clone();
-                                            let play_type = hero_item_type.clone();
-                                            h_flex()
-                                                .items_center()
-                                                .gap_2()
-                                                .px_5()
-                                                .py_2()
-                                                .mt_2()
-                                                .rounded(px(8.))
-                                                .bg(cx.theme().primary)
-                                                .text_color(cx.theme().background)
-                                                .cursor_pointer()
-                                                .hover(|this| this.opacity(0.8))
-                                                .child(Icon::new(IconName::Play).small())
-                                                .child("继续播放")
-                                                .id("hero-play")
-                                                .on_click(move |_event, _window, cx| {
-                                                    if let Some(app) = app_ref.upgrade() {
-                                                        cx.update_entity(&app, |app, cx| {
-                                                            let sid = if play_sid.is_some() || play_type == "Series" {
-                                                                play_sid.clone().unwrap_or_else(|| play_id.clone())
-                                                            } else {
-                                                                play_id.clone()
-                                                            };
-                                                            app.state.navigate(crate::state::View::SeriesInfo);
-                                                            app.load_series_info(&sid, cx);
-                                                        });
-                                                    }
-                                                })
+                        h_flex()
+                            .gap_4()
+                            .flex_wrap()
+                            .children(libraries.iter().map(move |lib| {
+                                let this = this.clone();
+                                let lib_id = lib.id.clone();
+                                let lib_name = lib.name.clone();
+                                LibraryCard::new(&lib.id, &lib.name)
+                                    .posters([None, None, None, None])
+                                    .on_click(move |_, cx| {
+                                        if let Some(app) = this.upgrade() {
+                                            cx.update_entity(&app, |app, cx| {
+                                                app.state.browser_library_id = lib_id.clone();
+                                                app.state.browser_library_name = lib_name.clone();
+                                                app.state.navigate(crate::state::View::LibraryBrowser);
+                                                app.load_browser_data(cx);
+                                            });
                                         }
-                                    )
-                            )
+                                    })
+                            }))
                     )
                     .into_any_element(),
             );
+        }
 
+        if !continue_watching.is_empty() {
             sections.push(
                 v_flex()
                     .gap_2()
@@ -212,11 +120,23 @@ impl RenderOnce for HomeView {
                             )
                             .child(
                                 div()
+                                    .id("view-all-latest")
                                     .text_sm()
                                     .text_color(cx.theme().primary)
                                     .cursor_pointer()
                                     .hover(|this| this.opacity(0.8))
                                     .child("查看全部 →")
+                                    .on_click({
+                                        let this = app_entity.clone();
+                                        move |_, _, cx| {
+                                            if let Some(app) = this.upgrade() {
+                                                cx.update_entity(&app, |app, cx| {
+                                                    app.state.navigate(crate::state::View::LibraryBrowser);
+                                                    app.load_browser_data(cx);
+                                                });
+                                            }
+                                        }
+                                    })
                             )
                     )
                     .child(latest_movies_row(latest_items, poster_cache.clone(), app_entity.clone(), bg_color))
@@ -248,11 +168,16 @@ impl RenderOnce for HomeView {
                 .into_any_element();
         }
 
-        v_flex()
+        div()
+            .id("home-scroll")
             .size_full()
-            .p_6()
-            .gap_6()
-            .children(sections)
+            .overflow_y_scroll()
+            .child(
+                v_flex()
+                    .p_6()
+                    .gap_6()
+                    .children(sections)
+            )
             .into_any_element()
     }
 }
@@ -342,11 +267,11 @@ fn latest_movies_row(items: Vec<remby_core::emby::MediaItem>, poster_cache: std:
                 .gap_4()
                 .overflow_x_scrollbar()
                 .children(items.into_iter().map(move |item| {
-                    let subtitle = item
-                        .series_name
-                        .clone()
-                        .or_else(|| item.media_type.clone())
-                        .unwrap_or_default();
+                    let subtitle = format!("{}{}{}",
+                        item.community_rating.map(|r| format!("★ {:.1}", r)).unwrap_or_default(),
+                        if item.community_rating.is_some() && item.production_year.is_some() { " · " } else { "" },
+                        item.production_year.map(|y| y.to_string()).unwrap_or_default()
+                    );
                     let badge_text: Option<&str> = match item.item_type.as_str() {
                         "Movie" => Some("Movie"),
                         "Series" => Some("Series"),
