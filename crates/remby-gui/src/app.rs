@@ -1387,7 +1387,6 @@ impl Render for RembyApp {
             .child(
                 div()
                     .flex_1()
-                    .overflow_y_hidden()
                     .child(view_element)
             )
             .when(has_toast, |this| {
