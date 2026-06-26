@@ -1,3 +1,4 @@
+mod api_cache;
 mod app;
 mod image_loader;
 mod loaders;

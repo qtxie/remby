@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::OnceLock;
 use url::Url;
@@ -52,7 +52,7 @@ fn base_headers(token: &str) -> Vec<(&'static str, String)> {
     ]
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MediaItem {
     #[serde(default, rename = "Id")]
     pub id: String,
@@ -92,7 +92,7 @@ pub struct MediaItem {
     pub user_data: Option<UserData>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct UserData {
     #[serde(default, rename = "PlaybackPositionTicks")]
     pub playback_position_ticks: Option<i64>,
@@ -100,7 +100,7 @@ pub struct UserData {
     pub is_favorite: bool,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct MediaSource {
     #[serde(default, rename = "Id")]
     pub id: String,
@@ -114,7 +114,7 @@ pub struct MediaSource {
     pub media_streams: Vec<MediaStream>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct MediaStream {
     #[serde(default, rename = "Type")]
     pub stream_type: String,
@@ -242,6 +242,10 @@ impl EmbyClient {
 
     pub fn token(&self) -> &str {
         &self.token
+    }
+
+    pub fn http_client(&self) -> &reqwest::Client {
+        &self.http
     }
 
     pub async fn authenticate(base_url: &str, username: &str, password: &str) -> Result<Self> {

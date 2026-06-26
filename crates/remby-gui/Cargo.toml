@@ -13,7 +13,12 @@ gpui = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac10
 gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.13", features = ["rustls"], default-features = false }
 ratatui = "0.30"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+tokio-util = "0.7"

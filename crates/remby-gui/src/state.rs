@@ -1,5 +1,6 @@
 use remby_core::config::RembyConfig;
 use remby_core::emby::{EmbyClient, Library, MediaItem, MediaSource, MediaStream};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum View {
@@ -145,6 +146,9 @@ pub struct GuiState {
     pub client: Option<EmbyClient>,
     pub server: String,
 
+    // API Cache
+    pub api_cache: std::sync::Arc<crate::api_cache::ApiCache>,
+
     // Navigation
     pub view: View,
     pub view_stack: Vec<View>,
@@ -239,6 +243,9 @@ pub struct GuiState {
     pub login_username: String,
     pub login_password: String,
     pub login_error: String,
+
+    // Cancellation
+    pub load_token: CancellationToken,
 }
 
 impl GuiState {
@@ -246,6 +253,8 @@ impl GuiState {
         Self {
             client: None,
             server: String::new(),
+
+            api_cache: std::sync::Arc::new(crate::api_cache::ApiCache::new()),
 
             view: View::Login,
             view_stack: Vec::new(),
@@ -325,10 +334,14 @@ impl GuiState {
             login_username: String::new(),
             login_password: String::new(),
             login_error: String::new(),
+
+            load_token: CancellationToken::new(),
         }
     }
 
     pub fn navigate(&mut self, view: View) {
+        self.load_token.cancel();
+        self.load_token = CancellationToken::new();
         self.view_stack.push(self.view.clone());
         self.view = view;
     }

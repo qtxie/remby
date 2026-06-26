@@ -91,9 +91,13 @@ impl RembyApp {
             accounts_cfg.accounts.into_iter().find(|a| a.id == id)
         });
 
+        let http_client = state.client.as_ref()
+            .map(|c| c.http_client().clone())
+            .unwrap_or_else(|| reqwest::Client::new());
+
         let app = Self {
             state,
-            image_loader: Arc::new(crate::image_loader::ImageLoader::new()),
+            image_loader: Arc::new(crate::image_loader::ImageLoader::new(http_client)),
             server_input,
             username_input,
             password_input,
@@ -218,8 +222,22 @@ impl RembyApp {
         let this = cx.entity();
         let (tx, mut rx) = tokio::sync::mpsc::channel(item_ids.len());
         crate::tokio_runtime().spawn(async move {
-            for item_id in item_ids {
-                if let Some(image) = image_loader.load_poster(&server, &token, &item_id).await {
+            use futures::stream::{self, StreamExt};
+            let results: Vec<_> = stream::iter(item_ids)
+                .map(|item_id| {
+                    let loader = image_loader.clone();
+                    let server = server.clone();
+                    let token = token.clone();
+                    async move {
+                        let image = loader.load_poster(&server, &token, &item_id).await;
+                        (item_id, image)
+                    }
+                })
+                .buffer_unordered(8)
+                .collect()
+                .await;
+            for (item_id, image_opt) in results {
+                if let Some(image) = image_opt {
                     let _ = tx.send((item_id, image)).await;
                 }
             }
@@ -248,8 +266,22 @@ impl RembyApp {
         let this = cx.entity();
         let (tx, mut rx) = tokio::sync::mpsc::channel(item_ids.len());
         crate::tokio_runtime().spawn(async move {
-            for item_id in item_ids {
-                if let Some(image) = image_loader.load_backdrop(&server, &token, &item_id).await {
+            use futures::stream::{self, StreamExt};
+            let results: Vec<_> = stream::iter(item_ids)
+                .map(|item_id| {
+                    let loader = image_loader.clone();
+                    let server = server.clone();
+                    let token = token.clone();
+                    async move {
+                        let image = loader.load_backdrop(&server, &token, &item_id).await;
+                        (item_id, image)
+                    }
+                })
+                .buffer_unordered(8)
+                .collect()
+                .await;
+            for (item_id, image_opt) in results {
+                if let Some(image) = image_opt {
                     let _ = tx.send((item_id, image)).await;
                 }
             }
@@ -275,12 +307,33 @@ impl RembyApp {
 
         let this = cx.entity();
         let client = self.state.client.clone().unwrap();
+        let cache = self.state.api_cache.clone();
+        let cancel_token = self.state.load_token.clone();
         crate::loaders::spawn_async(&this, cx, async move {
-            let cw = client.get_resume_items(20).await.unwrap_or_default();
-            let latest = client.get_latest_items(20).await.unwrap_or_default();
-            let following = client.get_latest_items(20).await.unwrap_or_default()
-                .into_iter()
-                .filter(|item| item.series_id.is_some())
+            if cancel_token.is_cancelled() {
+                return (Vec::new(), Vec::new(), Vec::new());
+            }
+
+            let client_clone = client.clone();
+            let client_clone2 = client.clone();
+
+            let cw = cache.get_or_fetch("resume_items", std::time::Duration::from_secs(60), || {
+                let c = client_clone;
+                async move { c.get_resume_items(20).await.ok() }
+            }).await.unwrap_or_default();
+
+            let latest = cache.get_or_fetch("latest_items", std::time::Duration::from_secs(60), || {
+                let c = client_clone2;
+                async move { c.get_latest_items(20).await.ok() }
+            }).await.unwrap_or_default();
+
+            if cancel_token.is_cancelled() {
+                return (Vec::new(), Vec::new(), Vec::new());
+            }
+
+            let following: Vec<_> = latest.iter()
+                .filter(|i| i.series_id.is_some())
+                .cloned()
                 .collect();
             (cw, latest, following)
         }, |app, cx, (cw, latest, following)| {
@@ -310,11 +363,14 @@ impl RembyApp {
         let client = self.state.client.clone().unwrap();
         crate::loaders::spawn_async(&this, cx, async move {
             let libraries = client.get_libraries().await.unwrap_or_default();
-            let mut all_latest = Vec::new();
-            for lib in &libraries {
-                let items = client.get_latest_for_library(&lib.id, 10).await.unwrap_or_default();
-                all_latest.extend(items);
-            }
+            let futures: Vec<_> = libraries.iter()
+                .map(|lib| client.get_latest_for_library(&lib.id, 10))
+                .collect();
+            let results = futures::future::join_all(futures).await;
+            let all_latest: Vec<_> = results.into_iter()
+                .flatten()
+                .flatten()
+                .collect();
             (libraries, all_latest)
         }, |app, cx, (libraries, latest)| {
             app.state.libraries = libraries;
@@ -355,22 +411,21 @@ impl RembyApp {
                 (None, None) => None,
             };
 
-            let page = client.get_items_filtered(
-                &library_id, 0, 50, &sort_field, &sort_order,
-                genres_str.as_deref(), tags_str.as_deref(), studios_str.as_deref(), years_str.as_deref(),
-            ).await.ok();
-
-            let (genres, tags, studios) = tokio::join!(
+            let (page_result, genres_result, tags_result, studios_result) = tokio::join!(
+                client.get_items_filtered(
+                    &library_id, 0, 50, &sort_field, &sort_order,
+                    genres_str.as_deref(), tags_str.as_deref(), studios_str.as_deref(), years_str.as_deref(),
+                ),
                 client.get_genres(&library_id),
                 client.get_tags(&library_id),
                 client.get_studios(&library_id),
             );
 
             (
-                page.map(|p| (p.total, p.items)).unwrap_or_default(),
-                genres.unwrap_or_default(),
-                tags.unwrap_or_default(),
-                studios.unwrap_or_default(),
+                page_result.ok().map(|p| (p.total, p.items)).unwrap_or_default(),
+                genres_result.unwrap_or_default(),
+                tags_result.unwrap_or_default(),
+                studios_result.unwrap_or_default(),
             )
         }, |app, cx, ((total, items), genres, tags, studios)| {
             app.state.browser_items = items;
@@ -727,9 +782,14 @@ impl RembyApp {
         let client = self.state.client.clone().unwrap();
         let sid = series_id.clone();
         crate::loaders::spawn_async(&this, cx, async move {
-            let item = client.get_item_detail(&sid).await.ok();
-            let seasons = client.get_seasons(&sid).await.unwrap_or_default();
-            let similar = client.get_similar(&sid).await.unwrap_or_default();
+            let (item_result, seasons_result, similar_result) = tokio::join!(
+                client.get_item_detail(&sid),
+                client.get_seasons(&sid),
+                client.get_similar(&sid),
+            );
+            let item = item_result.ok();
+            let seasons = seasons_result.unwrap_or_default();
+            let similar = similar_result.unwrap_or_default();
             (item, seasons, similar)
         }, |app, cx, (item, seasons, similar)| {
             if let Some(ref i) = item {
