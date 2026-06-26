@@ -1324,7 +1324,7 @@ impl Render for RembyApp {
                                 div()
                                     .id("globe-btn")
                                     .cursor_pointer()
-                                    .child(Icon::new(IconName::Globe).large())
+                                    .child(Icon::new(IconName::Globe).large().text_color(cx.theme().foreground))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.state.navigate(View::Libraries);
                                         cx.notify();
@@ -1334,7 +1334,7 @@ impl Render for RembyApp {
                                 div()
                                     .id("search-btn")
                                     .cursor_pointer()
-                                    .child(Icon::new(IconName::Search).large())
+                                    .child(Icon::new(IconName::Search).large().text_color(cx.theme().foreground))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.state.navigate(View::LibraryBrowser);
                                         cx.notify();
@@ -1346,7 +1346,7 @@ impl Render for RembyApp {
                                     .items_center()
                                     .gap_1()
                                     .cursor_pointer()
-                                    .child(Icon::new(IconName::User).large())
+                                    .child(Icon::new(IconName::User).large().text_color(cx.theme().foreground))
                                     .child(
                                         div()
                                             .text_sm()
@@ -1358,7 +1358,7 @@ impl Render for RembyApp {
                                 div()
                                     .id("settings-btn")
                                     .cursor_pointer()
-                                    .child(Icon::new(IconName::Settings).large())
+                                    .child(Icon::new(IconName::Settings).large().text_color(cx.theme().foreground))
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.state.navigate(View::Settings);
                                         cx.notify();
