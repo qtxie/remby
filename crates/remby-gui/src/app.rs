@@ -1228,6 +1228,7 @@ impl Render for RembyApp {
         let header = if !matches!(self.state.view, View::Login) {
             Some(
                 h_flex()
+                    .w_full()
                     .h(px(60.))
                     .items_center()
                     .px_6()
