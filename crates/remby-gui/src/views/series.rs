@@ -23,13 +23,14 @@ impl RenderOnce for SeriesView {
         let (
             loading,
             item,
-            _seasons,
-            _episodes,
+            seasons,
+            episodes,
             _similar,
             _section,
             is_favorite,
             poster_cache,
             backdrop_cache,
+            selected_season,
         ) = self
             .app
             .upgrade()
@@ -48,10 +49,11 @@ impl RenderOnce for SeriesView {
                             .unwrap_or(false),
                         state.state.poster_cache.clone(),
                         state.state.backdrop_cache.clone(),
+                        state.state.series_selected_season.clone(),
                     )
                 })
             })
-            .unwrap_or((false, None, vec![], vec![], vec![], SeriesSection::Seasons, false, std::collections::HashMap::new(), std::collections::HashMap::new()));
+            .unwrap_or((false, None, vec![], vec![], vec![], SeriesSection::Seasons, false, std::collections::HashMap::new(), std::collections::HashMap::new(), None));
 
         if loading && item.is_none() {
             return v_flex()
@@ -77,12 +79,13 @@ impl RenderOnce for SeriesView {
         let poster = poster_cache.get(&item_id).cloned();
         let backdrop = backdrop_cache.get(&item_id).cloned();
 
-        let rating = item.community_rating.unwrap_or(0.0) as i32;
+        let rating = item.community_rating.unwrap_or(0.0);
         let year = item.production_year.unwrap_or(0);
         let runtime_min = item.runtime_ticks.unwrap_or(0) / 10_000_000 / 60;
         let official_rating = item.official_rating.clone().unwrap_or_default();
         let genres = item.genres.clone();
         let overview = item.overview.clone().unwrap_or_default();
+        let tagline = item.tagline.clone().unwrap_or_default();
 
         let video_info = item.media_sources.first().map(|s| s.display_label()).unwrap_or_default();
 
@@ -212,7 +215,7 @@ impl RenderOnce for SeriesView {
                             .items_center()
                             .gap_1()
                             .child(Icon::new(IconName::Star).small().text_color(hsl(45., 0.8, 0.5)))
-                            .child(format!("{}", rating))
+                            .child(format!("{:.1}", rating))
                     )
                     .child(div().w(px(1.)).h(px(12.)).rounded_full().bg(cx.theme().muted_foreground.opacity(0.4)))
                     .child(format!("{}", year))
@@ -388,7 +391,7 @@ impl RenderOnce for SeriesView {
                             .text_sm()
                             .italic()
                             .text_color(cx.theme().muted_foreground)
-                            .child("He's never been cooler.")
+                            .when(!tagline.is_empty(), |this| this.child(tagline))
                     )
                     .child(
                         div()
@@ -404,72 +407,185 @@ impl RenderOnce for SeriesView {
                             .hover(|this| this.text_color(cx.theme().foreground))
                             .child("阅读更多 ∨")
                     )
-            )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .mt_2()
-                    .child("导演: 李·塔玛霍瑞")
             );
 
-        let cast_section = v_flex()
-            .mt_8()
-            .child(
-                div()
-                    .text_lg()
-                    .font_bold()
-                    .mb_4()
-                    .child("演职人员")
-            )
-            .child({
-                let people: Vec<(&str, &str)> = vec![
-                    ("李·塔玛霍瑞", "导演"),
-                    ("丹尼尔·克雷格", "饰演: James Bond"),
-                    ("朱迪·丹奇", "饰演: M"),
-                    ("哈维尔·巴登", "饰演: Raoul Silva"),
-                    ("蕾雅·赛杜", "饰演: Sévérine"),
-                    ("拉尔夫·费因斯", "饰演: Gareth Mallory"),
-                ];
-                h_flex()
-                    .gap_4()
-                    .overflow_x_scrollbar()
-                    .children(people.into_iter().map(|(person_name, role)| {
-                        v_flex()
-                            .w(px(100.))
-                            .items_center()
-                            .gap_2()
+        let effective_season = selected_season.clone()
+            .or_else(|| seasons.first().map(|s| s.id.clone()));
+
+        let season_tabs = if !seasons.is_empty() {
+            let tabs = h_flex()
+                .gap_2()
+                .mb_4()
+                .children(seasons.iter().map(|season| {
+                    let is_active = effective_season.as_ref() == Some(&season.id);
+                    let season_id = season.id.clone();
+                    let app_ref = app_ref.clone();
+                    let series_id_for_load = item_id.clone();
+                    div()
+                        .px_4()
+                        .py_2()
+                        .rounded(px(6.))
+                        .cursor_pointer()
+                        .when(is_active, |this| this.bg(cx.theme().primary).text_color(gpui::Hsla::default()))
+                        .when(!is_active, |this| {
+                            this.bg(cx.theme().muted.opacity(0.15))
+                                .hover(|this| this.bg(cx.theme().muted.opacity(0.3)))
+                        })
+                        .text_sm()
+                        .child(season.name.clone())
+                        .id(format!("season-tab-{}", season.id))
+                        .on_click(move |_, _window, cx| {
+                            if let Some(app) = app_ref.upgrade() {
+                                cx.update_entity(&app, |app, cx| {
+                                    app.state.series_selected_season = Some(season_id.clone());
+                                    app.load_series_episodes(&series_id_for_load, &crate::state::SeriesSection::Episodes, cx);
+                                });
+                            }
+                        })
+                }));
+            Some(tabs)
+        } else {
+            None
+        };
+
+        let episode_list = if !episodes.is_empty() {
+            let list = v_flex()
+                .gap_2()
+                .children(episodes.iter().filter_map(|ep| {
+                    let ep_season = ep.parent_index_number?;
+                    let season_match = effective_season.as_ref().and_then(|sid| {
+                        seasons.iter().find(|s| &s.id == sid).and_then(|s| s.index_number)
+                    });
+                    if let Some(s_num) = season_match {
+                        if ep_season != s_num {
+                            return None;
+                        }
+                    }
+                    let ep_num = ep.index_number.unwrap_or(0);
+                    let ep_title = ep.name.clone();
+                    let ep_runtime = ep.runtime_ticks.unwrap_or(0) / 10_000_000 / 60;
+                    let ep_overview = ep.overview.clone().unwrap_or_default();
+                    let progress = ep.user_data.as_ref().and_then(|u| {
+                        let pos = u.playback_position_ticks?;
+                        let dur = ep.runtime_ticks?;
+                        if dur > 0 { Some((pos as f32) / (dur as f32)) } else { None }
+                    });
+                    let ep_id = ep.id.clone();
+                    let ep_series_id = ep.series_id.clone();
+                    let ep_item_type = ep.item_type.clone();
+                    let app_ref = app_ref.clone();
+                    let thumb = poster_cache.get(&ep.id).cloned();
+
+                    Some(
+                        h_flex()
+                            .id(format!("ep-{}", ep_id))
+                            .gap_4()
+                            .p_3()
+                            .rounded(px(8.))
+                            .bg(cx.theme().muted.opacity(0.08))
+                            .hover(|this| this.bg(cx.theme().muted.opacity(0.15)))
+                            .cursor_pointer()
+                            .on_click(move |_, _window, cx| {
+                                if let Some(app) = app_ref.upgrade() {
+                                    cx.update_entity(&app, |app, cx| {
+                                        let sid = if ep_series_id.is_some() || ep_item_type == "Series" {
+                                            ep_series_id.clone().unwrap_or_else(|| ep_id.clone())
+                                        } else {
+                                            ep_id.clone()
+                                        };
+                                        app.state.navigate(crate::state::View::SeriesInfo);
+                                        app.load_series_info(&sid, cx);
+                                    });
+                                }
+                            })
                             .child(
                                 div()
-                                    .w(px(80.))
-                                    .h(px(100.))
+                                    .w(px(120.))
+                                    .h(px(68.))
                                     .rounded(px(6.))
                                     .overflow_hidden()
-                                    .bg(cx.theme().border.opacity(0.3))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
+                                    .flex_shrink_0()
+                                    .bg(cx.theme().muted.opacity(0.15))
+                                    .child(match thumb {
+                                        Some(t) => img(t).w_full().h_full().object_fit(gpui::ObjectFit::Cover).into_any_element(),
+                                        None => div().w_full().h_full().flex().items_center().justify_center()
+                                            .child(Icon::new(IconName::Play).text_color(cx.theme().muted_foreground.opacity(0.3)))
+                                            .into_any_element(),
+                                    })
+                            )
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .gap_1()
                                     .child(
-                                        Icon::new(IconName::User)
-                                            .large()
-                                            .text_color(cx.theme().muted_foreground.opacity(0.3))
+                                        h_flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .font_medium()
+                                                    .child(format!("{}. {}", ep_num, ep_title))
+                                            )
+                                            .child(div().flex_1())
+                                            .child(
+                                                div()
+                                                    .text_xs()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child(format!("{}分钟", ep_runtime))
+                                            )
                                     )
+                                    .when(!ep_overview.is_empty(), |this| {
+                                        this.child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .line_clamp(2)
+                                                .child(ep_overview)
+                                        )
+                                    })
+                                    .when_some(progress, |this, p| {
+                                        this.child(
+                                            div()
+                                                .w_full()
+                                                .h(px(3.))
+                                                .rounded(px(1.5))
+                                                .bg(cx.theme().muted.opacity(0.2))
+                                                .mt_1()
+                                                .child(
+                                                    div()
+                                                        .h_full()
+                                                        .rounded(px(1.5))
+                                                        .bg(cx.theme().primary)
+                                                        .w(relative(p)),
+                                                ),
+                                        )
+                                    })
                             )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_center()
-                                    .child(person_name.to_string())
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .text_center()
-                                    .child(role.to_string())
-                            )
-                    }))
-            });
+                    )
+                }));
+            Some(list)
+        } else {
+            None
+        };
+
+        let seasons_section = if season_tabs.is_some() || episode_list.is_some() {
+            Some(
+                v_flex()
+                    .mt_8()
+                    .gap_4()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_bold()
+                            .child("剧集")
+                    )
+                    .children(season_tabs)
+                    .children(episode_list)
+            )
+        } else {
+            None
+        };
 
         let content_scroll = v_flex()
             .flex_1()
@@ -478,6 +594,7 @@ impl RenderOnce for SeriesView {
             .child(header)
             .child(
                 h_flex()
+                    .flex_wrap()
                     .gap_8()
                     .mt_4()
                     .items_start()
@@ -490,7 +607,7 @@ impl RenderOnce for SeriesView {
                             .flex_shrink_0()
                             .child(poster_element)
                     )
-                    .child(info_section)
+                    .child(info_section.flex_1().min_w(px(250.)))
                     .child(
                         div()
                             .w(px(280.))
@@ -502,9 +619,9 @@ impl RenderOnce for SeriesView {
                             .child(backdrop_element)
                     )
             )
-            .child(cast_section);
+            .children(seasons_section);
 
-        let bg_poster: AnyElement = match poster_cache.get(&item_id).cloned() {
+        let bg_poster: AnyElement = match backdrop_cache.get(&item_id).cloned() {
             Some(bg_img) => img(bg_img)
                 .w_full()
                 .h_full()

@@ -9,7 +9,6 @@ use crate::app::RembyApp;
 use crate::state::{SortField, SortOrder};
 use crate::views::components::LoadingIndicator;
 
-const POSTER_W: f32 = 160.;
 const POSTER_H: f32 = 220.;
 
 const TABS: &[&str] = &["电影", "最近", "合集", "类型风格", "喜欢", "文件夹"];
@@ -28,7 +27,7 @@ impl BrowserView {
 
 impl RenderOnce for BrowserView {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let (loading, items, total, library_name, sort_field, sort_order, show_filters, filters, genres, tags, studios, poster_cache, _search_query, browser_selected) = self
+        let (loading, items, total, library_name, sort_field, sort_order, show_filters, filters, genres, tags, studios, poster_cache, _search_query, browser_selected, browser_tab, loading_more) = self
             .app
             .upgrade()
             .map(|app| {
@@ -54,12 +53,14 @@ impl RenderOnce for BrowserView {
                         state.state.poster_cache.clone(),
                         search_query,
                         state.state.browser_selected,
+                        state.state.browser_tab,
+                        state.state.browser_loading_more,
                     )
                 })
             })
-            .unwrap_or((false, vec![], 0, String::new(), SortField::Name, SortOrder::Ascending, false, Default::default(), vec![], vec![], vec![], Default::default(), String::new(), 0));
+            .unwrap_or((false, vec![], 0, String::new(), SortField::Name, SortOrder::Ascending, false, Default::default(), vec![], vec![], vec![], Default::default(), String::new(), 0, 0, false));
 
-        let _app_weak = self.app.clone();
+        let app_weak = self.app.clone();
         let app_weak2 = self.app.clone();
         let app_weak3 = self.app.clone();
         let app_weak4 = self.app.clone();
@@ -73,16 +74,26 @@ impl RenderOnce for BrowserView {
             .px_4()
             .py_2()
             .children(TABS.iter().enumerate().map(|(i, &tab)| {
-                let is_active = i == 0;
+                let is_active = i == browser_tab;
+                let app_w = app_weak.clone();
                 div()
+                    .id(("browser-tab", i))
                     .px_4()
                     .py_1()
                     .rounded_full()
-                    .when(is_active, |this| this.bg(hsl(110., 45., 50.)).text_color(hsl(0., 0., 100.)))
+                    .when(is_active, |this| this.bg(cx.theme().primary).text_color(gpui::white()))
                     .when(!is_active, |this| this.text_color(cx.theme().muted_foreground).hover(|this| this.bg(cx.theme().muted.opacity(0.15))))
                     .text_sm()
                     .cursor_pointer()
                     .child(tab)
+                    .on_click(move |_event, _window, cx| {
+                        if let Some(app) = app_w.upgrade() {
+                            cx.update_entity(&app, |app, cx| {
+                                app.state.browser_tab = i;
+                                app.load_browser_data(cx);
+                            });
+                        }
+                    })
             }));
 
         let item_count = items.len();
@@ -299,80 +310,115 @@ impl RenderOnce for BrowserView {
                         .child(div().text_sm().text_color(cx.theme().muted_foreground).child("No items found"))
                         .into_any_element()
                 } else {
-                    let cols = 5usize;
-                    let rows = items.chunks(cols);
                     let mut grid_content: Vec<AnyElement> = Vec::new();
 
-                    for row in rows {
-                        let cards = h_flex()
-                            .gap_4()
-                            .justify_center()
-                            .children(row.iter().enumerate().map(|(col_idx, item)| {
-                                let global_idx = grid_content.len() * cols + col_idx;
-                                let is_selected = global_idx == browser_selected;
-                                let poster = poster_cache.get(&item.id).cloned();
-                                let rating = item.community_rating.unwrap_or(0.0);
-                                let year = item.production_year.unwrap_or(0);
+                    let cards = h_flex()
+                        .flex_wrap()
+                        .gap_4()
+                        .children(items.iter().enumerate().map(|(i, item)| {
+                            let is_selected = i == browser_selected;
+                            let poster = poster_cache.get(&item.id).cloned();
+                            let rating = item.community_rating.unwrap_or(0.0);
+                            let year = item.production_year.unwrap_or(0);
+                            let item_id = item.id.clone();
+                            let series_id = item.series_id.clone();
+                            let item_type = item.item_type.clone();
+                            let app_w = app_weak.clone();
 
-                                v_flex()
-                                    .w(px(POSTER_W))
-                                    .gap_2()
-                                    .cursor_pointer()
-                                    .hover(|this| this.opacity(0.9))
-                                    .child(
-                                        div()
-                                            .id(format!("poster-{}", item.id))
-                                            .h(px(POSTER_H))
-                                            .rounded(px(6.))
-                                            .overflow_hidden()
-                                            .border_2()
-                                            .when(is_selected, |this| this.border_color(cx.theme().primary))
-                                            .when(!is_selected, |this| this.border_color(gpui::transparent_black()))
-                                            .child(match poster {
-                                                Some(image) => img(image).w_full().h_full().object_fit(gpui::ObjectFit::Cover).into_any_element(),
-                                                None => div().w_full().h_full().flex().items_center().justify_center().bg(cx.theme().muted.opacity(0.15)).child(
-                                                    Icon::new(IconName::Frame).large().text_color(cx.theme().muted_foreground.opacity(0.3))
-                                                ).into_any_element(),
-                                            })
-                                    )
-                                    .child(
-                                        v_flex()
-                                            .child(
-                                                div()
-                                                    .text_sm()
-                                                    .font_medium()
-                                                    .overflow_x_hidden()
-                                                    .whitespace_nowrap()
-                                                    .child(item.display_name())
-                                            )
-                                            .child(
-                                                h_flex()
-                                                    .items_center()
-                                                    .gap_1()
-                                                    .child(Icon::new(IconName::Star).small().text_color(hsl(45., 0.8, 0.5)))
-                                                    .child(
-                                                        div().text_xs().text_color(cx.theme().muted_foreground)
-                                                            .child(format!("{:.1}", rating))
-                                                    )
-                                                    .child(div().flex_1())
-                                                    .child(
-                                                        div().text_xs().text_color(cx.theme().muted_foreground)
-                                                            .child(format!("{}", year))
-                                                    )
-                                            )
-                                    )
-                                    .into_any_element()
-                            }));
-                        grid_content.push(cards.into_any_element());
-                    }
+                            div()
+                                .id(format!("browser-card-{}", item.id))
+                                .min_w(px(120.))
+                                .max_w(px(200.))
+                                .flex_1()
+                                .cursor_pointer()
+                                .hover(|this| this.opacity(0.9))
+                                .on_click(move |_event, _window, cx| {
+                                    if let Some(app) = app_w.upgrade() {
+                                        cx.update_entity(&app, |app, cx| {
+                                            let sid = if series_id.is_some() || item_type == "Series" {
+                                                series_id.clone().unwrap_or_else(|| item_id.clone())
+                                            } else {
+                                                item_id.clone()
+                                            };
+                                            app.state.navigate(crate::state::View::SeriesInfo);
+                                            app.load_series_info(&sid, cx);
+                                        });
+                                    }
+                                })
+                                .child(
+                                    v_flex()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .id(format!("poster-{}", item.id))
+                                                .h(px(POSTER_H))
+                                                .rounded(px(6.))
+                                                .overflow_hidden()
+                                                .border_2()
+                                                .when(is_selected, |this| this.border_color(cx.theme().primary))
+                                                .when(!is_selected, |this| this.border_color(gpui::transparent_black()))
+                                                .child(match poster {
+                                                    Some(image) => img(image).w_full().h_full().object_fit(gpui::ObjectFit::Cover).into_any_element(),
+                                                    None => div().w_full().h_full().flex().items_center().justify_center().bg(cx.theme().muted.opacity(0.15)).child(
+                                                        Icon::new(IconName::Frame).large().text_color(cx.theme().muted_foreground.opacity(0.3))
+                                                    ).into_any_element(),
+                                                })
+                                        )
+                                        .child(
+                                            v_flex()
+                                                .child(
+                                                    div()
+                                                        .text_sm()
+                                                        .font_medium()
+                                                        .overflow_x_hidden()
+                                                        .whitespace_nowrap()
+                                                        .child(item.display_name())
+                                                )
+                                                .child(
+                                                    h_flex()
+                                                        .items_center()
+                                                        .gap_1()
+                                                        .child(Icon::new(IconName::Star).small().text_color(hsl(45., 0.8, 0.5)))
+                                                        .child(
+                                                            div().text_xs().text_color(cx.theme().muted_foreground)
+                                                                .child(format!("{:.1}", rating))
+                                                        )
+                                                        .child(div().flex_1())
+                                                        .child(
+                                                            div().text_xs().text_color(cx.theme().muted_foreground)
+                                                                .child(format!("{}", year))
+                                                        )
+                                                )
+                                        )
+                                )
+                        }));
+                    grid_content.push(cards.into_any_element());
 
                     if items.len() < total {
+                        let load_more_app = self.app.clone();
+                        let start = items.len();
                         grid_content.push(
                             div()
                                 .p_4()
+                                .w_full()
                                 .flex()
                                 .justify_center()
-                                .child(LoadingIndicator::new("Loading more..."))
+                                .child(
+                                    if loading_more {
+                                        LoadingIndicator::new("Loading more...").into_any_element()
+                                    } else {
+                                        Button::new("load-more-btn")
+                                            .label(format!("加载更多 ({} / {})", items.len(), total))
+                                            .on_click(move |_, _window, cx| {
+                                                if let Some(app) = load_more_app.upgrade() {
+                                                    cx.update_entity(&app, |app, cx| {
+                                                        app.load_browser_page(start, cx);
+                                                    });
+                                                }
+                                            })
+                                            .into_any_element()
+                                    }
+                                )
                                 .into_any_element()
                         );
                     }

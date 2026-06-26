@@ -180,6 +180,7 @@ pub struct GuiState {
     pub browser_available_studios: Vec<String>,
     pub browser_search_term: String,
     pub browser_loading_more: bool,
+    pub browser_tab: usize,
 
     // Search
     pub search_results: Vec<MediaItem>,
@@ -194,6 +195,7 @@ pub struct GuiState {
     pub series_episodes: Vec<MediaItem>,
     pub series_similar: Vec<MediaItem>,
     pub series_section: SeriesSection,
+    pub series_selected_season: Option<String>,
 
     // Player
     pub playing_item: Option<MediaItem>,
@@ -274,6 +276,7 @@ impl GuiState {
             browser_available_studios: Vec::new(),
             browser_search_term: String::new(),
             browser_loading_more: false,
+            browser_tab: 0,
 
             search_results: Vec::new(),
             search_query: String::new(),
@@ -285,6 +288,7 @@ impl GuiState {
             series_episodes: Vec::new(),
             series_similar: Vec::new(),
             series_section: SeriesSection::Seasons,
+            series_selected_season: None,
 
             playing_item: None,
             playing_url: String::new(),

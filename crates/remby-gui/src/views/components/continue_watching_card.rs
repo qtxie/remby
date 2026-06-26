@@ -74,11 +74,41 @@ impl RenderOnce for ContinueWatchingCard {
                 )
         };
 
+        let thumb_with_overlay = div()
+            .relative()
+            .child(thumb_area)
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(px(8.))
+                    .bg(gpui::transparent_black().opacity(0.5))
+                    .opacity(0.)
+                    .hover(|this| this.opacity(1.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .w(px(40.))
+                            .h(px(40.))
+                            .rounded_full()
+                            .bg(cx.theme().primary.opacity(0.9))
+                            .child(Icon::new(IconName::Play).text_color(gpui::Hsla::default())),
+                    )
+            );
+
         let wrapper = div()
             .id(format!("{}-wrapper", self.id))
             .w(px(240.))
+            .rounded(px(8.))
             .cursor_pointer()
-            .hover(|this| this.opacity(0.9).shadow_lg());
+            .border_2()
+            .border_color(gpui::transparent_black())
+            .hover(|this| this.border_color(cx.theme().primary).shadow_lg());
 
         let wrapper = if let Some(handler) = self.on_click {
             wrapper.on_click(move |_event: &ClickEvent, window, cx| handler(window, cx))
@@ -89,7 +119,7 @@ impl RenderOnce for ContinueWatchingCard {
         wrapper.child(
             v_flex()
                 .gap_2()
-                .child(thumb_area)
+                .child(thumb_with_overlay)
                 .when_some(self.progress, |this, value| {
                     this.child(
                         div()

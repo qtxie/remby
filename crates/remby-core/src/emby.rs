@@ -84,6 +84,8 @@ pub struct MediaItem {
     pub genres: Vec<String>,
     #[serde(default, rename = "OfficialRating")]
     pub official_rating: Option<String>,
+    #[serde(default, rename = "Tagline")]
+    pub tagline: Option<String>,
     #[serde(default, rename = "MediaSources")]
     pub media_sources: Vec<MediaSource>,
     #[serde(default, rename = "UserData")]
@@ -983,6 +985,7 @@ impl MediaItem {
             production_year: None,
             genres: Vec::new(),
             official_rating: None,
+            tagline: None,
             media_sources: Vec::new(),
             user_data: None,
         }

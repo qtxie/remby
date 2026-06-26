@@ -1244,14 +1244,55 @@ impl Render for RembyApp {
                             })
                     })
                     .child(div().flex_1())
-                    .child(
+                    .child({
+                        let username = self.state.login_username.clone();
                         h_flex()
                             .gap_4()
-                            .child(Icon::new(IconName::Globe).large())
-                            .child(Icon::new(IconName::Search).large())
-                            .child(Icon::new(IconName::User).large())
-                            .child(Icon::new(IconName::Settings).large())
-                    )
+                            .child(
+                                div()
+                                    .id("globe-btn")
+                                    .cursor_pointer()
+                                    .child(Icon::new(IconName::Globe).large())
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.state.navigate(View::Libraries);
+                                        cx.notify();
+                                    }))
+                            )
+                            .child(
+                                div()
+                                    .id("search-btn")
+                                    .cursor_pointer()
+                                    .child(Icon::new(IconName::Search).large())
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.state.navigate(View::LibraryBrowser);
+                                        cx.notify();
+                                    }))
+                            )
+                            .child(
+                                h_flex()
+                                    .id("user-btn")
+                                    .items_center()
+                                    .gap_1()
+                                    .cursor_pointer()
+                                    .child(Icon::new(IconName::User).large())
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(username)
+                                    )
+                            )
+                            .child(
+                                div()
+                                    .id("settings-btn")
+                                    .cursor_pointer()
+                                    .child(Icon::new(IconName::Settings).large())
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.state.navigate(View::Settings);
+                                        cx.notify();
+                                    }))
+                            )
+                    })
             )
         } else {
             None

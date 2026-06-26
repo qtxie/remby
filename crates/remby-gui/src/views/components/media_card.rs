@@ -99,9 +99,32 @@ impl RenderOnce for MediaCard {
                 )
         };
 
-        let poster_with_badge = div()
+        let poster_with_overlay = div()
             .relative()
             .child(poster_area)
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded(px(8.))
+                    .bg(gpui::transparent_black().opacity(0.5))
+                    .opacity(0.)
+                    .hover(|this| this.opacity(1.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .w(px(48.))
+                            .h(px(48.))
+                            .rounded_full()
+                            .bg(cx.theme().primary.opacity(0.9))
+                            .child(Icon::new(IconName::Play).text_color(gpui::Hsla::default())),
+                    )
+            )
             .when_some(self.badge, |this, text| {
                 this.child(
                     div()
@@ -118,9 +141,11 @@ impl RenderOnce for MediaCard {
             .rounded(px(8.))
             .overflow_hidden()
             .cursor_pointer()
+            .border_2()
+            .border_color(gpui::transparent_black())
             .hover(|this| {
                 this.shadow_lg()
-                    .bg(cx.theme().muted.opacity(0.05))
+                    .border_color(cx.theme().primary)
             });
 
         let wrapper = if let Some(handler) = self.on_click {
@@ -132,7 +157,7 @@ impl RenderOnce for MediaCard {
         wrapper.child(
                 v_flex()
                     .gap_2()
-                    .child(poster_with_badge)
+                    .child(poster_with_overlay)
                     .when_some(self.progress, |this, value| {
                         this.child(Progress::new(value))
                     })

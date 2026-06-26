@@ -1788,6 +1788,11 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                             series_id: None,
                                                             overview: None,
                                                             child_count: None,
+                                                            community_rating: None,
+                                                            production_year: None,
+                                                            genres: Vec::new(),
+                                                            official_rating: None,
+                                                            tagline: None,
                                                             media_sources: Vec::new(),
                                                             user_data: None,
                                                         }
