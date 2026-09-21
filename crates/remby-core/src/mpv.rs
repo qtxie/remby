@@ -10,7 +10,7 @@ pub enum MpvEvent {
     Position(f64),
     Duration(f64),
     PlaybackStarted,
-    PlaybackEnded,
+    PlaybackEnded, // The file reached EOF; disconnects and manual stops are not completion.
 }
 
 pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, subtitle: Option<i32>, start_secs: Option<f64>) -> Result<(Child, mpsc::Receiver<MpvEvent>)> {
@@ -74,7 +74,6 @@ pub fn play(url: &str, mpv_path: &str, video: Option<i32>, audio: Option<i32>, s
                 Err(_) => break,
             }
         }
-        let _ = tx.send(MpvEvent::PlaybackEnded);
         let _ = std::fs::remove_file(&ipc);
     });
 
@@ -104,6 +103,9 @@ fn handle_ipc_message(msg: &serde_json::Value, tx: &mpsc::Sender<MpvEvent>) {
             "file-loaded" => {
                 let _ = tx.send(MpvEvent::PlaybackStarted);
             }
+            "end-file" if msg.get("reason").and_then(|v| v.as_str()) == Some("eof") => {
+                let _ = tx.send(MpvEvent::PlaybackEnded);
+            }
             "log-message" => {
                 let prefix = msg.get("prefix").and_then(|v| v.as_str()).unwrap_or("");
                 let level = msg.get("level").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -120,6 +122,23 @@ fn handle_ipc_message(msg: &serde_json::Value, tx: &mpsc::Sender<MpvEvent>) {
             _ => {}
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_eof_marks_playback_complete() {
+        for reason in ["stop", "quit", "error", "redirect", "eof"] {
+            let (tx, rx) = mpsc::channel();
+            handle_ipc_message(&serde_json::json!({
+                "event": "end-file", "reason": reason,
+            }), &tx);
+            assert_eq!(matches!(rx.try_recv(), Ok(MpvEvent::PlaybackEnded)), reason == "eof");
+        }
+    }
+
 }
 
 fn make_ipc_path() -> String {

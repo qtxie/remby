@@ -692,13 +692,14 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, t
 fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ps = &state.playing_state;
     let has_resume = ps.resume_position.is_some() && !ps.playing;
+    let next_episode = ps.next_episode.as_ref().filter(|_| !ps.playing);
 
     let halves = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    let top = if has_resume {
+    let top = if has_resume || next_episode.is_some() {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -749,7 +750,21 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_cor
     }
 
     // Resume choice
-    if has_resume {
+    if let Some(next) = next_episode {
+        let options = [
+            format!("{}: {} {}", t("playing.next_episode"), next.display_name(), t("playing.press_enter")),
+            t("playing.play_from_start").to_string(),
+        ];
+        let lines: Vec<Line> = options.iter().enumerate().map(|(idx, label)| {
+            let selected = ps.option_selected == idx;
+            Line::from(Span::styled(
+                format!("{} {}", if selected { ">" } else { " " }, label),
+                Style::default().fg(if selected { theme.success } else { theme.muted }),
+            ))
+        }).collect();
+        f.render_widget(Clear, top[3]);
+        f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), top[3]);
+    } else if has_resume {
         let ticks = ps.resume_position.unwrap();
         let secs = ticks / 10_000_000;
         let m = (secs % 3600) / 60;

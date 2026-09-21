@@ -11,6 +11,10 @@ const CLIENT_NAME: &str = "Emby";
 const CLIENT_VERSION: &str = "4.8.0.80";
 const DEVICE_NAME: &str = "remby";
 
+#[cfg(test)]
+#[path = "next_episode_tests.rs"]
+mod next_episode_tests;
+
 static DEVICE_ID: OnceLock<String> = OnceLock::new();
 
 pub fn init_device_id() {
@@ -536,6 +540,43 @@ impl EmbyClient {
         }
         let item: MediaItem = resp.json().await.context("Invalid item detail response")?;
         Ok(item)
+    }
+
+    pub async fn get_next_episode(&self, item_id: &str) -> Result<Option<MediaItem>> {
+        let current = self.get_item_detail(item_id).await?;
+        let Some(series_id) = current.series_id.filter(|_| current.item_type == "Episode") else {
+            return Ok(None);
+        };
+        let url = self.api_url(&format!("/Shows/{}/Episodes", series_id));
+        let mut start = 0;
+        let mut found_current = false;
+        loop {
+            let data: ItemsResponse = self.authed_get(&url)
+                .query(&[
+                    ("UserId", self.user_id.as_str()),
+                    ("Fields", "MediaSources,UserData"),
+                    ("SortBy", "ParentIndexNumber,IndexNumber"),
+                    ("SortOrder", "Ascending"),
+                    ("StartIndex", &start.to_string()),
+                    ("Limit", "100"),
+                ])
+                .send().await?
+                .error_for_status()?
+                .json().await?;
+            if data.items.is_empty() {
+                return Ok(None);
+            }
+            start += data.items.len();
+            for episode in data.items {
+                if found_current {
+                    return Ok(Some(episode));
+                }
+                found_current = episode.id == item_id;
+            }
+            if start >= data.total {
+                return Ok(None);
+            }
+        }
     }
 
     pub async fn get_episodes(&self, series_id: &str) -> Result<(Vec<MediaItem>, usize)> {

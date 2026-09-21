@@ -176,6 +176,7 @@ static EN: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "playing.resume_from" => "Resume from",
     "playing.play_from_start" => "Play from start",
     "playing.play" => "Play",
+    "playing.next_episode" => "Play next episode",
     "playing.press_enter" => "(Enter)",
 
     // Footer hints
@@ -402,6 +403,7 @@ static ZH: phf::Map<&'static str, &'static str> = phf::phf_map! {
     "playing.resume_from" => "继续播放",
     "playing.play_from_start" => "从头播放",
     "playing.play" => "播放",
+    "playing.next_episode" => "播放下一集",
     "playing.press_enter" => "(回车)",
 
     // Footer hints

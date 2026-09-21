@@ -88,6 +88,7 @@ pub enum BackgroundResult {
     MoreItemsLoaded(Vec<MediaItem>, String),
     SearchLoaded(Vec<MediaItem>),
     ItemDetailLoaded(MediaItem),
+    NextEpisodeLoaded(String, std::result::Result<Option<MediaItem>, String>),
     LibraryBrowserLoaded(Vec<MediaItem>, String, usize, Vec<String>, Vec<String>, Vec<String>, Vec<MediaItem>),
     MoreLibraryBrowserLoaded(Vec<MediaItem>, String),
     FavoritesLoaded(Vec<MediaItem>, usize),
@@ -207,6 +208,8 @@ pub enum SeriesSection {
 
 #[derive(Default)]
 pub struct PlayingState {
+    pub finished: bool,
+    pub next_episode: Option<MediaItem>,
     pub item_name: String,
     pub item_id: String,
     pub media_source_id: String,
@@ -1352,6 +1355,8 @@ impl AppState {
     #[allow(clippy::too_many_arguments)]
     pub fn open_playing(&mut self, item_name: &str, item_id: &str, media_source_id: &str, runtime_ticks: Option<i64>, url: &str, video: &str, audio: &str, subtitle: &str, resume_ticks: Option<i64>, media_source: Option<remby_core::emby::MediaSource>, selected_video: Option<usize>, selected_audio: Option<usize>, selected_subtitle: Option<usize>) {
         self.playing_state = PlayingState {
+            finished: false,
+            next_episode: None,
             item_name: item_name.to_string(),
             item_id: item_id.to_string(),
             media_source_id: media_source_id.to_string(),

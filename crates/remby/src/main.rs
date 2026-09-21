@@ -258,6 +258,7 @@ async fn main() -> Result<()> {
 
 async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &mut app::AppState) -> Result<()> {
     let mut spin_idx: usize = 0;
+    let mut mpv_exit_seen_at = None;
     let (bg_tx, mut bg_rx) = mpsc::unbounded_channel::<BackgroundResult>();
     state.bg_tx = Some(bg_tx.clone());
 
@@ -364,6 +365,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.loading = false;
                     state.searching = false;
                     state.status_msg = None;
+                }
+                BackgroundResult::NextEpisodeLoaded(session_id, result) => {
+                    if state.play_session_id == session_id && state.playing_state.finished {
+                        match result {
+                            Ok(next) => state.playing_state.next_episode = next,
+                            Err(error) => state.status_msg = Some(app::Message::error(error)),
+                        }
+                    }
                 }
                 BackgroundResult::ItemDetailLoaded(detail) => {
                     state.loading = false;
@@ -523,21 +532,6 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
             }
         }
 
-        // Check if mpv exited
-        if let Some(ref mut child) = state.mpv_child {
-            if let Ok(Some(_)) = child.try_wait() {
-                let position_ticks = state.stop_playback();
-                let item_id = state.playing_state.item_id.clone();
-                let source_id = state.playing_state.media_source_id.clone();
-                let session_id = state.play_session_id.clone();
-                let client = state.client.clone();
-                tokio::spawn(async move {
-                    let _ = client.report_playback_stopped(&item_id, &source_id, &session_id, position_ticks).await;
-                });
-                state.status_msg = Some(app::Message::info(t("status.mpv_closed").to_string()));
-            }
-        }
-
         // Drain mpv events
         if let Some(rx) = &state.mpv_rx {
             while let Ok(event) = rx.try_recv() {
@@ -558,9 +552,48 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                         state.status_msg = Some(app::Message::success("Playback started".to_string()));
                     }
                     remby_core::mpv::MpvEvent::PlaybackEnded => {
-                        // Handled by mpv exit detection below
+                        state.playing_state.finished = true;
                     }
                 }
+            }
+        }
+
+        // Consume EOF before stopping playback, which drops the event receiver.
+        let mpv_exited = state.mpv_child.as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(Some(_))));
+        // The IPC reader may still be delivering the final event after process exit.
+        let exit_ready = if mpv_exited {
+            mpv_exit_seen_at.get_or_insert_with(std::time::Instant::now).elapsed() >= Duration::from_millis(300)
+        } else {
+            mpv_exit_seen_at = None;
+            false
+        };
+        if exit_ready || (state.playing_state.playing && state.playing_state.finished) {
+            mpv_exit_seen_at = None;
+            let position_ticks = state.stop_playback();
+            let item_id = state.playing_state.item_id.clone();
+            let source_id = state.playing_state.media_source_id.clone();
+            let session_id = state.play_session_id.clone();
+            let client = state.client.clone();
+            tokio::spawn(async move {
+                let _ = client.report_playback_stopped(&item_id, &source_id, &session_id, position_ticks).await;
+            });
+            state.status_msg = Some(app::Message::info(t("status.mpv_closed").to_string()));
+            if state.playing_state.finished {
+                state.playing_state.resume_position = None;
+                let item_id = state.playing_state.item_id.clone();
+                let session_id = state.play_session_id.clone();
+                let client = state.client.clone();
+                let tx = bg_tx.clone();
+                tokio::spawn(async move {
+                    let result = match tokio::time::timeout(
+                        Duration::from_secs(15), client.get_next_episode(&item_id),
+                    ).await {
+                        Ok(result) => result.map_err(|error| format!("Next episode: {error}")),
+                        Err(_) => Err("Next episode lookup timed out".to_string()),
+                    };
+                    let _ = tx.send(BackgroundResult::NextEpisodeLoaded(session_id, result));
+                });
             }
         }
 
@@ -755,14 +788,14 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if state.mpv_output_scroll < max_scroll {
                                             state.mpv_output_scroll += 1;
                                         }
-                                    } else if state.playing_state.resume_position.is_some() {
+                                    } else if state.playing_state.resume_position.is_some() || state.playing_state.next_episode.is_some() {
                                         state.playing_state.option_selected = 0;
                                     }
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
                                     if state.playing_state.playing && mpv_has_output {
                                         state.mpv_output_scroll = state.mpv_output_scroll.saturating_sub(1);
-                                    } else if state.playing_state.resume_position.is_some() {
+                                    } else if state.playing_state.resume_position.is_some() || state.playing_state.next_episode.is_some() {
                                         state.playing_state.option_selected = 1;
                                     }
                                 }
@@ -776,7 +809,16 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     if mpv_has_output => {
                                         state.mpv_output_scroll = state.mpv_output_scroll.saturating_sub(10);
                                     }
-                                KeyCode::Enter => {
+                                KeyCode::Enter if !state.playing_state.playing => {
+                                    if state.playing_state.option_selected == 0 {
+                                        if let Some(next) = &state.playing_state.next_episode {
+                                            let item_id = next.id.clone();
+                                            state.loading = true;
+                                            state.loading_msg = t("status.loading").to_string();
+                                            spawn_item_detail(bg_tx.clone(), state.client.clone(), item_id);
+                                            continue;
+                                        }
+                                    }
                                     let is_default_mpv = state.config.mpv_path == "mpv";
                                     if is_default_mpv {
                                         let ps = &state.playing_state;
@@ -785,6 +827,13 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.open_mpv_prompt(&url, "", "", "", start);
                                     } else {
                                         state.status_msg = Some(app::Message::Loading("⣾".to_string(), t("status.launching_mpv").to_string()));
+                                        state.mpv_output.clear();
+                                        state.mpv_output_scroll = 0;
+                                        state.playing_state.finished = false;
+                                        state.playing_state.next_episode = None;
+                                        state.playing_state.playing = true;
+                                        // Paint the spinner before process startup can delay the next frame.
+                                        terminal.draw(|f| ui::render(f, state))?;
                                         let ps = &state.playing_state;
                                         let start_secs = if ps.resume_position.is_some() && ps.option_selected == 0 {
                                             ps.resume_position.map(|t| t as f64 / 10_000_000.0)
@@ -797,9 +846,6 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if let Ok((child, rx)) = remby_core::mpv::play(&ps.url, &state.config.mpv_path, vid, aid, sid, start_secs) {
                                             state.mpv_child = Some(child);
                                             state.mpv_rx = Some(rx);
-                                            state.mpv_output.clear();
-                                            state.mpv_output_scroll = 0;
-                                            state.playing_state.playing = true;
                                             state.playback_started_at = Some(std::time::Instant::now());
                                             // Report playback start to Emby
                                             let item_id = state.playing_state.item_id.clone();
@@ -810,6 +856,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                 let _ = client.report_playback_start(&item_id, &source_id, &session_id).await;
                                             });
                                         } else {
+                                            state.playing_state.playing = false;
                                             state.status_msg = Some(app::Message::error("mpv::play failed".to_string()));
                                         }
                                     }
