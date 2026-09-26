@@ -1318,6 +1318,23 @@ impl AppState {
         self.navigate_to(View::Help);
     }
 
+    /// Whether `?` opens help here: false while a text field owns the keyboard.
+    pub fn accepts_help(&self) -> bool {
+        if self.view == View::Help || self.searching {
+            return false;
+        }
+        match self.view {
+            View::Wizard | View::MpvPrompt => false,
+            View::Settings => self.settings_state.section != SettingsSection::MpvPath,
+            View::AccountManager => !matches!(
+                self.account_manager_state.action,
+                AccountManagerAction::Add | AccountManagerAction::Edit(_)
+            ),
+            View::LibraryBrowser => self.library_browser_state.filter_year_field.is_none(),
+            _ => true,
+        }
+    }
+
     pub fn close_help(&mut self) {
         let prev = self.help_state.previous_view.clone();
         self.go_back();
