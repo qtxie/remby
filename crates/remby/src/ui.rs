@@ -2,9 +2,9 @@ use ratatui::prelude::*;
 use ratatui::widgets::*;
 use ratatui_textarea::TextArea;
 
-use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
+use crate::app::{AppState, BrowserPanel, FilterSection, ItemSort, PlayOption, SeriesSection, SettingsColumn, SettingsSection, SortOrder, TrackSection, View, WizardField};
 use remby_core::i18n::{t, tf};
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 fn rounded_block() -> Block<'static> {
     Block::default()
@@ -496,29 +496,24 @@ fn render_episodes(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_co
 fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ss = &state.series_state;
 
+    // The overview box grows with the terminal so the text is not cut short.
+    let max_rows = ((area.height as usize).saturating_sub(8) / 2).clamp(5, 12);
+    let inner_width = (area.width as usize).saturating_sub(2).max(1);
+    let overview_text = if ss.overview.is_empty() { t("series.no_overview") } else { &ss.overview };
+    let overview_lines = fit_paragraph(overview_text, inner_width, max_rows);
+    let overview_height = (overview_lines.len() + 2) as u16;
+
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(7),
+            Constraint::Length(overview_height),
             Constraint::Min(1),
         ])
         .split(area);
 
     // Overview panel
-    let overview_text = if ss.overview.is_empty() {
-        t("series.no_overview").to_string()
-    } else if ss.overview.len() > 500 {
-        let mut end = 500;
-        while !ss.overview.is_char_boundary(end) {
-            end -= 1;
-        }
-        format!("{}...", &ss.overview[..end])
-    } else {
-        ss.overview.clone()
-    };
-    let overview = Paragraph::new(overview_text)
-        .block(rounded_block().title(format!(" {}", t("section.overview"))))
-        .wrap(Wrap { trim: true });
+    let overview = Paragraph::new(overview_lines.join("\n"))
+        .block(rounded_block().title(format!(" {}", t("section.overview"))));
     f.render_widget(Clear, layout[0]);
     f.render_widget(overview, layout[0]);
 
@@ -569,10 +564,124 @@ fn render_series_info(f: &mut Frame, state: &AppState, area: Rect, theme: &remby
         f.render_widget(Clear, sections_layout[i]);
         f.render_stateful_widget(list, sections_layout[i], &mut state_list);
     }
+
+    if ss.show_cast {
+        render_cast_popup(f, ss, area, theme);
+    }
+}
+
+fn render_cast_popup(f: &mut Frame, ss: &crate::app::SeriesState, area: Rect, theme: &remby_core::theme::Theme) {
+    let items: Vec<ListItem> = if ss.people.is_empty() {
+        vec![ListItem::new(Line::from(Span::styled(
+            format!("  {}", t("series.no_cast")),
+            Style::default().fg(theme.muted),
+        )))]
+    } else {
+        ss.people.iter().map(|person| {
+            let detail = if person.role.is_empty() { &person.person_type } else { &person.role };
+            ListItem::new(Line::from(vec![
+                Span::styled(person.name.clone(), Style::default().fg(theme.text)),
+                Span::styled(
+                    if detail.is_empty() { String::new() } else { format!(" ({})", detail) },
+                    Style::default().fg(theme.muted),
+                ),
+            ]))
+        }).collect()
+    };
+
+    let height = (items.len() as u16 + 2).clamp(4, area.height.saturating_sub(4).max(6));
+    let list = List::new(items)
+        .block(rounded_block().title(format!(" {} ({}) ", t("section.cast"), ss.people.len())))
+        .highlight_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD))
+        .highlight_symbol("▸ ");
+
+    let mut state_list = ListState::default();
+    if !ss.people.is_empty() {
+        state_list.select(Some(ss.cast_selected.min(ss.people.len() - 1)));
+    }
+    let popup = centered_rect(44, height, area);
+    f.render_widget(Clear, popup);
+    f.render_stateful_widget(list, popup, &mut state_list);
 }
 
 fn display_width(s: &str) -> usize {
     s.width()
+}
+
+/// Soft-wrap `text` into lines of at most `width` cells: Latin words break at
+/// spaces, words wider than a line break at any character (CJK).
+fn wrap_cells(text: &str, width: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    if width == 0 {
+        return lines;
+    }
+    let mut current = String::new();
+    let mut cells = 0usize;
+    for word in text.split_whitespace() {
+        let mut word = word;
+        loop {
+            let w = display_width(word);
+            if cells > 0 && cells + 1 + w > width {
+                lines.push(std::mem::take(&mut current));
+                cells = 0;
+                continue;
+            }
+            if cells + w <= width {
+                if cells > 0 {
+                    current.push(' ');
+                    cells += 1;
+                }
+                current.push_str(word);
+                cells += w;
+                break;
+            }
+            let head = chars_up_to(word, width);
+            let (chunk, rest) = word.split_at(head);
+            lines.push(chunk.to_string());
+            word = rest;
+            if word.is_empty() {
+                break;
+            }
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
+fn chars_up_to(s: &str, width: usize) -> usize {
+    let mut cells = 0;
+    let mut count = 0;
+    for ch in s.chars() {
+        let w = ch.width().unwrap_or(0);
+        if cells + w > width && count > 0 {
+            break;
+        }
+        cells += w;
+        count += ch.len_utf8();
+    }
+    count
+}
+
+/// Wrap `text` to fit a `rows`-line panel, marking the end with an ellipsis
+/// when there is more to read than the panel can hold.
+fn fit_paragraph(text: &str, width: usize, rows: usize) -> Vec<String> {
+    let mut lines = wrap_cells(text, width);
+    if lines.len() > rows {
+        lines = wrap_cells(text, width.saturating_sub(3));
+        let clipped = lines.len() > rows;
+        lines.truncate(rows);
+        if clipped {
+            if let Some(last) = lines.last_mut() {
+                last.push_str("...");
+            }
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
 }
 
 fn pad_right(s: &str, target: usize) -> String {
@@ -691,37 +800,24 @@ fn render_media_info(f: &mut Frame, ps: &crate::app::PlayingState, area: Rect, t
 
 fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core::theme::Theme) {
     let ps = &state.playing_state;
-    let has_resume = ps.resume_position.is_some() && !ps.playing;
-    let next_episode = ps.next_episode.as_ref().filter(|_| !ps.playing);
+    let options = ps.play_options();
+    let show_list = options.len() > 1;
 
     let halves = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    let top = if has_resume || next_episode.is_some() {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(5),
-                Constraint::Length(4),
-                Constraint::Min(1),
-            ])
-            .split(halves[0])
-    } else {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(5),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
-            .split(halves[0])
-    };
+    let top = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(5),
+            Constraint::Length(if show_list { options.len() as u16 + 2 } else { 1 }),
+            Constraint::Min(1),
+        ])
+        .split(halves[0]);
 
     // Title
     let title = Paragraph::new(Span::styled(
@@ -749,92 +845,51 @@ fn render_playing(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_cor
         f.render_widget(playing_text, top[3]);
     }
 
-    // Resume choice
-    if let Some(next) = next_episode {
-        let options = [
-            format!("{}: {} {}", t("playing.next_episode"), next.display_name(), t("playing.press_enter")),
-            t("playing.play_from_start").to_string(),
-        ];
-        let lines: Vec<Line> = options.iter().enumerate().map(|(idx, label)| {
-            let selected = ps.option_selected == idx;
-            Line::from(Span::styled(
-                format!("{} {}", if selected { ">" } else { " " }, label),
-                Style::default().fg(if selected { theme.success } else { theme.muted }),
-            ))
+    // Playback options
+    if show_list {
+        let labels: Vec<String> = options.iter().map(|option| match option {
+            PlayOption::Resume => {
+                let secs = ps.resume_position.unwrap_or(0) / 10_000_000;
+                format!("{} {}:{:02}", t("playing.resume_from"), (secs % 3600) / 60, secs % 60)
+            }
+            PlayOption::FromStart => t("playing.play_from_start").to_string(),
+            PlayOption::NextEpisode => match &ps.next_episode {
+                Some(next) => format!("{}: {}", t("playing.next_episode"), next.display_name()),
+                None => t("playing.next_episode").to_string(),
+            },
         }).collect();
-        f.render_widget(Clear, top[3]);
-        f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), top[3]);
-    } else if has_resume {
-        let ticks = ps.resume_position.unwrap();
-        let secs = ticks / 10_000_000;
-        let m = (secs % 3600) / 60;
-        let s = secs % 60;
-        let resume_time = format!("{}:{:02}", m, s);
 
         let prompt = format!("  {}", t("playing.choose_option"));
-        let resume_label = format!("{} {}", t("playing.resume_from"), resume_time);
-        let start_label = t("playing.play_from_start").to_string();
-
         let marker = "\u{25b8} ";
         let dw_marker = display_width(marker);
-
-        let opt1 = if ps.option_selected == 0 {
-            format!("{}{}", marker, resume_label)
-        } else {
-            format!("{}{}", " ".repeat(dw_marker), resume_label)
-        };
-        let opt2 = if ps.option_selected == 1 {
-            format!("{}{}", marker, start_label)
-        } else {
-            format!("{}{}", " ".repeat(dw_marker), start_label)
-        };
-
         let dw_prompt = display_width(&prompt);
-        let dw_opt1 = display_width(&opt1);
-        let dw_opt2 = display_width(&opt2);
-        let opt_maxdw = dw_opt1.max(dw_opt2);
+        let opt_maxdw = labels.iter().map(|l| display_width(l) + dw_marker).max().unwrap_or(dw_marker);
         let maxdw = dw_prompt.max(opt_maxdw);
-
-        let pad_right = |s: &str, dw: usize, target: usize| -> String {
-            let pad = target.saturating_sub(dw);
-            format!("{}{}", s, " ".repeat(pad))
-        };
+        let active = ps.selected_play_option();
+        let selected = options.iter().position(|option| Some(*option) == active).unwrap_or(0);
 
         let center = |s: &str, dw: usize| -> String {
-            let pad = maxdw.saturating_sub(dw);
-            let left = pad / 2;
+            let left = maxdw.saturating_sub(dw) / 2;
             format!("{}{}", " ".repeat(left), s)
         };
 
-        let opt1_padded = pad_right(&opt1, dw_opt1, opt_maxdw);
-        let opt2_padded = pad_right(&opt2, dw_opt2, opt_maxdw);
-
-        let options = vec![
-            Line::from(Span::styled(
-                center(&prompt, dw_prompt),
-                Style::default().fg(theme.warning),
-            )),
+        let mut lines = vec![
+            Line::from(Span::styled(center(&prompt, dw_prompt), Style::default().fg(theme.warning))),
             Line::from(""),
-            Line::from(Span::styled(
-                center(&opt1_padded, opt_maxdw),
-                if ps.option_selected == 0 {
-                    Style::default().fg(theme.accent)
-                } else {
-                    Style::default()
-                },
-            )),
-            Line::from(Span::styled(
-                center(&opt2_padded, opt_maxdw),
-                if ps.option_selected == 1 {
-                    Style::default().fg(theme.accent)
-                } else {
-                    Style::default()
-                },
-            )),
         ];
-        let options_widget = Paragraph::new(options);
+        for (idx, label) in labels.iter().enumerate() {
+            let blank = " ".repeat(dw_marker);
+            let prefix = if idx == selected { marker } else { blank.as_str() };
+            let row = pad_right(&format!("{prefix}{label}"), opt_maxdw);
+            let style = if idx == selected {
+                Style::default().fg(theme.accent)
+            } else {
+                Style::default()
+            };
+            lines.push(Line::from(Span::styled(center(&row, opt_maxdw), style)));
+        }
         f.render_widget(Clear, top[3]);
-        f.render_widget(options_widget, top[3]);
+        f.render_widget(Paragraph::new(lines), top[3]);
     } else if !ps.playing {
         // Play button when no resume and not playing
         let play_text = format!("\u{25b8} {} {}", t("playing.play"), t("playing.press_enter"));
@@ -1127,7 +1182,13 @@ fn render_footer(f: &mut Frame, state: &AppState, area: Rect, theme: &remby_core
         View::TrackSelect => t("footer.track_select"),
         View::SourceSelect => t("footer.source_select"),
         View::Episodes => t("footer.episodes"),
-        View::SeriesInfo => t("footer.series_info"),
+        View::SeriesInfo => {
+            if state.series_state.show_cast {
+                t("footer.cast")
+            } else {
+                t("footer.series_info")
+            }
+        }
         View::Playing => {
             if state.playing_state.playing {
                 ""

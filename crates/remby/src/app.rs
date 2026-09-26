@@ -194,6 +194,9 @@ pub struct SeriesState {
     pub seasons: Vec<MediaItem>,
     pub episodes: Vec<MediaItem>,
     pub similar: Vec<MediaItem>,
+    pub people: Vec<remby_core::emby::Person>,
+    pub show_cast: bool,
+    pub cast_selected: usize,
     pub selected_season: usize,
     pub selected_episode: usize,
     pub section: SeriesSection,
@@ -204,6 +207,13 @@ pub enum SeriesSection {
     Seasons,
     Episodes,
     Similar,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PlayOption {
+    Resume,
+    FromStart,
+    NextEpisode,
 }
 
 #[derive(Default)]
@@ -225,6 +235,35 @@ pub struct PlayingState {
     pub resume_position: Option<i64>,
     pub option_selected: usize,
     pub playing: bool,
+}
+
+impl PlayingState {
+    /// Choices offered on the playing page, in display order.
+    pub fn play_options(&self) -> Vec<PlayOption> {
+        if self.playing {
+            return Vec::new();
+        }
+        let mut options = vec![PlayOption::FromStart];
+        if self.resume_position.is_some() {
+            options.insert(0, PlayOption::Resume);
+        }
+        if self.next_episode.is_some() {
+            options.push(PlayOption::NextEpisode);
+        }
+        options
+    }
+
+    pub fn selected_play_option(&self) -> Option<PlayOption> {
+        let options = self.play_options();
+        options.get(self.option_selected.min(options.len().saturating_sub(1))).copied()
+    }
+
+    pub fn select_play_option(&mut self, index: usize) {
+        let last = self.play_options().len().saturating_sub(1);
+        if last > 0 {
+            self.option_selected = index.min(last);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -488,6 +527,9 @@ impl Default for SeriesState {
             seasons: Vec::new(),
             episodes: Vec::new(),
             similar: Vec::new(),
+            people: Vec::new(),
+            show_cast: false,
+            cast_selected: 0,
             selected_season: 0,
             selected_episode: 0,
             section: SeriesSection::Seasons,
@@ -564,7 +606,10 @@ impl AppState {
         let config = remby_core::config::load_config();
 
         let (client, server) = if let Some(acc) = account {
-            let password = remby_core::crypto::decrypt(&acc.password_enc).unwrap_or_default();
+            let password = match remby_core::crypto::decrypt(&acc.password_enc) {
+                Some(password) => password,
+                None => anyhow::bail!("{}", remby_core::i18n::t("error.account_unreadable")),
+            };
             let client = EmbyClient::authenticate(&acc.server, &acc.username, &password).await?;
             (client, acc.server)
         } else {
@@ -705,6 +750,22 @@ impl AppState {
             self.status_msg = None;
         }
         Ok(())
+    }
+
+    pub fn toggle_cast(&mut self) {
+        self.series_state.show_cast = !self.series_state.show_cast;
+        if self.series_state.show_cast {
+            self.series_state.cast_selected = 0;
+        }
+    }
+
+    pub fn cast_move(&mut self, delta: isize) {
+        let len = self.series_state.people.len();
+        if len == 0 {
+            return;
+        }
+        let current = self.series_state.cast_selected.min(len - 1) as isize;
+        self.series_state.cast_selected = (current + delta).clamp(0, len as isize - 1) as usize;
     }
 
     pub fn series_current_len(&self) -> usize {
@@ -1690,6 +1751,20 @@ impl AppState {
             ..Default::default()
         };
         self.navigate_to(View::AccountManager);
+    }
+
+    /// Open the sign-in form directly, e.g. when no usable account is left.
+    pub fn open_add_account(&mut self) {
+        let mut password = TextArea::default();
+        password.set_mask_char('\u{2022}');
+        self.account_manager_state.action = AccountManagerAction::Add;
+        self.account_manager_state.input_server = TextArea::default();
+        self.account_manager_state.input_username = TextArea::default();
+        self.account_manager_state.input_password = password;
+        self.account_manager_state.input_label = TextArea::default();
+        self.account_manager_state.input_field = AccountInputField::Label;
+        self.account_manager_state.selected = 0;
+        self.account_manager_state.status_msg = None;
     }
 
     pub fn account_manager_select_next(&mut self) {

@@ -54,6 +54,7 @@ pub fn bindings_for_view(view: &str) -> Vec<Keybinding> {
             Keybinding { keys: "↑/↓ k/j", description: "help.navigate" },
             Keybinding { keys: "Enter", description: "help.open_item" },
             Keybinding { keys: "f", description: "help.follow" },
+            Keybinding { keys: "a", description: "help.cast" },
             Keybinding { keys: "e", description: "help.episodes" },
             Keybinding { keys: "?", description: "help.help" },
             Keybinding { keys: "Esc", description: "help.back" },

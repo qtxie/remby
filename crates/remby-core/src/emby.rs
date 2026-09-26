@@ -94,6 +94,18 @@ pub struct MediaItem {
     pub media_sources: Vec<MediaSource>,
     #[serde(default, rename = "UserData")]
     pub user_data: Option<UserData>,
+    #[serde(default, rename = "People")]
+    pub people: Vec<Person>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Person {
+    #[serde(default, rename = "Name")]
+    pub name: String,
+    #[serde(default, rename = "Role")]
+    pub role: String,
+    #[serde(default, rename = "Type")]
+    pub person_type: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
@@ -274,6 +286,10 @@ impl EmbyClient {
             .await
             .context("Failed to authenticate with Emby server")?;
 
+        let status = resp.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            anyhow::bail!("{}", t("error.bad_credentials"));
+        }
         let data: serde_json::Value = resp.json().await.context("Invalid auth response")?;
 
         let token = data.get("AccessToken")
@@ -1033,6 +1049,7 @@ impl MediaItem {
             tagline: None,
             media_sources: Vec::new(),
             user_data: None,
+            people: Vec::new(),
         }
     }
 

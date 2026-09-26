@@ -129,6 +129,9 @@ async fn main() -> Result<()> {
             accounts_cfg.accounts.into_iter().find(|a| a.id == id)
         })
     };
+    let saved_account_id = account.as_ref()
+        .filter(|a| !a.id.is_empty())
+        .map(|a| a.id.clone());
     let connect_task = tokio::spawn(async move {
         app::AppState::new(account).await
     });
@@ -187,13 +190,31 @@ async fn main() -> Result<()> {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    let mut state = state.unwrap().unwrap_or_else(|e| {
-        disable_raw_mode().ok();
-        execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
-        terminal.show_cursor().ok();
-        eprintln!("Error: {e:#}");
-        std::process::exit(1);
-    });
+    let mut state = match state.unwrap() {
+        Ok(state) => state,
+        Err(error) => {
+            // Forget the saved account that failed so the sign-in page can start clean.
+            if let Some(id) = saved_account_id {
+                let mut accounts_cfg = remby_core::config::load_accounts();
+                accounts_cfg.accounts.retain(|a| a.id != id);
+                accounts_cfg.last_account_id = None;
+                let _ = remby_core::config::save_accounts(&accounts_cfg);
+            }
+            match app::AppState::new(None).await {
+                Ok(mut state) => {
+                    state.status_msg = Some(app::Message::error(format!("{error:#}")));
+                    state
+                }
+                Err(e) => {
+                    disable_raw_mode().ok();
+                    execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
+                    terminal.show_cursor().ok();
+                    eprintln!("Error: {e:#}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    };
 
     // Auto-save CLI args if login succeeded
     let cli_used = cli.server.is_some() && cli.user.is_some() && cli.pass.is_some();
@@ -241,6 +262,9 @@ async fn main() -> Result<()> {
             state.open_wizard();
         } else {
             state.open_account_manager();
+            if !has_accounts {
+                state.open_add_account();
+            }
         }
     }
 
@@ -262,21 +286,24 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
     let (bg_tx, mut bg_rx) = mpsc::unbounded_channel::<BackgroundResult>();
     state.bg_tx = Some(bg_tx.clone());
 
-    // Load home in background
-    state.loading = true;
-    state.loading_msg = t("status.loading_home").to_string();
-    {
-        let tx = bg_tx.clone();
-        let client = state.client.clone();
-        spawn_home_load(tx, client);
-    }
+    // Without a signed-in account there is nothing to load; the sign-in page stays up.
+    if !state.server.is_empty() {
+        // Load home in background
+        state.loading = true;
+        state.loading_msg = t("status.loading_home").to_string();
+        {
+            let tx = bg_tx.clone();
+            let client = state.client.clone();
+            spawn_home_load(tx, client);
+        }
 
-    // Check following series updates
-    if !state.config.following_series.is_empty() {
-        let tx = bg_tx.clone();
-        let client = state.client.clone();
-        let following = state.config.following_series.clone();
-        spawn_following_load(tx, client, following);
+        // Check following series updates
+        if !state.config.following_series.is_empty() {
+            let tx = bg_tx.clone();
+            let client = state.client.clone();
+            let following = state.config.following_series.clone();
+            spawn_following_load(tx, client, following);
+        }
     }
 
     loop {
@@ -367,7 +394,9 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                     state.status_msg = None;
                 }
                 BackgroundResult::NextEpisodeLoaded(session_id, result) => {
-                    if state.play_session_id == session_id && state.playing_state.finished {
+                    if state.play_session_id == session_id
+                        && state.view == app::View::Playing
+                        && !state.playing_state.playing {
                         match result {
                             Ok(next) => state.playing_state.next_episode = next,
                             Err(error) => state.status_msg = Some(app::Message::error(error)),
@@ -581,20 +610,21 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
             state.status_msg = Some(app::Message::info(t("status.mpv_closed").to_string()));
             if state.playing_state.finished {
                 state.playing_state.resume_position = None;
-                let item_id = state.playing_state.item_id.clone();
-                let session_id = state.play_session_id.clone();
-                let client = state.client.clone();
-                let tx = bg_tx.clone();
-                tokio::spawn(async move {
-                    let result = match tokio::time::timeout(
-                        Duration::from_secs(15), client.get_next_episode(&item_id),
-                    ).await {
-                        Ok(result) => result.map_err(|error| format!("Next episode: {error}")),
-                        Err(_) => Err("Next episode lookup timed out".to_string()),
-                    };
-                    let _ = tx.send(BackgroundResult::NextEpisodeLoaded(session_id, result));
-                });
             }
+            // Offer "Play next episode" as soon as mpv is gone, not only after a full watch.
+            let item_id = state.playing_state.item_id.clone();
+            let session_id = state.play_session_id.clone();
+            let client = state.client.clone();
+            let tx = bg_tx.clone();
+            tokio::spawn(async move {
+                let result = match tokio::time::timeout(
+                    Duration::from_secs(15), client.get_next_episode(&item_id),
+                ).await {
+                    Ok(result) => result.map_err(|error| format!("Next episode: {error}")),
+                    Err(_) => Err("Next episode lookup timed out".to_string()),
+                };
+                let _ = tx.send(BackgroundResult::NextEpisodeLoaded(session_id, result));
+            });
         }
 
         // Update spinner
@@ -788,15 +818,15 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         if state.mpv_output_scroll < max_scroll {
                                             state.mpv_output_scroll += 1;
                                         }
-                                    } else if state.playing_state.resume_position.is_some() || state.playing_state.next_episode.is_some() {
-                                        state.playing_state.option_selected = 0;
+                                    } else {
+                                        state.playing_state.select_play_option(0);
                                     }
                                 }
                                 KeyCode::Down | KeyCode::Char('j') => {
                                     if state.playing_state.playing && mpv_has_output {
                                         state.mpv_output_scroll = state.mpv_output_scroll.saturating_sub(1);
-                                    } else if state.playing_state.resume_position.is_some() || state.playing_state.next_episode.is_some() {
-                                        state.playing_state.option_selected = 1;
+                                    } else {
+                                        state.playing_state.select_play_option(usize::MAX);
                                     }
                                 }
                                 KeyCode::PageUp
@@ -810,7 +840,8 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         state.mpv_output_scroll = state.mpv_output_scroll.saturating_sub(10);
                                     }
                                 KeyCode::Enter if !state.playing_state.playing => {
-                                    if state.playing_state.option_selected == 0 {
+                                    let selected = state.playing_state.selected_play_option();
+                                    if selected == Some(app::PlayOption::NextEpisode) {
                                         if let Some(next) = &state.playing_state.next_episode {
                                             let item_id = next.id.clone();
                                             state.loading = true;
@@ -835,7 +866,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                         // Paint the spinner before process startup can delay the next frame.
                                         terminal.draw(|f| ui::render(f, state))?;
                                         let ps = &state.playing_state;
-                                        let start_secs = if ps.resume_position.is_some() && ps.option_selected == 0 {
+                                        let start_secs = if selected == Some(app::PlayOption::Resume) {
                                             ps.resume_position.map(|t| t as f64 / 10_000_000.0)
                                         } else {
                                             None
@@ -922,6 +953,20 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                             }
                         }
                         app::View::SeriesInfo => {
+                            if state.series_state.show_cast {
+                                match key.code {
+                                    KeyCode::Char('q') => break,
+                                    KeyCode::Esc | KeyCode::Enter | KeyCode::Char('a') => {
+                                        state.series_state.show_cast = false;
+                                    }
+                                    KeyCode::Up | KeyCode::Char('k') => state.cast_move(-1),
+                                    KeyCode::Down | KeyCode::Char('j') => state.cast_move(1),
+                                    KeyCode::PageUp => state.cast_move(-10),
+                                    KeyCode::PageDown => state.cast_move(10),
+                                    _ => {}
+                                }
+                                continue;
+                            }
                             match key.code {
                                 KeyCode::Char('q') => break,
                                 KeyCode::Esc => state.go_back(),
@@ -929,6 +974,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                 KeyCode::Right | KeyCode::Char('l') => state.series_section_next(),
                                 KeyCode::Up | KeyCode::Char('k') => state.series_select_prev(),
                                 KeyCode::Down | KeyCode::Char('j') => state.series_select_next(),
+                                KeyCode::Char('a') => state.toggle_cast(),
                                 KeyCode::Char('f') => {
                                     if let Some(ref series_item) = state.series_state.item {
                                         let id = series_item.id.clone();
@@ -1422,18 +1468,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                     KeyCode::Char('q') => break,
                                     KeyCode::Up | KeyCode::Char('k') => state.account_manager_select_prev(),
                                     KeyCode::Down | KeyCode::Char('j') => state.account_manager_select_next(),
-                                    KeyCode::Char('a') => {
-                                        state.account_manager_state.action = app::AccountManagerAction::Add;
-                                        let mut pw = ratatui_textarea::TextArea::default();
-                                        pw.set_mask_char('\u{2022}');
-                                        state.account_manager_state.input_server = ratatui_textarea::TextArea::default();
-                                        state.account_manager_state.input_username = ratatui_textarea::TextArea::default();
-                                        state.account_manager_state.input_password = pw;
-                                        state.account_manager_state.input_label = ratatui_textarea::TextArea::default();
-                                        state.account_manager_state.input_field = app::AccountInputField::Label;
-                                        state.account_manager_state.selected = 0;
-                                        state.account_manager_state.status_msg = None;
-                                    }
+                                    KeyCode::Char('a') => state.open_add_account(),
                                     KeyCode::Enter => {
                                         let sel = state.account_manager_state.selected;
                                         let acc_count = state.account_manager_state.accounts.len();
@@ -1842,6 +1877,7 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &
                                                             tagline: None,
                                                             media_sources: Vec::new(),
                                                             user_data: None,
+                                                            people: Vec::new(),
                                                         }
                                                     }).collect();
                                                     let _ = tx.send(BackgroundResult::FolderLoaded(items, String::new(), 0));
@@ -2157,9 +2193,9 @@ async fn build_series_state(client: &remby_core::emby::EmbyClient, item: &remby_
         client.get_similar(series_id),
     );
 
-    let overview = match &detail {
-        Ok(i) => i.overview.clone().unwrap_or_default(),
-        Err(_) => String::new(),
+    let (overview, people) = match &detail {
+        Ok(i) => (i.overview.clone().unwrap_or_default(), i.people.clone()),
+        Err(_) => (String::new(), Vec::new()),
     };
 
     let mut episodes = Vec::new();
@@ -2177,6 +2213,9 @@ async fn build_series_state(client: &remby_core::emby::EmbyClient, item: &remby_
         seasons: seasons.unwrap_or_default(),
         episodes,
         similar: similar.unwrap_or_default(),
+        people,
+        show_cast: false,
+        cast_selected: 0,
         selected_season: 0,
         selected_episode: 0,
         section: app::SeriesSection::Seasons,
