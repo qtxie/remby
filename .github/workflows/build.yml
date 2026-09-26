@@ -14,22 +14,29 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             artifact: remby-linux-x86_64
+            builder: cargo
             rustflags: -C target-feature=+crt-static
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             artifact: remby-linux-arm64
+            # cross supplies the musl toolchain from its own image: the public
+            # musl.cc tarballs are unreachable from GitHub runners.
+            builder: cross
             rustflags: -C target-feature=+crt-static
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: remby-windows-x86_64.exe
+            builder: cargo
             rustflags: -C target-feature=+crt-static
           - target: aarch64-pc-windows-msvc
             os: windows-latest
             artifact: remby-windows-arm64.exe
+            builder: cargo
             rustflags: -C target-feature=+crt-static
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: remby-macos-arm64
+            builder: cargo
 
     runs-on: ${{ matrix.os }}
     name: Build ${{ matrix.target }}
@@ -48,22 +55,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Install musl cross toolchain (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
+      - name: Install cross (Linux ARM64)
+        if: matrix.builder == 'cross'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xz-utils
-          curl -fL --retry 3 -o /tmp/aarch64-musl-cross.tar.xz https://musl.cc/aarch64-linux-musl-cross.tgz
-          sudo tar -xf /tmp/aarch64-musl-cross.tar.xz -C /opt
-          echo "/opt/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc" >> "$GITHUB_ENV"
-          echo "CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc" >> "$GITHUB_ENV"
-          echo "AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar" >> "$GITHUB_ENV"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/cross.tar.gz" \
+            https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-musl.tar.gz
+          tar -xf "$RUNNER_TEMP/cross.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Build
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build --release --target ${{ matrix.target }}
+        run: ${{ matrix.builder }} build --release --target ${{ matrix.target }}
 
       - name: Verify static linking (Linux)
         if: endsWith(matrix.target, '-linux-musl')
