@@ -11,18 +11,22 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             artifact: remby-linux-x86_64
-          - target: aarch64-unknown-linux-gnu
+            rustflags: -C target-feature=+crt-static
+          - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             artifact: remby-linux-arm64
+            rustflags: -C target-feature=+crt-static
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: remby-windows-x86_64.exe
+            rustflags: -C target-feature=+crt-static
           - target: aarch64-pc-windows-msvc
             os: windows-latest
             artifact: remby-windows-arm64.exe
+            rustflags: -C target-feature=+crt-static
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: remby-macos-arm64
@@ -38,15 +42,34 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install musl toolchain (Linux x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          sudo apt-get install -y musl-tools
+
+      - name: Install musl cross toolchain (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xz-utils
+          curl -fL --retry 3 -o /tmp/aarch64-musl-cross.tar.xz https://musl.cc/aarch64-linux-musl-cross.tgz
+          sudo tar -xf /tmp/aarch64-musl-cross.tar.xz -C /opt
+          echo "/opt/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc" >> "$GITHUB_ENV"
+          echo "AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar" >> "$GITHUB_ENV"
 
       - name: Build
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Verify static linking (Linux)
+        if: endsWith(matrix.target, '-linux-musl')
+        run: |
+          file "target/${{ matrix.target }}/release/remby"
+          file "target/${{ matrix.target }}/release/remby" | grep -qi static
 
       - name: Rename artifact (Linux/macOS)
         if: matrix.os != 'windows-latest'
